@@ -1,0 +1,358 @@
+import { Vector3 } from "three"
+import { Session } from "../../network/client/session"
+
+import { WatchEvent } from "../../events/watchevent"
+import { Outcome } from "../../model/outcome"
+import { Rack } from "../../utils/rack"
+import { Controller } from "../controller"
+import { Rules } from "./rules"
+import { Respot } from "../../utils/respot"
+import { Aim } from "../aim"
+import { WatchAim } from "../watchaim"
+import { Container } from "../../container/container"
+import { Ball } from "../../model/ball"
+import { Table } from "../../model/table"
+import { TableConfig } from "../../view/tableconfig"
+import { PlaceBall } from "../placeball"
+import { PlaceBallEvent } from "../../events/placeballevent"
+import { isFirstShot } from "../../utils/utils"
+import { zero } from "../../utils/three-utils"
+import { SnookerUtils, ShotInfo } from "./snookerutils"
+import { SnookerScoring } from "./snookerscoring"
+import { StartAimEvent } from "../../events/startaimevent"
+import { RerackEvent } from "../../events/rerackevent"
+import { scaleTableModel } from "../../utils/table-scaler"
+import { T, foulReason } from "../../utils/i18n"
+
+const tableModelStretchBySize: Record<number, { x: number; y: number }> = {
+  // 6ft values copied from the 12ft table for manual tuning.
+  6: { x: -2800, y: -1350 },
+  12: { x: 1420, y: 700 },
+}
+
+export class Snooker implements Rules {
+  cueball: Ball
+  previousPotRed = false
+  targetIsRed = true
+  currentBreak = 0
+  previousBreak = 0
+  foulPoints = 0
+  rulename = "snooker"
+
+  static readonly tablemodel = "models/snooker.min.gltf"
+
+  readonly container: Container
+
+  constructor(container: Container) {
+    this.container = container
+  }
+
+  snookerrule(outcome: Outcome[]): Controller {
+    this.foulPoints = 0
+    const info = SnookerUtils.shotInfo(
+      this.container.table,
+      outcome,
+      this.targetIsRed,
+      this.previousPotRed
+    )
+
+    if (info.pots === 0) {
+      this.targetIsRed =
+        SnookerUtils.redsOnTable(this.container.table).length > 0
+      if (!info.legalFirstCollision) {
+        return this.foul(outcome, info)
+      }
+      return this.switchPlayer()
+    }
+
+    if (this.targetIsRed) {
+      return this.targetRedRule(outcome, info)
+    }
+
+    return this.targetColourRule(outcome, info)
+  }
+
+  private targetRedRule(outcome: Outcome[], info: ShotInfo): Controller {
+    if (info.legalFirstCollision && Outcome.onlyRedsPotted(outcome)) {
+      this.currentBreak += info.pots
+      Session.getInstance().addMyScore(info.pots)
+
+      this.targetIsRed = false
+      this.previousPotRed = true
+      return this.continueBreak()
+    }
+
+    return this.foul(outcome, info)
+  }
+
+  private targetColourRule(outcome: Outcome[], info: ShotInfo): Controller {
+    if (info.whitePotted) {
+      return this.foul(outcome, info)
+    }
+
+    if (info.pots > 1) {
+      this.respotColours(outcome)
+      return this.foul(outcome, info)
+    }
+
+    if (Outcome.pots(outcome)[0].id > 6) {
+      return this.foul(outcome, info)
+    }
+
+    const id = Outcome.pots(outcome)[0].id
+    if (id !== info.firstCollision.ballB.id) {
+      return this.foul(outcome, info)
+    }
+
+    const ballsRemaining = SnookerUtils.ballsOnTable(
+      this.container.table
+    ).length
+    if (this.previousPotRed && ballsRemaining > 0) {
+      this.respotColours(outcome)
+      this.currentBreak += id + 1
+      Session.getInstance().addMyScore(id + 1)
+
+      this.previousPotRed = false
+      this.targetIsRed =
+        SnookerUtils.redsOnTable(this.container.table).length > 0
+      return this.continueBreak()
+    }
+
+    const lesserBallOnTable = SnookerUtils.coloursOnTable(
+      this.container.table
+    ).some((b: Ball) => b.id < id)
+
+    if (lesserBallOnTable) {
+      return this.foul(outcome, info)
+    }
+
+    this.currentBreak += id + 1
+    Session.getInstance().addMyScore(id + 1)
+
+    this.previousPotRed = false
+    this.targetIsRed = SnookerUtils.redsOnTable(this.container.table).length > 0
+    return this.continueBreak()
+  }
+
+  private foul(outcome: Outcome[], info: ShotInfo): Controller {
+    const foulResult = SnookerUtils.calculateFoul(outcome, info)
+    this.foulPoints = foulResult.points
+    Session.getInstance().addOpponentScore(this.foulPoints)
+
+    const foulText = foulResult.reason
+      ? foulReason(foulResult.reason)
+      : `犯规（对方加 ${this.foulPoints} 分）`
+    const notification = info.whitePotted
+      ? ({
+          type: "Foul",
+          title: T.foul,
+          subtext: foulText,
+          extra: T.ballInHand,
+        } as const)
+      : ({
+          type: "Foul",
+          title: T.foul,
+          subtext: foulText,
+        } as const)
+    this.container.notify(notification)
+    this.respotColours(outcome)
+    if (info.whitePotted) {
+      return this.whiteInHand()
+    }
+    return this.switchPlayer()
+  }
+
+  tableGeometry(): void {
+    TableConfig.apply(this.rulename, TableConfig.tableSizeFromUrl())
+  }
+
+  scaleTableModel(scene: any): void {
+    const stretch = tableModelStretchBySize[TableConfig.tableSizeFromUrl()]
+    if (!stretch) return
+
+    scaleTableModel(scene, stretch.x, stretch.y)
+  }
+
+  table(): Table {
+    const table = new Table(this.rack())
+    this.cueball = table.cueball
+    return table
+  }
+
+  otherPlayersCueBall(): Ball {
+    return this.cueball
+  }
+
+  secondToPlay(): void {
+    // only for three cushion
+  }
+
+  isPartOfBreak(_: Outcome[]): boolean {
+    return this.currentBreak > 0
+  }
+
+  isEndOfGame(_: Outcome[]): boolean {
+    return Outcome.isClearTable(this.container.table)
+  }
+
+  allowsPlaceBall(): boolean {
+    return true
+  }
+
+  readonly asset = Snooker.tablemodel
+
+  startTurn(): void {
+    this.previousPotRed = false
+    this.targetIsRed = SnookerUtils.redsOnTable(this.container.table).length > 0
+    this.previousBreak = this.currentBreak
+    this.currentBreak = 0
+  }
+
+  rack(): Ball[] {
+    return Rack.fromInitParam(Rack.snooker())
+  }
+
+  nextCandidateBall(_p1type?: number): Ball | undefined {
+    if (isFirstShot(this.container.recorder)) {
+      return undefined
+    }
+    const table = this.container.table
+    const redsOnTable = SnookerUtils.redsOnTable(table)
+    const coloursOnTable = SnookerUtils.coloursOnTable(table)
+    if (this.previousPotRed) {
+      return Respot.closest(table.cueball, coloursOnTable)
+    }
+    if (redsOnTable.length > 0) {
+      return Respot.closest(table.cueball, redsOnTable)
+    }
+
+    if (coloursOnTable.length > 0) {
+      return coloursOnTable[0]
+    }
+    return undefined
+  }
+
+  placeBall(target?: Vector3): Vector3 {
+    if (target) {
+      const centre = new Vector3(Rack.baulk, 0, 0)
+      const radius = Rack.sixth
+      const distance = target.distanceTo(centre)
+      if (target.x >= Rack.baulk) {
+        target.x = Rack.baulk
+      }
+      if (distance > radius) {
+        const direction = target.clone().sub(centre).normalize()
+        return centre.add(direction.multiplyScalar(radius))
+      } else {
+        return target
+      }
+    }
+    return Respot.snookerD(this.container.table)
+  }
+
+  private switchPlayer(): Controller {
+    const table = this.container.table
+    this.container.sendEvent(new StartAimEvent())
+    if (this.container.isSinglePlayer) {
+      this.container.sendEvent(new WatchEvent(table.serialise()))
+      this.startTurn()
+      return new Aim(this.container)
+    }
+    this.startTurn()
+    return new WatchAim(this.container)
+  }
+
+  private continueBreak(): Controller {
+    const table = this.container.table
+    this.container.sound.playSuccess(table.inPockets())
+    if (Outcome.isClearTable(table)) {
+      return this.handleGameEnd(true)
+    }
+    this.container.sendEvent(new WatchEvent(table.serialise()))
+    return new Aim(this.container)
+  }
+
+  handleGameEnd(isWinner: boolean, endSubtext?: string): Controller {
+    return SnookerScoring.presentGameEnd(
+      this.container,
+      this.rulename,
+      isWinner,
+      endSubtext
+    )
+  }
+
+  private whiteInHand(): Controller {
+    this.startTurn()
+    if (this.container.isSinglePlayer) {
+      return new PlaceBall(this.container)
+    }
+    this.container.sendEvent(new PlaceBallEvent(zero))
+    return new WatchAim(this.container)
+  }
+
+  advanceState(outcome: Outcome[]): void {
+    const info = SnookerUtils.shotInfo(
+      this.container.table,
+      outcome,
+      this.targetIsRed,
+      this.previousPotRed
+    )
+    if (info.pots === 0) {
+      this.targetIsRed =
+        SnookerUtils.redsOnTable(this.container.table).length > 0
+      this.previousPotRed = false
+      return
+    }
+    if (this.targetIsRed) {
+      if (info.legalFirstCollision && Outcome.onlyRedsPotted(outcome)) {
+        this.targetIsRed = false
+        this.previousPotRed = true
+      } else {
+        this.previousPotRed = false
+        this.targetIsRed =
+          SnookerUtils.redsOnTable(this.container.table).length > 0
+      }
+    } else {
+      this.previousPotRed = false
+      this.targetIsRed =
+        SnookerUtils.redsOnTable(this.container.table).length > 0
+    }
+  }
+
+  update(outcome: Outcome[]): Controller {
+    return this.snookerrule(outcome)
+  }
+
+  foulReason(outcome: Outcome[]): string | null {
+    const info = SnookerUtils.shotInfo(
+      this.container.table,
+      outcome,
+      this.targetIsRed,
+      this.previousPotRed
+    )
+    return SnookerUtils.calculateFoul(outcome, info).reason
+  }
+
+  getAmountScored(outcome: Outcome[]): number {
+    return Outcome.pots(outcome).reduce((sum, ball) => {
+      if (ball.id >= 7) return sum + 1 // red: 1 point
+      if (ball.id >= 1) return sum + ball.id + 1 // colour: id+1 points
+      return sum
+    }, 0)
+  }
+
+  respot(outcome: Outcome[]): Ball[] {
+    return SnookerUtils.respotAllPottedColours(this.container.table, outcome)
+  }
+
+  private respotColours(outcome: Outcome[]): void {
+    const respotted = this.respot(outcome)
+    if (respotted.length > 0) {
+      respotted.forEach((ball) => ball.fround())
+      const respotEvent = RerackEvent.fromJson({
+        balls: respotted.map((b) => b.serialise()),
+      })
+      this.container.sendEvent(respotEvent)
+    }
+  }
+}

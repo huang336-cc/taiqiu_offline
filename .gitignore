@@ -1,0 +1,31 @@
+# 依赖
+node_modules/
+.yarn/
+.pnp.*
+yarn-error.log
+npm-debug.log*
+
+# 安卓构建中间产物
+billiards-apk/obj/
+billiards-apk/compiled/
+billiards-apk/apk_content/
+billiards-apk/assets/
+billiards-apk/lib/
+billiards-apk/src/**/R.java
+*.apk
+*.idsig
+*.dex
+*.ap_
+
+# 签名私钥 —— 绝不入库
+*.keystore
+*.jks
+*.p12
+keystore.properties
+
+# 系统与编辑器
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

@@ -1,0 +1,110 @@
+import { ControllerBase } from "./controllerbase"
+import { Controller, Input } from "./controller"
+import { Aim } from "./aim"
+import { BreakEvent } from "../events/breakevent"
+import { R } from "../model/physics/constants"
+import { Vector3 } from "three"
+import { CueMesh } from "../view/cuemesh"
+import { CameraTop } from "../view/cameratop"
+import { T } from "../utils/i18n"
+
+/**
+ * Place cue ball using input events.
+ *
+ * Needs to be configurable to break place ball and post foul place ball anywhere legal.
+ */
+export class PlaceBall extends ControllerBase {
+  override get name() {
+    return "PlaceBall"
+  }
+  readonly placescale = 0.02 * R
+  private readonly startPos: Vector3 | undefined
+
+  constructor(container, startPos?: Vector3) {
+    super(container)
+    this.startPos = startPos
+    this.container.table.cue.moveTo(this.container.table.cueball.pos)
+    this.container.view.camera.forceMode(this.container.view.camera.topView)
+  }
+
+  override onFirst() {
+    const cueball = this.container.table.cueball
+    if (this.container.rules.allowsPlaceBall()) {
+      if (this.startPos) {
+        cueball.pos.copy(this.container.rules.placeBall(this.startPos.clone()))
+      } else {
+        cueball.pos.copy(this.container.rules.placeBall())
+      }
+    }
+    cueball.setStationary()
+    cueball.updateMesh(0)
+    this.container.table.cue.placeBallMode()
+    this.container.table.cue.showHelper(false)
+    this.container.table.cue.moveTo(this.container.table.cueball.pos)
+    this.container.table.cue.aimInputs.setButtonText(T.placeBallButton)
+    this.container.table.cue.aimInputs.setDisabled(false)
+    if (!this.container.rules.allowsPlaceBall()) {
+      this.container.inputQueue.push(new Input(1, "SpaceUp"))
+    }
+  }
+
+  override handleInput(input: Input): Controller {
+    const ballPos = this.container.table.cueball.pos
+    switch (input.key) {
+      case "ArrowLeft":
+        this.moveTo(0, input.t * this.placescale)
+        break
+      case "ArrowRight":
+        this.moveTo(0, -input.t * this.placescale)
+        break
+      // use cursor movement for placing cueball
+      case "movementXUp":
+        this.handleMovement(input.t * 4, 0)
+        break
+      case "movementYUp":
+        this.handleMovement(0, input.t * 4)
+        break
+      case "SpaceUp":
+        return this.placed()
+      default:
+        this.commonKeyHandler(input)
+    }
+
+    this.container.table.cue.moveTo(ballPos)
+    this.container.view.camera.forceMove(this.container.table.cue.aim)
+    this.container.sendEvent(this.container.table.cue.aim)
+
+    return this
+  }
+
+  handleMovement(dx: number, dy: number) {
+    const aspect = this.container.view.camera.camera.aspect
+    if (aspect > CameraTop.portrait) {
+      this.moveTo(dx * this.placescale, -dy * this.placescale)
+    } else {
+      this.moveTo(-dy * this.placescale, -dx * this.placescale)
+    }
+  }
+
+  moveTo(dx, dy) {
+    const delta = new Vector3(dx, dy)
+    const ballPos = this.container.table.cueball.pos.add(delta)
+    ballPos.copy(this.container.rules.placeBall(ballPos))
+    this.container.table.cueball.fround()
+    CueMesh.indicateValid(!this.container.table.overlapsAny(ballPos))
+  }
+
+  placed() {
+    if (this.container.table.overlapsAny(this.container.table.cueball.pos)) {
+      return this
+    }
+    this.container.table.cueball.fround()
+    this.container.table.cue.aimInputs.setButtonText(T.hitButton)
+    this.container.sound.playNotify()
+    this.container.sendEvent(
+      new BreakEvent(this.container.table.shortSerialise())
+    )
+    this.container.view.camera.forceMode(this.container.view.camera.aimView)
+    return new Aim(this.container)
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "include": ["src/**/*"],
+  "exclude": ["**/*.spec.ts"],
+  "compilerOptions": {
+    "incremental": false,
+    "outDir": "./dist",
+    "module": "preserve",
+    "noImplicitAny": false,
+    "strictNullChecks": true,
+    "noUnusedLocals": true,
+    "noEmitOnError": false,
+    "alwaysStrict": true,
+    "noImplicitReturns": true,
+    "noImplicitThis": true,
+    "noUnusedParameters": true,
+    "strictBindCallApply": true,
+    "strictFunctionTypes": true,
+    "strictPropertyInitialization": false,
+    "noImplicitOverride": true,
+    "exactOptionalPropertyTypes": false,
+    "moduleResolution": "Bundler",
+    "target": "ES2018",
+    "types": ["node"],
+    "lib": ["ES2021", "DOM"],
+    "sourceMap": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  }
+}

@@ -1,0 +1,142 @@
+import { Ball } from "../model/ball"
+import { Outcome, OutcomeType } from "../model/outcome"
+import { ProximityIndicator } from "../view/proximityindicator"
+import { R } from "../model/physics/constants"
+
+function updateCushionCount(
+  outcome: Outcome[],
+  cueball: Ball,
+  indicator: ProximityIndicator
+) {
+  const cushionCount = outcome.filter(
+    (o) => o.type === OutcomeType.Cushion && o.ballA === cueball
+  ).length
+  if (cushionCount !== indicator.cushionCount) {
+    indicator.cushionCount = cushionCount
+    indicator.setCushionCount(cushionCount)
+  }
+  if (cushionCount >= 3) {
+    indicator.threeCushionsMet = true
+  }
+}
+
+function updateProximityOutcome(
+  outcome: Outcome[],
+  cueball: Ball,
+  indicator: ProximityIndicator,
+  time: number
+) {
+  if (indicator.hitTarget) return
+  const lastOutcome = outcome[outcome.length - 1]
+  const involved = (o: Outcome) =>
+    o?.type === OutcomeType.Collision &&
+    ((o.ballA === cueball && o.ballB === indicator.target) ||
+      (o.ballB === cueball && o.ballA === indicator.target))
+  if (involved(lastOutcome)) {
+    indicator.hitTarget = true
+    const distance = 1.99 * R
+    outcome.push(
+      Outcome.proximity(
+        cueball,
+        indicator.target!,
+        distance,
+        lastOutcome.timestamp + 1
+      )
+    )
+    indicator.setProximity(distance)
+    return
+  }
+  const distance = cueball.pos.distanceTo(indicator.target!.pos)
+  if (distance >= 4 * R) return
+  if (lastOutcome?.type !== OutcomeType.Proximity) {
+    outcome.push(Outcome.proximity(cueball, indicator.target!, distance, time))
+    indicator.setProximity(distance)
+  } else if (distance < lastOutcome.incidentSpeed) {
+    refineProximity(
+      outcome,
+      cueball,
+      indicator.target!,
+      distance,
+      lastOutcome,
+      time
+    )
+    indicator.setProximity(distance)
+  }
+}
+
+function refineProximity(
+  outcome: Outcome[],
+  cueball: Ball,
+  target: Ball,
+  distance: number,
+  lastOutcome: Outcome,
+  time: number
+) {
+  if (lastOutcome.incidentSpeed > 3 * R && distance <= 3 * R) {
+    outcome.push(Outcome.proximity(cueball, target, distance, time))
+  } else {
+    outcome[outcome.length - 1] = Outcome.proximity(
+      cueball,
+      target,
+      distance,
+      lastOutcome.timestamp
+    )
+  }
+}
+
+function trackActiveIndicator(
+  outcome: Outcome[],
+  cueball: Ball,
+  indicator: ProximityIndicator,
+  time: number
+) {
+  if (indicator.target!.inMotion()) {
+    indicator.showAt(indicator.target!.pos)
+  }
+  if (!indicator.hitTarget) {
+    const hitNow = outcome.some(
+      (o) =>
+        o.type === OutcomeType.Collision &&
+        ((o.ballA === cueball && o.ballB === indicator.target) ||
+          (o.ballB === cueball && o.ballA === indicator.target))
+    )
+    if (hitNow) {
+      indicator.hitTarget = true
+      if (indicator.threeCushionsMet) {
+        const distance = 1.99 * R
+        outcome.push(
+          Outcome.proximity(cueball, indicator.target!, distance, time)
+        )
+        indicator.setProximity(distance)
+      }
+    }
+  }
+  if (!indicator.threeCushionsMet) {
+    updateCushionCount(outcome, cueball, indicator)
+  }
+  if (indicator.threeCushionsMet && !indicator.hitTarget) {
+    updateProximityOutcome(outcome, cueball, indicator, time)
+  }
+}
+
+export function checkProximity(
+  outcome: Outcome[],
+  cueball: Ball,
+  balls: Ball[],
+  indicator: ProximityIndicator,
+  time: number
+): void {
+  if (indicator.group.visible && indicator.target) {
+    trackActiveIndicator(outcome, cueball, indicator, time)
+    return
+  }
+
+  const moving = balls.filter((b) => b.inMotion())
+  if (moving.length !== 2 || !moving.includes(cueball)) return
+
+  const target = balls.find((b) => !b.inMotion() && b !== cueball)
+  if (target) {
+    indicator.target = target
+    indicator.showAt(target.pos)
+  }
+}

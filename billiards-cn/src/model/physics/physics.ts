@@ -1,0 +1,265 @@
+import { Vector3 } from "three"
+import { sin, cos, hypot } from "../../utils/utils"
+import { norm, upCross, up } from "../../utils/three-utils"
+import { muS, muC, g, m, Mz, Mxy, R, I, e, ee, μs, μw } from "./constants"
+import { Mathavan } from "./mathavan"
+
+export function surfaceVelocity(v, w) {
+  return surfaceVelocityFull(v, w).setZ(0)
+}
+
+const sv = new Vector3()
+export function surfaceVelocityFull(v, w) {
+  return sv.copy(v).addScaledVector(upCross(w), R)
+}
+
+const delta = { v: new Vector3(), w: new Vector3() }
+
+export function sliding(v, w) {
+  const va = surfaceVelocity(v, w)
+  delta.v.copy(norm(va).multiplyScalar(-muS * g))
+  delta.w.copy(norm(upCross(va)).multiplyScalar(((5 / 2) * muS * g) / R))
+  delta.w.setZ(-(5 / 2) * (Mz / (m * R * R)) * Math.sign(w.z))
+  return delta
+}
+
+export function rollingFull(w: Vector3, v: Vector3, t: number) {
+  const mag = hypot(w.x, w.y)
+  const zmag = Math.abs(w.z)
+  const zsign = Math.sign(w.z)
+  const eps = 0.1
+
+  if (mag < eps) {
+    delta.v.set(-v.x / t, -v.y / t, 0)
+    const spindownFactor = zmag > 24 ? 12 : 1
+    delta.w.set(
+      -w.x / t,
+      -w.y / t,
+      -(5 / 2) * (Mz / (m * R * R)) * spindownFactor * zsign
+    )
+    return delta
+  }
+
+  const kw = ((5 / 7) * Mxy) / (m * R * R) / mag
+  const dwx = -kw * w.x
+  const dwy = -kw * w.y
+
+  delta.w.set(dwx, dwy, -(5 / 2) * (Mz / (m * R * R)) * zsign)
+  delta.v.set(R * (w.y + dwy) - v.x, -R * (w.x + dwx) - v.y, 0)
+  return delta
+}
+
+export function forceRoll(v, w) {
+  const wz = w.z
+  w.copy(upCross(v).multiplyScalar(1 / R))
+  w.setZ(wz)
+}
+
+const vr_v = new Vector3()
+const wr_v = new Vector3()
+
+export function rotateApplyUnrotate(theta, v, w, model) {
+  const vr = vr_v.copy(v).applyAxisAngle(up, theta)
+  const wr = wr_v.copy(w).applyAxisAngle(up, theta)
+
+  const delta = model(vr, wr)
+
+  delta.v.applyAxisAngle(up, -theta)
+  delta.w.applyAxisAngle(up, -theta)
+  return delta
+}
+
+// Han paper cushion physics
+
+// cushion contact point epsilon above ball centre
+
+const epsilon = R * 0.1
+const theta_a = Math.asin(epsilon / R)
+
+const sin_a = sin(theta_a)
+const cos_a = cos(theta_a)
+
+export function s0(v, w) {
+  return new Vector3(
+    v.x * sin_a - v.z * cos_a + R * w.y,
+    -v.y - R * w.z * cos_a + R * w.x * sin_a
+  )
+}
+
+export function c0(v) {
+  return v.x * cos_a
+}
+
+export function Pzs(s) {
+  const A = 7 / 2 / m
+  return s.length() / A
+}
+
+export function Pze(c) {
+  const B = 1 / m
+  const coeff = restitutionCushion(new Vector3(c / cos_a, 0, 0))
+  return (muC * ((1 + coeff) * c)) / B
+}
+
+export function isGripCushion(v, w) {
+  const Pze_val = Pze(c0(v))
+  const Pzs_val = Pzs(s0(v, w))
+  return Pzs_val <= Pze_val
+}
+
+function basisHan(v, w) {
+  return {
+    c: c0(v),
+    s: s0(v, w),
+    A: 7 / 2 / m,
+    B: 1 / m,
+  }
+}
+
+function gripHan(v, w) {
+  const { c, s, A, B } = basisHan(v, w)
+  const ecB = (1 + e) * (c / B)
+  const PX = (-s.x / A) * sin_a - ecB * cos_a
+  const PY = s.y / A
+  const PZ = (s.x / A) * cos_a - ecB * sin_a
+  return impulseToDelta(PX, PY, PZ)
+}
+
+function slipHan(v, w) {
+  const { c, B } = basisHan(v, w)
+  const ecB = (1 + e) * (c / B)
+  const mu = muCushion(v)
+  const phi = Math.atan2(v.y, v.x)
+  const cos_phi = Math.cos(phi)
+  const sin_phi = Math.sin(phi)
+  const PX = -mu * ecB * cos_phi * cos_a - ecB * cos_a
+  const PY = mu * ecB * sin_phi
+  const PZ = mu * ecB * cos_phi * cos_a - ecB * sin_a
+  return impulseToDelta(PX, PY, PZ)
+}
+
+/**
+ * Based directly on Han2005 paper.
+ * Expects ball to be bouncing in +X plane.
+ *
+ * @param v ball velocity
+ * @param w ball spin
+ * @returns delta to apply to velocity and spin
+ */
+export function bounceHan(v: Vector3, w: Vector3) {
+  if (isGripCushion(v, w)) {
+    return gripHan(v, w)
+  } else {
+    return slipHan(v, w)
+  }
+}
+
+/**
+ * Modification Han 2005 paper by Taylor to blend two bounce regimes.
+ * Motive is to remove cliff edge discontinuity in original model.
+ * Gives more realistic check side (reverse side played at steep angle)
+ *
+ * @param v ball velocity
+ * @param w ball spin
+ * @returns delta to apply to velocity and spin
+ */
+export function bounceHanBlend(v: Vector3, w: Vector3) {
+  const deltaGrip = gripHan(v, w)
+  const deltaSlip = slipHan(v, w)
+
+  const isCheckSide = Math.sign(v.y) === Math.sign(w.z)
+  const factor = isCheckSide ? Math.cos(Math.atan2(v.y, v.x)) : 1
+
+  const delta = {
+    v: deltaSlip.v.lerp(deltaGrip.v, factor),
+    w: deltaSlip.w.lerp(deltaGrip.w, factor),
+  }
+  return delta
+}
+
+function impulseToDelta(PX, PY, PZ) {
+  return {
+    v: new Vector3(PX / m, PY / m),
+    w: new Vector3(
+      (-R / I) * PY * sin_a,
+      (R / I) * (PX * sin_a - PZ * cos_a),
+      (R / I) * PY * cos_a
+    ),
+  }
+}
+
+export function muCushion(v: Vector3) {
+  const theta = Math.atan2(Math.abs(v.y), v.x)
+  return 0.471 - theta * 0.241
+}
+
+export function restitutionCushion(v: Vector3) {
+  const e = 0.39 + 0.257 * v.x - 0.044 * v.x * v.x
+  return e
+}
+
+function cartesionToBallCentric(v, w) {
+  const mathavan = new Mathavan(m, R, ee, μs, μw)
+  mathavan.solve(v.x, v.y, w.x, w.y, w.z)
+
+  const rv = new Vector3(mathavan.vx, mathavan.vy, 0)
+  const rw = new Vector3(mathavan.ωx, mathavan.ωy, mathavan.ωz)
+
+  return { v: rv.sub(v), w: rw.sub(w) }
+}
+
+/**
+ * Bounce is called with ball travelling in +x direction to cushion,
+ * mathavan expects it in +y direction and also requires angle
+ * and spin to be relative to direction of ball travel.
+ */
+export function mathavanAdapter(v: Vector3, w: Vector3) {
+  return rotateApplyUnrotate(Math.PI / 2, v, w, cartesionToBallCentric)
+}
+
+export interface CueStrike {
+  vel: Vector3
+  rvel: Vector3
+}
+
+/**
+ * Resolve a cue strike into linear and angular velocity.
+ */
+export function cueStrike(
+  angle: number,
+  power: number,
+  offset: Vector3,
+  elevation: number = 0
+): CueStrike {
+  const speed = power * (1 - 0.25 * offset.lengthSq())
+  const vel = norm(new Vector3(cos(angle), sin(angle), 0)).multiplyScalar(speed)
+  const velCos = vel.clone().multiplyScalar(cos(elevation))
+
+  return {
+    vel: velCos,
+    rvel: cueToSpin(offset, vel, elevation),
+  }
+}
+
+/**
+ * Spin on ball after strike with cue
+ * https://billiards.colostate.edu/technical_proofs/new/TP_A-12.pdf
+ *
+ * @param offset (x,y,0) from center strike where x,y range from -0.5 to 0.5 the fraction of R from center.
+ * @param v velocity of ball after strike
+ * @param elevation angle of cue in radians
+ * @returns angular velocity
+ */
+export function cueToSpin(offset: Vector3, v: Vector3, elevation: number = 0) {
+  const cosAlpha = Math.max(1e-3, Math.cos(elevation))
+  const sinAlpha = Math.sin(elevation)
+
+  const projection = Math.max(0.5, cosAlpha) // clamp floor
+  const spinRate =
+    ((5 / 2) * v.length() * (offset.length() * R)) / (R * R * projection)
+  const dir = v.clone().normalize()
+  const q = dir.clone().multiplyScalar(cosAlpha).addScaledVector(up, -sinAlpha)
+  const spinAxis = Math.atan2(-offset.x, offset.y)
+  const rvel = upCross(dir).applyAxisAngle(q, spinAxis).multiplyScalar(spinRate)
+  return rvel
+}

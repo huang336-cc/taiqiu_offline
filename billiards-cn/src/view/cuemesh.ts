@@ -1,0 +1,202 @@
+import { R } from "../model/physics/constants"
+import { up } from "../utils/three-utils"
+import {
+  Matrix4,
+  Mesh,
+  CylinderGeometry,
+  MeshPhongMaterial,
+  Vector3,
+  ShaderMaterial,
+  Group,
+  PlaneGeometry,
+  MeshBasicMaterial,
+  ConeGeometry,
+} from "three"
+
+export type CueMeshes = {
+  mesh: Group
+  tiltMesh: Group
+  cueBody: Group
+}
+
+export class CueMesh {
+  static mesh: Mesh
+  static readonly baseTilt = 0.17
+
+  static readonly placermaterial = new MeshPhongMaterial({
+    color: 0xffffff,
+    wireframe: false,
+    flatShading: false,
+    transparent: false,
+  })
+
+  static indicateValid(valid) {
+    CueMesh.placermaterial.color.setHex(valid ? 0xccffcc : 0xff0000)
+  }
+
+  private static readonly helpermaterial = new ShaderMaterial({
+    uniforms: {
+      lightDirection: { value: new Vector3(0, 0, 1) },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vNormal;  
+      void main() {
+        vNormal = normal;
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+      }
+    `,
+    fragmentShader: `
+      varying vec2 vUv;
+      varying vec3 vNormal;
+      uniform vec3 lightDirection;
+      void main() {
+        float intensity = dot(vNormal, lightDirection);
+        vec3 color = vec3(1.0, 1.0, 1.0);
+        vec3 finalColor = color * intensity;
+        gl_FragColor = vec4(finalColor, 0.075 * (1.0-vUv.y));
+      }
+    `,
+    wireframe: false,
+    transparent: true,
+  })
+
+  static createHelper() {
+    const geometry = new CylinderGeometry(R, R, (R * 30) / 0.5, 12, 1, true)
+    const mesh = new Mesh(geometry, this.helpermaterial)
+    mesh.geometry
+      .applyMatrix4(new Matrix4().identity().makeRotationAxis(up, -Math.PI / 2))
+      .applyMatrix4(
+        new Matrix4()
+          .identity()
+          .makeTranslation((R * 15) / 0.5, 0, (-R * 0.01) / 0.5)
+      )
+    mesh.visible = false
+    mesh.renderOrder = -1
+    mesh.material.depthTest = false
+    return mesh
+  }
+
+  static createPlacer() {
+    const group = new Group()
+    const pyramidGeo = new ConeGeometry(0.75 * R, 1.6 * R, 4)
+    const n = 4
+    for (let i = 0; i < n; i++) {
+      const pyramid = new Mesh(pyramidGeo, CueMesh.placermaterial)
+      const angle = (i * 2 * Math.PI) / n
+
+      // Distribute around the ball
+      pyramid.position.x = Math.cos(angle) * 2 * R
+      pyramid.position.y = Math.sin(angle) * 2 * R
+      pyramid.position.z = 1 * R // Hover height
+
+      // Point toward the center
+      pyramid.lookAt(0, 0, R)
+      // Adjust rotation because ConeGeometry points up its Y axis
+      pyramid.rotateX(Math.PI / 2)
+
+      group.add(pyramid)
+    }
+    group.visible = false
+    return group
+  }
+
+  static createShadow(length: number) {
+    const geometry = new PlaneGeometry(length, R * 0.4)
+    geometry.applyMatrix4(
+      new Matrix4().identity().makeTranslation(-length / 2 - R, 0, 0)
+    )
+    const material = new MeshBasicMaterial({
+      color: 0x000000,
+      opacity: 0.25,
+      transparent: true,
+      depthWrite: false,
+    })
+    const mesh = new Mesh(geometry, material)
+    mesh.visible = true
+    return mesh
+  }
+
+  static createCue(tip, but, length): CueMeshes {
+    const cueBody = this.cueGeometry(tip, but, length)
+    const tiltGroup = new Group()
+    const mesh = new Group()
+
+    cueBody.applyMatrix4(
+      new Matrix4().identity().makeRotationAxis(up, -Math.PI / 2)
+    )
+    cueBody.position.set(-length / 2 - R, 0, R * 0.12)
+    tiltGroup.rotation.y = this.baseTilt
+    tiltGroup.add(cueBody)
+    mesh.add(tiltGroup)
+    return { mesh, tiltMesh: tiltGroup, cueBody }
+  }
+
+  static cueGeometry(tipRadius, buttRadius, length, segments = 9) {
+    const group = new Group()
+
+    // Material Definitions
+    const ashWoodMat = new MeshPhongMaterial({ color: 0xd2b48c, shininess: 50 })
+    const ebonyMat = new MeshPhongMaterial({ color: 0x1a1a1a, shininess: 80 })
+    const ferruleMat = new MeshPhongMaterial({
+      color: 0xe5e5e5,
+      shininess: 100,
+    })
+    const tipMat = new MeshPhongMaterial({ color: 0x4a7c9a, shininess: 5 })
+
+    // Ratios for a standard snooker cue
+    const buttLength = length * 0.28
+    const shaftLength = length * 0.71
+    const ferruleLength = length * 0.007
+
+    // 1. Butt
+    const buttGeom = new CylinderGeometry(
+      buttRadius * 0.9,
+      buttRadius,
+      buttLength,
+      segments
+    )
+    const butt = new Mesh(buttGeom, ebonyMat)
+    butt.position.y = -length / 2 + buttLength / 2
+    group.add(butt)
+
+    // 2. Shaft
+    const shaftGeom = new CylinderGeometry(
+      tipRadius,
+      buttRadius * 0.9,
+      shaftLength,
+      segments
+    )
+    const shaft = new Mesh(shaftGeom, ashWoodMat)
+    shaft.position.y = butt.position.y + buttLength / 2 + shaftLength / 2
+    group.add(shaft)
+
+    // 3. Ferrule
+    const ferruleGeom = new CylinderGeometry(
+      tipRadius,
+      tipRadius,
+      ferruleLength,
+      segments
+    )
+    const ferrule = new Mesh(ferruleGeom, ferruleMat)
+    ferrule.position.y = shaft.position.y + shaftLength / 2 + ferruleLength / 2
+    group.add(ferrule)
+
+    // 4. Tip
+    const tipHeight = 0.0055
+    const tipTopRadius = tipRadius * 0.93
+    const tipGeom = new CylinderGeometry(
+      tipTopRadius,
+      tipRadius,
+      tipHeight,
+      segments
+    )
+    const tip = new Mesh(tipGeom, tipMat)
+    tip.position.y = ferrule.position.y + ferruleLength / 2 + tipHeight / 2
+    tip.name = "cueTip"
+    group.add(tip)
+
+    return group
+  }
+}

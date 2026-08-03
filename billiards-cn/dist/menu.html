@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover"
+    />
+    <title>中式台球 · 离线版</title>
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <link rel="stylesheet" href="css/menu-cn.css" />
+  </head>
+  <body>
+    <div class="app">
+      <!-- 顶部标题 -->
+      <header class="hero">
+        <h1 class="hero-title">台球大师</h1>
+        <p class="hero-sub">真实物理引擎 · 纯离线 · 无广告</p>
+      </header>
+
+      <!-- 主体：玩法选择 -->
+      <main id="screen-home" class="screen active">
+        <section class="section">
+          <h2 class="section-title">选择玩法</h2>
+          <div class="mode-grid" id="modeGrid">
+            <button class="mode-card" data-rule="nineball">
+              <img src="assets/nineball.png" alt="" class="mode-icon" />
+              <span class="mode-name">九球</span>
+              <span class="mode-desc">按号码顺序击球，先进9号者胜</span>
+            </button>
+            <button class="mode-card" data-rule="eightball">
+              <img src="assets/eightball.png" alt="" class="mode-icon" />
+              <span class="mode-name">八球</span>
+              <span class="mode-desc">清完己方半区，再打黑8获胜</span>
+            </button>
+            <button class="mode-card" data-rule="snooker">
+              <img src="assets/snooker.png" alt="" class="mode-icon" />
+              <span class="mode-name">斯诺克</span>
+              <span class="mode-desc">红球彩球交替，比拼总分</span>
+            </button>
+            <button class="mode-card" data-rule="threecushion">
+              <img src="assets/threecushion.png" alt="" class="mode-icon" />
+              <span class="mode-name">三库开伦</span>
+              <span class="mode-desc">无袋台，碰三库后撞两球得分</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2 class="section-title">对手</h2>
+          <div class="seg" id="opponentSeg" role="tablist">
+            <button class="seg-btn active" data-opponent="solo">
+              自己练习
+            </button>
+            <button class="seg-btn" data-opponent="ClawBreak">
+              电脑 · 稳健
+            </button>
+            <button class="seg-btn" data-opponent="TheFarJaw">
+              电脑 · 激进
+            </button>
+          </div>
+          <p class="seg-hint" id="opponentHint">
+            自由练习模式，不计胜负，适合熟悉手感与走位。
+          </p>
+        </section>
+
+        <div class="actions">
+          <button class="btn btn-primary" id="btnStart">开始游戏</button>
+          <div class="actions-row">
+            <button class="btn btn-ghost" id="btnGuide">操作介绍</button>
+            <button class="btn btn-ghost" id="btnSettings">游戏设置</button>
+          </div>
+        </div>
+      </main>
+
+      <!-- 操作介绍 -->
+      <section id="screen-guide" class="screen">
+        <h2 class="screen-title">操作介绍</h2>
+        <div class="scroll">
+          <div class="guide-block">
+            <h3>基本操作</h3>
+            <ul class="guide-list">
+              <li><b>旋转视角</b>：在球桌上单指左右拖动</li>
+              <li><b>调整俯仰</b>：单指上下拖动</li>
+              <li><b>缩放画面</b>：双指捏合放大 / 缩小</li>
+              <li><b>击球</b>：点击右下角的「击球」按钮</li>
+              <li><b>力度</b>：拖动力度滑条，百分比实时显示</li>
+            </ul>
+          </div>
+
+          <div class="guide-block">
+            <h3>加塞与杆法</h3>
+            <ul class="guide-list">
+              <li>
+                <b>击球点</b>：在白色母球图示上点选，偏上为高杆（跟进），偏下为低杆（缩杆），左右为左右塞
+              </li>
+              <li>
+                <b>抬杆角度</b>：点击母球图示旁的「+」，可调整球杆抬起角度，用于跳球或加强弧线
+              </li>
+              <li><b>复位</b>：双击母球图示可将击球点恢复到正中心</li>
+            </ul>
+          </div>
+
+          <div class="guide-block">
+            <h3>摆球（自由球）</h3>
+            <ul class="guide-list">
+              <li>对手犯规后你将获得自由球，可拖动母球到任意合法位置</li>
+              <li>确定位置后点击「击球」进入瞄准</li>
+            </ul>
+          </div>
+
+          <div class="guide-block">
+            <h3>视角切换</h3>
+            <ul class="guide-list">
+              <li>
+                点击右下角 🎥 按钮循环切换：跟随视角 → 俯视全局 → 母球视角
+              </li>
+              <li>俯视视角便于观察整体球型和走位路线</li>
+            </ul>
+          </div>
+
+          <div class="guide-block">
+            <h3>键盘操作（外接键盘时）</h3>
+            <table class="key-table">
+              <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>左右微调瞄准方向</td></tr>
+              <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>调整击球力度</td></tr>
+              <tr><td><kbd>空格</kbd></td><td>击球</td></tr>
+              <tr><td><kbd>Shift</kbd> + 方向键</td><td>精细微调</td></tr>
+              <tr><td><kbd>C</kbd></td><td>切换视角</td></tr>
+            </table>
+          </div>
+
+          <div class="guide-block tip">
+            <h3>小技巧</h3>
+            <ul class="guide-list">
+              <li>击球前先切到俯视，规划好下一颗球的走位</li>
+              <li>低杆可让母球回撤，高杆使其跟进，善用可控制走位</li>
+              <li>力度并非越大越好，很多球轻推反而更准</li>
+            </ul>
+          </div>
+        </div>
+        <button class="btn btn-primary back-btn" data-back>返回</button>
+      </section>
+
+      <!-- 游戏设置 -->
+      <section id="screen-settings" class="screen">
+        <h2 class="screen-title">游戏设置</h2>
+        <div class="scroll">
+          <div class="setting-group">
+            <h3>画面</h3>
+            <div class="setting-row">
+              <label for="setQuality">画质档位</label>
+              <select id="setQuality" class="select"></select>
+            </div>
+            <p class="setting-hint" id="qualityHint"></p>
+            <div class="setting-row">
+              <span>自动检测推荐画质</span>
+              <button class="btn btn-mini" id="btnAutoQuality">重新检测</button>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <h3>声音</h3>
+            <div class="setting-row">
+              <label for="setSound">音效开关</label>
+              <label class="switch">
+                <input type="checkbox" id="setSound" />
+                <span class="slider-ui"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <label for="setVolume">音量</label>
+              <input
+                type="range"
+                id="setVolume"
+                min="0"
+                max="100"
+                step="5"
+                class="range"
+              />
+              <span class="range-val" id="volumeVal">80%</span>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <h3>操作</h3>
+            <div class="setting-row">
+              <label for="setAim">瞄准辅助线</label>
+              <label class="switch">
+                <input type="checkbox" id="setAim" />
+                <span class="slider-ui"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <label for="setVibrate">震动反馈</label>
+              <label class="switch">
+                <input type="checkbox" id="setVibrate" />
+                <span class="slider-ui"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <h3>关于</h3>
+            <p class="about-text">
+              本游戏为完全离线的单机版本，<b>不需要联网</b>、<b>无任何广告</b>、<b>不收集任何个人信息</b>。
+            </p>
+            <p class="about-text dim">
+              本作品是开源项目
+              <b>tailuge/billiards</b> 的衍生作品，遵循 GPL-3.0 协议。
+              物理引擎实现了真实的球体碰撞、旋转、库边反弹与摩擦模型。
+            </p>
+            <p class="about-text dim" id="versionText"></p>
+            <button class="btn btn-mini" id="btnLicense">
+              开源许可与致谢
+            </button>
+            <button class="btn btn-mini danger" id="btnReset">
+              恢复默认设置
+            </button>
+          </div>
+        </div>
+        <button class="btn btn-primary back-btn" data-back>返回</button>
+      </section>
+
+      <!-- 开源许可与致谢 -->
+      <section id="screen-license" class="screen">
+        <h2 class="screen-title">开源许可与致谢</h2>
+        <div class="scroll">
+          <div class="setting-group">
+            <h3>原始项目</h3>
+            <p class="about-text">
+              本作品是开源项目 <b>tailuge/billiards</b> 的衍生作品。
+            </p>
+            <table class="key-table">
+              <tr><td>项目</td><td>tailuge/billiards</td></tr>
+              <tr><td>作者</td><td>tailuge</td></tr>
+              <tr><td>协议</td><td>GNU GPL v3.0</td></tr>
+              <tr><td>基线</td><td>0.3.1</td></tr>
+            </table>
+            <p class="about-text dim">
+              物理引擎、渲染管线、规则判定与电脑对手等核心实现均来自该项目，
+              版权归原作者及其贡献者所有。在此致谢。
+            </p>
+            <p class="about-text dim">
+              项目地址：github.com/tailuge/billiards
+            </p>
+          </div>
+
+          <div class="setting-group">
+            <h3>修改声明</h3>
+            <p class="about-text dim">
+              本作品由 tailuge/billiards 修改而来，修改日期 2026 年 8 月 3 日。
+              主要改动：全中文本地化、移除全部联网功能、新增六档画质系统与移动端适配、
+              新增操作介绍与设置面板、封装为安卓离线应用。
+            </p>
+          </div>
+
+          <div class="setting-group">
+            <h3>协议义务</h3>
+            <p class="about-text dim">
+              本作品整体依据 GPL-3.0 发布。依据协议第 6 条，
+              分发二进制形式时须同时提供对应完整源代码，
+              该源码已随发布页附件一并提供。
+            </p>
+            <p class="about-text dim">
+              你有权自由运行、研究、修改和再分发本作品，
+              但再分发时须遵循同样的 GPL-3.0 条款。
+              协议全文：gnu.org/licenses/gpl-3.0.html
+            </p>
+          </div>
+
+          <div class="setting-group">
+            <h3>第三方组件</h3>
+            <table class="key-table">
+              <tr><td>three.js 0.185.1</td><td>MIT</td></tr>
+              <tr><td>JSONCrush 1.1.8</td><td>MIT</td></tr>
+              <tr><td>interact.js 1.10.28</td><td>MIT</td></tr>
+            </table>
+            <p class="about-text dim">
+              以上组件版权归各自作者所有，依 MIT 协议使用。
+            </p>
+          </div>
+
+          <div class="setting-group">
+            <h3>无担保声明</h3>
+            <p class="about-text dim">
+              本程序不提供任何担保。在适用法律允许的最大范围内，
+              版权持有者以「原样」提供本程序，不作任何明示或默示的担保，
+              使用风险由你自行承担。
+            </p>
+          </div>
+        </div>
+        <button class="btn btn-primary back-btn" data-back="settings">返回</button>
+      </section>
+    </div>
+
+    <script>
+      window.__BILLIARDS_VERSION__ = "1.0.0-260803";
+    </script>
+    <script src="menu-cn.js"></script>
+  </body>
+</html>

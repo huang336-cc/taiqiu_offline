@@ -1,0 +1,153 @@
+/* Minimalist Ball Tray Style */
+.tray-container {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 160px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  background: rgb(0 0 0 / 40%);
+  border-radius: 0 0 8px 8px;
+  border: 1px solid rgb(255 255 255 / 15%);
+  border-top: none;
+  z-index: 1500;
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.tray-score-container {
+  position: absolute;
+  top: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-family: var(--font-family-mono);
+  font-size: 16px;
+  letter-spacing: 0.5px;
+  line-height: 1.2;
+  color: white;
+  text-shadow: 1px 1px 0 rgb(0 0 0 / 100%);
+  pointer-events: none;
+  gap: 12px;
+  z-index: 1501;
+}
+
+.p1Score,
+.p2Score,
+.hudMiddle {
+  font-size: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.hud-name,
+.hud-value {
+  line-height: 1;
+}
+
+.ball-tray-list {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 15%,
+    black 90%,
+    transparent
+  );
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  scroll-behavior: smooth;
+  gap: 3px;
+}
+
+.ball-tray-list::-webkit-scrollbar {
+  display: none;
+}
+
+.break-group {
+  display: flex;
+  align-items: center;
+  background: rgb(255 255 255 / 10%);
+  padding: 0 3px;
+  border-radius: 12px;
+  height: 22px;
+  gap: 1px;
+}
+
+.nav-btn {
+  width: 20px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: rgb(255 255 255 / 50%);
+  font-size: 12px;
+  transition:
+    opacity 0.3s ease,
+    background 0.2s;
+  user-select: none;
+  z-index: 10;
+  opacity: 0;
+  background: rgb(255 255 255 / 5%);
+}
+
+.nav-btn:hover {
+  background: rgb(255 255 255 / 20%);
+  color: white;
+}
+
+.tray-container:hover .nav-btn {
+  opacity: 1;
+}
+
+.ball-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  margin: 0;
+  text-decoration: none;
+  transition: transform 0.1s ease;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.ball-item:hover {
+  transform: scale(1.25);
+}
+
+.hi-score-pill {
+  color: #ffd700;
+  font-size: 12px;
+  text-decoration: none;
+  margin-left: 2px;
+  position: relative;
+  top: -2px;
+}
+
+.hi-score-pill:hover {
+  transform: scale(1.1);
+}
+
+.ball-item.break-score {
+  font-size: 16px;
+  font-weight: 100;
+  font-family: var(--font-family-primary);
+  vertical-align: middle;
+  line-height: normal;
+  position: relative;
+  top: -2px;
+}

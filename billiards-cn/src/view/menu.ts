@@ -1,0 +1,153 @@
+import { Container } from "../container/container"
+import { WatchShot } from "../controller/watchshot"
+import { getButton } from "../utils/dom"
+import { Session } from "../network/client/session"
+import { ConcedeEvent } from "../events/concedeevent"
+
+export class Menu {
+  container: Container
+  share: HTMLButtonElement
+  diagram: HTMLButtonElement
+  camera: HTMLButtonElement
+  concede: HTMLButtonElement
+  menu: HTMLButtonElement
+  analysis: HTMLButtonElement
+
+  disabled = true
+
+  constructor(container) {
+    this.container = container
+
+    this.share = this.getElement("share")
+    this.diagram = this.getElement("diagram")
+    this.camera = this.getElement("camera")
+    this.concede = this.getElement("concede")
+    this.menu = this.getElement("menu")
+    this.analysis = this.getElement("analysis")
+
+    this.setShareVisible(false)
+    this.setDiagramVisible(false)
+    if (this.camera) {
+      this.camera.onclick = (_) => {
+        this.adjustCamera()
+      }
+    }
+    if (this.menu) {
+      this.menu.onclick = (_) => {
+        this.toggleHelpOverlay()
+      }
+    }
+    const closeBtn = document.getElementById("helpClose")
+    if (closeBtn) {
+      closeBtn.onclick = () => {
+        const overlay = document.getElementById("helpOverlay")
+        overlay?.setAttribute("hidden", "true")
+      }
+    }
+    if (this.concede) {
+      this.concede.onclick = (_) => {
+        this.container.notification.show(
+          {
+            type: "Info",
+            title: "认输本局",
+            subtext: "确认后本局判负",
+            extra:
+              '<button class="notification-btn" data-notification-action="concede-confirm">确认认输</button>' +
+              '<button class="notification-btn" data-notification-action="concede-cancel">继续比赛</button>',
+            duration: 0,
+          },
+          0,
+          {
+            "concede-confirm": () => {
+              this.container.notification.clear()
+              if (Session.isBotMode()) {
+                this.container.updateController(
+                  this.container.rules.handleGameEnd(false)
+                )
+              } else {
+                this.container.updateController(
+                  this.container.rules.handleGameEnd(false)
+                )
+                this.container.sendEvent(new ConcedeEvent())
+              }
+            },
+            "concede-cancel": () => this.container.notification.clear(),
+          }
+        )
+      }
+    }
+  }
+
+  adjustCamera() {
+    const camera = this.container.view.camera
+    if (
+      this.container.controller instanceof WatchShot &&
+      camera.mode === camera.topView
+    ) {
+      camera.cycleModeToAimz(
+        this.container.table.balls,
+        this.container.table.cue.aim
+      )
+    } else {
+      camera.cycleMode(this.container.table.balls, this.container.table.cue.aim)
+    }
+    this.container.lastEventTime = performance.now()
+  }
+
+  getElement(id): HTMLButtonElement {
+    return getButton(id)!
+  }
+
+  setShareVisible(visible: boolean) {
+    if (!this.share) {
+      return
+    }
+    this.share.hidden = !visible
+    this.share.disabled = !visible
+  }
+
+  setDiagramVisible(visible: boolean) {
+    if (!this.diagram) {
+      return
+    }
+    this.diagram.hidden = !visible
+    this.diagram.disabled = !visible
+  }
+
+  setConcedeVisible(visible: boolean) {
+    if (this.concede) {
+      this.concede.hidden = !visible
+      this.concede.disabled = !visible
+    }
+  }
+
+  setAnalysisVisible(visible: boolean) {
+    if (this.analysis) {
+      this.analysis.hidden = !visible
+      this.analysis.disabled = !visible
+    }
+  }
+
+  toggleHelpOverlay() {
+    const overlay = document.getElementById("helpOverlay")
+    if (overlay) {
+      const isHidden = overlay.hasAttribute("hidden")
+      if (isHidden) {
+        this.showOverlay("help.html")
+      } else {
+        overlay.setAttribute("hidden", "true")
+      }
+    }
+  }
+
+  showOverlay(url: string) {
+    const overlay = document.getElementById("helpOverlay")
+    if (overlay) {
+      const iframe = overlay.querySelector("iframe")
+      if (iframe) {
+        iframe.setAttribute("src", url)
+      }
+      overlay.removeAttribute("hidden")
+    }
+  }
+}

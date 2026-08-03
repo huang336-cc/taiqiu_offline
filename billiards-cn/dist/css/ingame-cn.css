@@ -1,0 +1,206 @@
+/* ==========================================================================
+   台球大师 · 离线版 —— 游戏内中文界面与手机适配
+   在原版样式之后加载，只做“覆盖”，不改动原有布局逻辑。
+   ========================================================================== */
+
+:root {
+  --cn-gold: #e8c37a;
+  --cn-felt: #0d5c3a;
+  --cn-panel-top: #0a2a3d;
+  --cn-panel-bottom: #04070f;
+  --cn-safe-top: env(safe-area-inset-top, 0px);
+  --cn-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --cn-safe-left: env(safe-area-inset-left, 0px);
+  --cn-safe-right: env(safe-area-inset-right, 0px);
+}
+
+/* --------------------------------------------------------------------------
+   1. 全局：禁止选中/长按菜单/回弹，手机上更像原生 App
+   -------------------------------------------------------------------------- */
+html,
+body {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
+  font-family: var(--font-family-primary);
+}
+
+body {
+  padding-left: var(--cn-safe-left);
+  padding-right: var(--cn-safe-right);
+  box-sizing: border-box;
+}
+
+/* 画布不做像素化处理，保留高画质渲染 */
+canvas {
+  image-rendering: auto;
+}
+
+/* --------------------------------------------------------------------------
+   2. 底部操作面板
+   -------------------------------------------------------------------------- */
+.panel {
+  background: linear-gradient(180deg, var(--cn-panel-top), var(--cn-panel-bottom));
+  border-top: 1px solid rgb(232 195 122 / 25%);
+  padding-bottom: var(--cn-safe-bottom);
+  height: calc(70px + var(--cn-safe-bottom));
+}
+
+.hitButton {
+  font-family: var(--font-family-primary);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: #08130c;
+  background: linear-gradient(180deg, #ffe6a8, var(--cn-gold));
+  border: 1px solid #b8905180;
+  border-radius: 10px;
+  text-shadow: none;
+}
+
+.hitButton:active {
+  filter: brightness(0.92);
+}
+
+.menuButton {
+  color: var(--cn-gold);
+}
+
+.powerPercent {
+  font-family: var(--font-family-mono, monospace);
+  color: var(--cn-gold);
+}
+
+/* --------------------------------------------------------------------------
+   3. 比分 / 提示条
+   -------------------------------------------------------------------------- */
+#snookerScore,
+.breakScore {
+  color: var(--cn-gold);
+  font-family: var(--font-family-primary);
+}
+
+.p1Score,
+.p2Score {
+  font-family: var(--font-family-primary);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.tray-score-container {
+  padding-bottom: var(--cn-safe-bottom);
+}
+
+/* --------------------------------------------------------------------------
+   4. 通知面板（犯规 / 结算）中文排版
+   -------------------------------------------------------------------------- */
+#notification {
+  font-family: var(--font-family-primary);
+  line-height: 1.6;
+}
+
+#notification .notification-title,
+#notification h2 {
+  letter-spacing: 0.08em;
+}
+
+.notification-btn {
+  font-family: var(--font-family-primary);
+  font-size: 14px;
+  padding: 9px 18px;
+  min-height: 40px;
+  border-radius: 8px;
+  letter-spacing: 0.05em;
+}
+
+/* --------------------------------------------------------------------------
+   5. 帮助 / 设置浮层
+   -------------------------------------------------------------------------- */
+#helpOverlay {
+  width: min(94%, 420px);
+  height: min(88%, 680px);
+  background: #0b1418;
+  border: 1px solid rgb(232 195 122 / 30%);
+}
+
+.help-footer {
+  font-family: var(--font-family-primary);
+  gap: 8px;
+}
+
+.help-text {
+  flex: 1;
+  text-align: center;
+  color: #8fa3a8;
+}
+
+.lobby-btn,
+#helpClose {
+  font-family: var(--font-family-primary);
+  min-height: 34px;
+  padding: 6px 12px;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   6. 手机横屏：压缩面板高度，把控件挪到两侧，尽量给球桌让出空间
+   -------------------------------------------------------------------------- */
+@media (orientation: landscape) and (max-height: 500px) {
+  .panel {
+    height: calc(58px + var(--cn-safe-bottom));
+  }
+
+  .hitButton {
+    font-size: 13px;
+  }
+
+  #snookerScore {
+    font-size: 24px;
+  }
+
+  .breakScore {
+    font-size: 24px;
+  }
+
+  #helpOverlay {
+    width: min(92%, 560px);
+    height: 92%;
+  }
+}
+
+/* 小屏竖屏：缩小提示文字，避免遮挡球桌 */
+@media (orientation: portrait) and (max-width: 420px) {
+  .notification-btn {
+    font-size: 13px;
+    padding: 8px 14px;
+  }
+
+  .p1Score,
+  .p2Score {
+    font-size: 12px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   7. 低画质档位：关闭一些昂贵的合成效果（由 JS 给 body 加类）
+   -------------------------------------------------------------------------- */
+body.lod-low #snookerScore,
+body.lod-low .breakScore {
+  filter: none;
+}
+
+body.lod-low .panel {
+  background: #061020;
+}
+
+body.lod-low .hitButton {
+  background: var(--cn-gold);
+}
+
+/* --------------------------------------------------------------------------
+   8. 聊天区在离线版无用，彻底隐藏，避免占位
+   -------------------------------------------------------------------------- */
+.chatarea {
+  display: none !important;
+}

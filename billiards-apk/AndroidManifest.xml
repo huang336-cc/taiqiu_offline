@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.tailuge.billiards.cn"
+    android:versionCode="26080303"
+    android:versionName="1.0.0">
+
+    <!-- 明确声明 SDK 版本，避免 aapt2 按旧版兼容规则隐式追加存储/电话权限 -->
+    <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
+
+    <!-- 纯单机离线应用，不需要任何权限 -->
+    <!-- 刻意不声明 INTERNET / ACCESS_NETWORK_STATE / 存储 / 电话 -->
+
+    <uses-feature android:glEsVersion="0x00020000" android:required="true" />
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+        android:allowBackup="false"
+        android:hardwareAccelerated="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden"
+            android:screenOrientation="sensorLandscape"
+            android:exported="true"
+            android:immersive="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
