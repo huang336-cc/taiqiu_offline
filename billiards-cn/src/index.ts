@@ -19,6 +19,11 @@ function initialise() {
   const params = new URLSearchParams(location.search)
   const browserContainer = new BrowserContainer(canvas3d, params)
   browserContainer.start()
+  // 调试句柄：仅在显式打开 ?debug=1 时挂载，发布版不带，
+  // 既能给自动化测试用，也不污染正式包
+  if (params.get("debug") === "1") {
+    ;(globalThis as any).__bc = browserContainer
+  }
 
   setupMobileBehaviour()
   setupOverlayControls(browserContainer)
@@ -46,6 +51,10 @@ function setupOverlayControls(browserContainer: BrowserContainer) {
     // 对局内实时换肤（item 1）：立即刷新球杆与球台外观，无需重开
     if (e.data.type === "billiards-apply-skin") {
       try {
+        // 先按浮层刚写入的 localStorage 刷新缓存，再落定皮肤，
+        // 避免用本页的旧快照覆盖掉浮层同时改动的其它设置
+        Settings.reload()
+        Settings.set("skin", e.data.skin)
         browserContainer.container?.view?.applySkin(e.data.skin)
       } catch {
         /* 尚未初始化时忽略 */
