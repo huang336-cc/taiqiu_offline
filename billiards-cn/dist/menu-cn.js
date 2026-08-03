@@ -33,6 +33,8 @@
     aimAssist: true,
     vibrate: true,
     seenGuide: false,
+    practiceGuide: true,
+    turnTimer: 0,
     lastRule: "nineball",
     lastOpponent: "solo",
     vsBot: false,
@@ -203,6 +205,11 @@
     })
     var target = $("screen-" + name)
     if (target) target.classList.add("active")
+    // 进入引导页时，如果有暂存的训练游戏 URL，就显示「开始游戏」按钮
+    if (name === "guide") {
+      var b = $("btnGuideStart")
+      if (b) b.style.display = pendingPracticeGame ? "" : "none"
+    }
   }
 
   /* ---------------- 设置面板 ---------------- */
@@ -253,6 +260,16 @@
       if (e.target.checked) buzz(20)
     })
 
+    $("setPracticeGuide").addEventListener("change", function (e) {
+      settings.practiceGuide = e.target.checked
+      saveSettings(settings)
+    })
+
+    $("setTurnTimer").addEventListener("change", function (e) {
+      settings.turnTimer = parseInt(e.target.value, 10) || 0
+      saveSettings(settings)
+    })
+
     $("btnReset").addEventListener("click", function () {
       var d = {}
       for (var k in DEFAULTS) d[k] = DEFAULTS[k]
@@ -272,6 +289,8 @@
     $("volumeVal").textContent = Math.round(settings.volume * 100) + "%"
     $("setAim").checked = !!settings.aimAssist
     $("setVibrate").checked = !!settings.vibrate
+    $("setPracticeGuide").checked = settings.practiceGuide !== false
+    $("setTurnTimer").value = String(settings.turnTimer || 0)
   }
 
   function buzz(ms) {
@@ -289,13 +308,34 @@
     params.push("ruletype=" + encodeURIComponent(selectedRule))
     if (selectedOpponent !== "solo") {
       params.push("bot=" + encodeURIComponent(selectedOpponent))
+      if (settings.turnTimer && settings.turnTimer > 0) {
+        params.push("timer=" + settings.turnTimer)
+      }
     } else {
       // 落袋类玩法在无对手时进入自由练习
       params.push("practice=true")
     }
     settings.seenGuide = true
     saveSettings(settings)
+
+    // 训练模式（自己练习）若开启了新手引导，先弹出引导页
+    if (selectedOpponent === "solo" && settings.practiceGuide !== false) {
+      pendingPracticeGame = "index.html?" + params.join("&")
+      showScreen("guide")
+      return
+    }
     location.href = "index.html?" + params.join("&")
+  }
+
+  /** 训练模式开启了新手引导时，先把游戏 URL 暂存这里，看完引导再启动 */
+  var pendingPracticeGame = null
+
+  function startPendingPracticeGame() {
+    var url = pendingPracticeGame
+    pendingPracticeGame = null
+    var b = $("btnGuideStart")
+    if (b) b.style.display = "none"
+    if (url) location.href = url
   }
 
   /* ---------------- 初始化 ---------------- */
@@ -316,6 +356,14 @@
       syncSettingsUI()
       showScreen("settings")
     })
+
+    var guideStartBtn = $("btnGuideStart")
+    if (guideStartBtn) {
+      guideStartBtn.addEventListener("click", function () {
+        buzz(15)
+        startPendingPracticeGame()
+      })
+    }
     var licenseBtn = $("btnLicense")
     if (licenseBtn) {
       licenseBtn.addEventListener("click", function () {

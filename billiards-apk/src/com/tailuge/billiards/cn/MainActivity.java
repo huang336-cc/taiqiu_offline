@@ -197,11 +197,37 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) {
+        if (webView == null) {
+            super.onBackPressed();
+            return;
+        }
+        // 游戏内页面（index.html）由 JS 自己弹"继续游戏 / 返回主菜单"二次确认；
+        // 不再走 goBack，避免直接丢掉本局进度。
+        String url = webView.getUrl();
+        if (url != null && url.contains("/index.html")) {
+            softEvaluate(
+                "(function(){try{return !!window.__onAndroidBack&&(window.__onAndroidBack(),true)}catch(e){return false}})()"
+            );
+            return;
+        }
+        if (webView.canGoBack()) {
             webView.goBack();
             return;
         }
         super.onBackPressed();
+    }
+
+    /** 反射调用 WebView.evaluateJavascript(String, ValueCallback)，调不到就忽略 */
+    private void softEvaluate(String script) {
+        try {
+            java.lang.reflect.Method m = webView.getClass().getMethod(
+                "evaluateJavascript", String.class, android.webkit.ValueCallback.class
+            );
+            m.invoke(webView, script, null);
+        } catch (Throwable t) {
+            // 该 API 不存在或调用失败，回退到 loadUrl 触发 JS 执行（不推荐，仅保底）
+            try { webView.loadUrl("javascript:void(" + script + ")"); } catch (Throwable ignored) {}
+        }
     }
 
     @Override

@@ -6,6 +6,14 @@
 
 一个全中文、纯离线、无广告的安卓台球游戏。基于 three.js 的真实物理引擎，内置本地 AI 对手，**不申请任何系统权限**。
 
+<p align="center">
+  <img src="docs/screenshots/menu-home.jpg" alt="主菜单" width="48%" />
+  <img src="docs/screenshots/topview-eightball.jpg" alt="八球顶视" width="48%" />
+</p>
+<p align="center">
+  <img src="docs/screenshots/cueview-nineball.jpg" alt="九球击球视角" width="48%" />
+</p>
+
 > **修改声明**
 > 本作品是开源项目 [tailuge/billiards](https://github.com/tailuge/billiards) 的**衍生作品**，
 > 由该项目修改而来，修改日期 **2026 年 8 月 3 日**。

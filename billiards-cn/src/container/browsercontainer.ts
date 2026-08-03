@@ -23,6 +23,7 @@ import { getUID } from "../utils/uid"
 import { applyPhysicsParams } from "../utils/physicsparams"
 import { Settings } from "../utils/settings"
 import { ruleName } from "../utils/i18n"
+import { TurnTimer } from "../utils/turntimer"
 
 /**
  * Integrate game container into HTML page
@@ -64,6 +65,7 @@ export class BrowserContainer {
   examMode: boolean = false
   speedrun: boolean = false
   localMesh: boolean = false
+  turnTimer = new TurnTimer()
   readonly botDelay: number = 500
   constructor(canvas3d, params) {
     this.now = Date.now()
@@ -83,6 +85,13 @@ export class BrowserContainer {
     this.first = false
     this.botMode = params.has("bot")
     this.botName = params.get("bot") ?? ""
+    // 电脑对战每回合倒计时：参数 ?timer=N（N 秒），0 表示无限制
+    const timerParam = Number.parseInt(params.get("timer") ?? "0", 10)
+    if (this.botMode) {
+      this.turnTimer.configure(timerParam > 0 ? timerParam : 0)
+    } else {
+      this.turnTimer.configure(0)
+    }
     this.practiceMode = params.has("practice")
       ? params.get("practice") !== "false"
       : !this.botMode
@@ -143,7 +152,10 @@ export class BrowserContainer {
       isSinglePlayer: !this.botMode && !this.replay,
       examMode: false,
     }
-    return new Container(config)
+    const c = new Container(config)
+    // 把 BrowserContainer 上配置好的 turnTimer 注入到 Container，确保倒计时生效
+    c.turnTimer = this.turnTimer
+    return c
   }
 
   start() {

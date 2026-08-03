@@ -14,7 +14,7 @@
     <div class="app">
       <!-- 顶部标题 -->
       <header class="hero">
-        <h1 class="hero-title">台球大师</h1>
+        <h1 class="hero-title">奥特曼的台球</h1>
         <p class="hero-sub">真实物理引擎 · 纯离线 · 无广告</p>
       </header>
 
@@ -140,8 +140,8 @@
           </div>
         </div>
         <button class="btn btn-primary back-btn" data-back>返回</button>
+        <button class="btn btn-primary guide-start-btn" id="btnGuideStart" style="display:none">看完，开始游戏</button>
       </section>
-
       <!-- 游戏设置 -->
       <section id="screen-settings" class="screen">
         <h2 class="screen-title">游戏设置</h2>
@@ -201,6 +201,36 @@
           </div>
 
           <div class="setting-group">
+            <h3>训练</h3>
+            <div class="setting-row">
+              <label for="setPracticeGuide">训练模式新手引导</label>
+              <label class="switch">
+                <input type="checkbox" id="setPracticeGuide" />
+                <span class="slider-ui"></span>
+              </label>
+            </div>
+            <p class="about-text dim" style="margin-top:6px">
+              开启后，每次进入「自己练习」会先弹出操作介绍；关闭则直接开始游戏。
+            </p>
+          </div>
+
+          <div class="setting-group">
+            <h3>电脑对战</h3>
+            <div class="setting-row">
+              <label for="setTurnTimer">每回合时间限制</label>
+              <select id="setTurnTimer" class="select-inline">
+                <option value="0">无限制</option>
+                <option value="10">10 秒</option>
+                <option value="20">20 秒</option>
+                <option value="30">30 秒</option>
+              </select>
+            </div>
+            <p class="about-text dim" style="margin-top:6px">
+              仅在「电脑·稳健 / 电脑·激进」模式下生效。超时未击球则本回合判负。
+            </p>
+          </div>
+
+          <div class="setting-group">
             <h3>关于</h3>
             <p class="about-text">
               本游戏为完全离线的单机版本，<b>不需要联网</b>、<b>无任何广告</b>、<b>不收集任何个人信息</b>。
@@ -212,7 +242,7 @@
             </p>
             <table class="key-table">
               <tr><td>开发者</td><td>huang336</td></tr>
-              <tr><td>版本</td><td id="versionCell">1.0.3</td></tr>
+              <tr><td>版本</td><td id="versionCell">1.0.4</td></tr>
               <tr><td>协议</td><td>GNU GPL v3.0</td></tr>
             </table>
             <p class="about-text dim" id="versionText"></p>
@@ -255,7 +285,7 @@
             <h3>修改声明</h3>
             <table class="key-table">
               <tr><td>修改者</td><td>huang336</td></tr>
-              <tr><td>衍生版本</td><td>台球大师 · 离线版</td></tr>
+              <tr><td>衍生版本</td><td>奥特曼的台球 · 离线版</td></tr>
               <tr><td>修改日期</td><td>2026 年 8 月 3 日</td></tr>
             </table>
             <p class="about-text dim">

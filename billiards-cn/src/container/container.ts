@@ -42,6 +42,8 @@ import { WatchAim } from "../controller/watchaim"
 import { WatchShot } from "../controller/watchshot"
 import { BallTray } from "../view/ball-tray"
 import { ExportUtils } from "../utils/export-utils"
+import { TurnTimer } from "../utils/turntimer"
+import { ConcedeEvent } from "../events/concedeevent"
 
 type ActivePlayer = 0 | 1 | 2
 
@@ -75,6 +77,9 @@ export class Container {
   relay: MessageRelay | null = null
   scoreReporter: ScoreReporter | null = null
   frame: (timestamp: number) => void
+  turnTimer: TurnTimer = new TurnTimer()
+  /** 标记上一次 updateController 时玩家是否在场上（用于启停计时器） */
+  private wasPlayerTurn: boolean = false
   /** Multiplier applied to real elapsed time before it's converted to physics
    * steps in `advance()`. 1 everywhere except the shot-analysis view, which
    * sets this higher so shot playback feels snappier without changing the
@@ -336,7 +341,8 @@ export class Container {
   lastEventTime = performance.now()
 
   animate(timestamp): void {
-    this.advance((timestamp - this.last) / 1000)
+    const dt = (timestamp - this.last) / 1000
+    this.advance(dt)
     this.last = timestamp
     this.processEvents()
     const needsRender =
@@ -345,6 +351,23 @@ export class Container {
       this.view.sizeChanged()
     if (needsRender) {
       this.view.render()
+    }
+    // 电脑对战每回合倒计时（仅 vs 电脑 + 配置了 timer 时生效）
+    if (this.turnTimer.enabled()) {
+      const r = this.turnTimer.tick(dt)
+      if (r.justExpired) {
+        this.notification.show(
+          {
+            type: "Info",
+            title: "本回合超时",
+            subtext: "系统判本局负",
+            duration: 2200,
+          },
+          0,
+          {}
+        )
+        this.eventQueue.push(new ConcedeEvent())
+      }
     }
     requestAnimationFrame((t) => {
       this.animate(t)
@@ -381,6 +404,32 @@ export class Container {
       this.comment?.setVisible(false)
 
       this.controller.onFirst()
+
+      // 电脑对战每回合倒计时：根据 controller 启停
+      this.applyTurnTimerForController(controller)
+    }
+  }
+
+  /**
+   * 当 controller 是「玩家在打」的阶段时启动倒计时，其它阶段停止。
+   * 玩家回合包括 Aim（瞄准 / 击球）与 PlaceBall（自由球摆位）。
+   */
+  private applyTurnTimerForController(controller: Controller) {
+    if (!this.turnTimer.enabled()) {
+      this.turnTimer.stop()
+      this.wasPlayerTurn = false
+      return
+    }
+    const isPlayerTurn =
+      controller instanceof Aim ||
+      controller instanceof PlaceBall ||
+      (controller as any).constructor?.name === "Aim"
+    if (isPlayerTurn && !this.wasPlayerTurn) {
+      this.turnTimer.start()
+      this.wasPlayerTurn = true
+    } else if (!isPlayerTurn && this.wasPlayerTurn) {
+      this.turnTimer.stop()
+      this.wasPlayerTurn = false
     }
   }
 }
