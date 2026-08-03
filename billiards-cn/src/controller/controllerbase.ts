@@ -5,6 +5,7 @@ import { ScoreEvent } from "../events/scoreevent"
 import { ConcedeEvent } from "../events/concedeevent"
 import { Outcome } from "../model/outcome"
 import { Session } from "../network/client/session"
+import { Tutorial } from "../view/tutorial"
 
 const flipP1type = (t: number) => (t === 1 ? 2 : 1)
 
@@ -92,6 +93,8 @@ export abstract class ControllerBase extends Controller {
     switch (input.key) {
       case "movementXUp":
         cue.rotateAim(delta * 2, this.container.table)
+        // 用户拖动瞄准 → 推进新手引导步骤 1
+        Tutorial.notifyAimDrag()
         return true
       case "movementYUp":
         this.container.view.camera.adjustHeight(delta * 8)

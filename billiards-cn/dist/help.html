@@ -79,15 +79,10 @@
         </div>
         <div class="row">
           <label for="tline">被击打球瞄准线</label>
-          <select id="tline">
-            <option value="0">关闭</option>
-            <option value="1">短</option>
-            <option value="2">中短</option>
-            <option value="3">中</option>
-            <option value="4">中长</option>
-            <option value="5">长</option>
-          </select>
+          <input type="range" id="tline" min="0" max="5" step="1" value="3" />
+          <span class="val" id="tlinev">中</span>
         </div>
+        <p class="hint">仅在第一人称（跟随）视角下显示，并会实时指向最近的袋口。</p>
         <div class="row">
           <label for="vib">震动反馈</label>
           <label class="sw"
@@ -107,7 +102,7 @@
             <option value="golden">金辉</option>
           </select>
         </div>
-        <p class="hint">更换皮肤后返回主菜单重新开局即可生效。</p>
+        <p class="hint">选择后立即实时刷新当前对局的球杆与球台外观。</p>
       </div>
       <div class="block">
         <a class="menu-link" href="menu.html">← 返回主菜单</a>

@@ -148,6 +148,8 @@ export class Container {
       cue.updateAimInput()
       this.lastEventTime = performance.now()
     }
+    // 让球杆能访问 View（用于判断相机模式，控制辅助线显示 / 实时换肤）
+    this.table.cue.view = this.view
     const tableSize = parseFloat(
       new URLSearchParams(globalThis.location?.search ?? "").get("tableSize") ||
         "10"

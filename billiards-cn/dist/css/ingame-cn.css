@@ -204,3 +204,39 @@ body.lod-low .hitButton {
 .chatarea {
   display: none !important;
 }
+
+/* --------------------------------------------------------------------------
+   9. 分步实操新手引导横幅（item 6）
+   -------------------------------------------------------------------------- */
+.tutorial-banner {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  max-width: calc(100% - 24px);
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: rgba(15, 28, 24, 0.92);
+  border: 1px solid var(--cn-gold, #e8c87a);
+  color: #f2f3ef;
+  font-size: 15px;
+  line-height: 1.5;
+  text-align: center;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  animation: tut-pop 0.25s ease-out;
+}
+.tutorial-banner .tut-text b {
+  color: var(--cn-gold, #e8c87a);
+}
+@keyframes tut-pop {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}

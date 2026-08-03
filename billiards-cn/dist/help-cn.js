@@ -25,6 +25,9 @@
     "最高渲染精度，仅建议旗舰机型开启，耗电较高。",
   ]
 
+  // 被击打球瞄准线滑动条档位文案（0=关，1~5=短到长）
+  var TLINE_LABELS = ["关闭", "短", "中短", "中", "中长", "长"]
+
   var DEFAULTS = {
     lod: 3,
     sound: true,
@@ -109,6 +112,7 @@
     $("volv").textContent = Math.round(st.volume * 100) + "%"
     $("aim").checked = !!st.aimAssist
     $("tline").value = String(st.targetLineLength || 3)
+    $("tlinev").textContent = TLINE_LABELS[st.targetLineLength || 3]
     $("skin").value = st.skin || "classic"
     $("vib").checked = !!st.vibrate
   }
@@ -132,13 +136,22 @@
     st.aimAssist = e.target.checked
     save(st)
   })
-  $("tline").addEventListener("change", function (e) {
+  $("tline").addEventListener("input", function (e) {
     st.targetLineLength = parseInt(e.target.value, 10)
+    $("tlinev").textContent = TLINE_LABELS[st.targetLineLength] || "中"
     save(st)
   })
   $("skin").addEventListener("change", function (e) {
     st.skin = e.target.value
     save(st)
+    // 对局内实时换肤：通知父页面立即刷新球杆与球台外观
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: "billiards-apply-skin", skin: st.skin }, "*")
+      }
+    } catch (err) {
+      /* 跨域时忽略 */
+    }
   })
   $("vib").addEventListener("change", function (e) {
     st.vibrate = e.target.checked

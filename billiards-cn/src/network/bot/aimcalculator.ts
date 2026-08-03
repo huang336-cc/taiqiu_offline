@@ -19,8 +19,8 @@ export class AimCalculator {
   private static readonly GHOST_BALL_DISTANCE_FACTOR = 2.001
   private static readonly RANDOM_OFFSET_RANGE = 0.6
 
-  static readonly DEFAULT_SHOT_POWER = 180 * R
-  static readonly MAX_SHOT_POWER = 220 * R
+  static readonly DEFAULT_SHOT_POWER = 90 * R
+  static readonly MAX_SHOT_POWER = 110 * R
   public readonly pockets: Vector3[]
   public readonly knuckles: Vector3[]
 

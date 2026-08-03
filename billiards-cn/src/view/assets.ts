@@ -121,6 +121,33 @@ export class Assets {
     )
   }
 
+  /**
+   * 实时更换皮肤（item 1）：遍历桌台场景，按当前皮肤重设台呢/库边/阴影颜色。
+   * 复用 customizeTableScene 的颜色匹配逻辑，但同步执行（不重新加载贴图）。
+   */
+  recolorTable(scene): void {
+    const cfg = Assets.tableCustomization
+    scene.traverse((child) => {
+      if (!child.isMesh) return
+      const materials = Array.isArray(child.material)
+        ? child.material
+        : [child.material]
+      for (const mat of materials) {
+        const name = mat.name?.toLowerCase() ?? ""
+        if (name.includes("clothshade")) {
+          mat.color.set(cfg.clothshadeColor)
+          mat.needsUpdate = true
+        } else if (name.includes("cloth")) {
+          mat.color.set(cfg.clothColor)
+          mat.needsUpdate = true
+        } else if (name.includes("cushion")) {
+          mat.color.set(cfg.cushionColor)
+          mat.needsUpdate = true
+        }
+      }
+    })
+  }
+
   private fixClothUVs(mesh): void {
     const geometry = mesh.geometry as BufferGeometry
     if (!geometry) return

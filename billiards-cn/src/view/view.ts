@@ -81,6 +81,14 @@ export class View {
     this.drawing.onBallTap = callback
   }
 
+  /** 实时更换皮肤（item 1）：串联球杆换肤 + 桌台重着色 */
+  applySkin(skinId: string) {
+    this.table.cue.applySkin(skinId)
+    if (this.assets.table) {
+      this.assets.recolorTable(this.assets.table)
+    }
+  }
+
   update(elapsed, aim: AimEvent) {
     this.camera.update(elapsed, aim)
   }

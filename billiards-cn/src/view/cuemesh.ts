@@ -184,6 +184,7 @@ export class CueMesh {
       segments
     )
     const butt = new Mesh(buttGeom, ebonyMat)
+    butt.name = "cueButt"
     butt.position.y = -length / 2 + buttLength / 2
     group.add(butt)
 
@@ -195,6 +196,7 @@ export class CueMesh {
       segments
     )
     const shaft = new Mesh(shaftGeom, ashWoodMat)
+    shaft.name = "cueShaft"
     shaft.position.y = butt.position.y + buttLength / 2 + shaftLength / 2
     group.add(shaft)
 
@@ -206,6 +208,7 @@ export class CueMesh {
       segments
     )
     const ferrule = new Mesh(ferruleGeom, ferruleMat)
+    ferrule.name = "cueFerrule"
     ferrule.position.y = shaft.position.y + shaftLength / 2 + ferruleLength / 2
     group.add(ferrule)
 
@@ -224,5 +227,36 @@ export class CueMesh {
     group.add(tip)
 
     return group
+  }
+
+  /**
+   * 实时更换皮肤：遍历球杆各段 mesh，按名称重设材质颜色。
+   * 不需要重建几何体，避免内存泄漏。
+   */
+  static applySkin(group: Group, skinId: string) {
+    const skin = getSkin(skinId)
+    group.traverse((child) => {
+      const mesh = child as Mesh
+      if (!(mesh as any).isMesh) return
+      const mat = mesh.material as MeshPhongMaterial
+      if (!mat || !mat.color) return
+      switch (mesh.name) {
+        case "cueButt":
+          mat.color.setHex(skin.buttColor)
+          break
+        case "cueShaft":
+          mat.color.setHex(skin.shaftColor)
+          break
+        case "cueTip":
+          mat.color.setHex(skin.tipColor)
+          break
+        case "cueFerrule":
+          // 铜箍保持银白，不随皮肤变化
+          break
+        default:
+          break
+      }
+      mat.needsUpdate = true
+    })
   }
 }

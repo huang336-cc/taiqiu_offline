@@ -33,7 +33,7 @@
     aimAssist: true,
     vibrate: true,
     seenGuide: false,
-    practiceGuide: true,
+    practiceGuide: false,
     turnTimer: 0,
     lastRule: "nineball",
     lastOpponent: "solo",
@@ -207,11 +207,6 @@
     })
     var target = $("screen-" + name)
     if (target) target.classList.add("active")
-    // 进入引导页时，如果有暂存的训练游戏 URL，就显示「开始游戏」按钮
-    if (name === "guide") {
-      var b = $("btnGuideStart")
-      if (b) b.style.display = pendingPracticeGame ? "" : "none"
-    }
   }
 
   /* ---------------- 设置面板 ---------------- */
@@ -323,27 +318,27 @@
       // 落袋类玩法在无对手时进入自由练习
       params.push("practice=true")
     }
-    settings.seenGuide = true
-    saveSettings(settings)
 
-    // 训练模式（自己练习）若开启了新手引导，先弹出引导页
-    if (selectedOpponent === "solo" && settings.practiceGuide !== false) {
-      pendingPracticeGame = "index.html?" + params.join("&")
-      showScreen("guide")
-      return
+    // 分步实操新手引导（item 6）：
+    // 仅首次安装（!seenGuide）自动显示；若开启了「练习时显示引导」，练习模式强制显示。
+    // 不再在这里写 seenGuide（由游戏内引导完成后写入）。
+    var forceTutorial =
+      !settings.seenGuide ||
+      (selectedOpponent === "solo" && settings.practiceGuide === true)
+    if (forceTutorial) {
+      params.push("tutorial=1")
     }
     location.href = "index.html?" + params.join("&")
   }
 
-  /** 训练模式开启了新手引导时，先把游戏 URL 暂存这里，看完引导再启动 */
-  var pendingPracticeGame = null
-
-  function startPendingPracticeGame() {
-    var url = pendingPracticeGame
-    pendingPracticeGame = null
-    var b = $("btnGuideStart")
-    if (b) b.style.display = "none"
-    if (url) location.href = url
+  /** 从设置页「重新打开新手引导」：直接进入一次练习并强制显示引导 */
+  function replayTutorial() {
+    var params = [
+      "ruletype=" + encodeURIComponent(selectedRule),
+      "practice=true",
+      "tutorial=1",
+    ]
+    location.href = "index.html?" + params.join("&")
   }
 
   /* ---------------- 初始化 ---------------- */
@@ -352,6 +347,7 @@
     initModes()
     initOpponents()
     initSettingsPanel()
+    initSkins()
 
     $("btnStart").addEventListener("click", function () {
       buzz(15)
@@ -365,17 +361,18 @@
       showScreen("settings")
     })
 
-    var guideStartBtn = $("btnGuideStart")
-    if (guideStartBtn) {
-      guideStartBtn.addEventListener("click", function () {
-        buzz(15)
-        startPendingPracticeGame()
-      })
-    }
     var licenseBtn = $("btnLicense")
     if (licenseBtn) {
       licenseBtn.addEventListener("click", function () {
         showScreen("license")
+      })
+    }
+
+    var replayBtn = $("btnReplayTutorial")
+    if (replayBtn) {
+      replayBtn.addEventListener("click", function () {
+        buzz(15)
+        replayTutorial()
       })
     }
 
@@ -389,11 +386,29 @@
 
     var v = $("versionText")
     if (v) v.style.display = "none"
+  }
 
-    // 首次进入自动展示操作介绍
-    if (!settings.seenGuide) {
-      showScreen("guide")
+  /* ---------------- 皮肤卡片（item 1） ---------------- */
+
+  function initSkins() {
+    var cards = document.querySelectorAll("#skinCards .skin-card")
+    if (!cards.length) return
+    function syncActive() {
+      Array.prototype.forEach.call(cards, function (c) {
+        c.classList.toggle("active", c.getAttribute("data-skin") === settings.skin)
+      })
+      var sel = $("setSkin")
+      if (sel) sel.value = settings.skin || "classic"
     }
+    Array.prototype.forEach.call(cards, function (c) {
+      c.addEventListener("click", function () {
+        settings.skin = c.getAttribute("data-skin")
+        saveSettings(settings)
+        syncActive()
+        buzz(10)
+      })
+    })
+    syncActive()
   }
 
   if (document.readyState === "loading") {

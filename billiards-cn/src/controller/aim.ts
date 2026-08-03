@@ -6,6 +6,7 @@ import { Replay } from "./replay"
 import { gameOverButtons } from "../utils/gameover"
 import { Settings } from "../utils/settings"
 import { T } from "../utils/i18n"
+import { Tutorial } from "../view/tutorial"
 
 /**
  * Aim using input events.
@@ -61,6 +62,12 @@ export class Aim extends ControllerBase {
     this.container.view.clearLines()
     this.container.table.cue.aimInputs.setDisabled(false)
     this.container.table.cue.aimInputs.setButtonText(T.hitButton)
+    // 分步实操新手引导：仅首次安装自动显示，或带 tutorial=1 强制显示
+    const forceTutorial =
+      new URLSearchParams(globalThis.location?.search).get("tutorial") === "1"
+    if (!Settings.get().seenGuide || forceTutorial) {
+      Tutorial.start(forceTutorial)
+    }
   }
 
   override handleInput(input: Input): Controller {
@@ -112,6 +119,8 @@ export class Aim extends ControllerBase {
   playShot() {
     this.container.inputQueue.length = 0
     this.container.table.cue.aimInputs.setDisabled(true)
+    // 完成击球 → 结束新手引导
+    Tutorial.notifyShot()
     const hitEvent = new HitEvent(this.container.table.serialiseHit())
     this.container.sendEvent(hitEvent)
     return new PlayShot(this.container)

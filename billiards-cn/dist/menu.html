@@ -64,6 +64,33 @@
           </p>
         </section>
 
+        <section class="section">
+          <h2 class="section-title">皮肤</h2>
+          <p class="seg-hint">点击色块即可实时更换球杆与球台外观</p>
+          <div class="skin-cards" id="skinCards">
+            <button class="skin-card" data-skin="classic">
+              <span class="skin-swatch" style="background:linear-gradient(135deg,#d2b48c 0%,#1a1a1a 100%)"></span>
+              <span class="skin-name">经典原木</span>
+            </button>
+            <button class="skin-card" data-skin="emerald">
+              <span class="skin-swatch" style="background:linear-gradient(135deg,#c8b07a 0%,#1a3a2a 100%)"></span>
+              <span class="skin-name">翡翠绿</span>
+            </button>
+            <button class="skin-card" data-skin="crimson">
+              <span class="skin-swatch" style="background:linear-gradient(135deg,#d8a878 0%,#4a0a0a 100%)"></span>
+              <span class="skin-name">赤焰红</span>
+            </button>
+            <button class="skin-card" data-skin="sapphire">
+              <span class="skin-swatch" style="background:linear-gradient(135deg,#c0a878 0%,#0a1a3a 100%)"></span>
+              <span class="skin-name">蓝宝石</span>
+            </button>
+            <button class="skin-card" data-skin="golden">
+              <span class="skin-swatch" style="background:linear-gradient(135deg,#e8c878 0%,#4a2a0a 100%)"></span>
+              <span class="skin-name">金辉</span>
+            </button>
+          </div>
+        </section>
+
         <div class="actions">
           <button class="btn btn-primary" id="btnStart">开始游戏</button>
           <div class="actions-row">
@@ -117,17 +144,6 @@
               </li>
               <li>俯视视角便于观察整体球型和走位路线</li>
             </ul>
-          </div>
-
-          <div class="guide-block">
-            <h3>键盘操作（外接键盘时）</h3>
-            <table class="key-table">
-              <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>左右微调瞄准方向</td></tr>
-              <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>调整击球力度</td></tr>
-              <tr><td><kbd>空格</kbd></td><td>击球</td></tr>
-              <tr><td><kbd>Shift</kbd> + 方向键</td><td>精细微调</td></tr>
-              <tr><td><kbd>C</kbd></td><td>切换视角</td></tr>
-            </table>
           </div>
 
           <div class="guide-block tip">
@@ -213,22 +229,27 @@
               </select>
             </div>
             <p class="about-text dim" style="margin-top:6px">
-              更换皮肤后重新开局即可生效。
+              选择后会立即在主菜单高亮，进入对局即生效；对局中经本页或设置页更换也会实时刷新。
             </p>
           </div>
 
           <div class="setting-group">
             <h3>训练</h3>
             <div class="setting-row">
-              <label for="setPracticeGuide">训练模式新手引导</label>
+              <label for="setPracticeGuide">练习时显示分步引导</label>
               <label class="switch">
                 <input type="checkbox" id="setPracticeGuide" />
                 <span class="slider-ui"></span>
               </label>
             </div>
             <p class="about-text dim" style="margin-top:6px">
-              开启后，每次进入「自己练习」会先弹出操作介绍；关闭则直接开始游戏。
+              仅在安装后第一次进入对局时自动显示一次分步引导，引导你实做「瞄准→击球」。
+              之后不再自动弹出，可随时点击下方按钮重新观看。
             </p>
+            <div class="setting-row" style="margin-top:10px">
+              <span>手动重看引导</span>
+              <button class="btn btn-mini" id="btnReplayTutorial">重新打开新手引导</button>
+            </div>
           </div>
 
           <div class="setting-group">

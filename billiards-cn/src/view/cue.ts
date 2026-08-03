@@ -7,6 +7,8 @@ import { AimInputs } from "./dom/aiminputs"
 import { Ball, State } from "../model/ball"
 import { cueStrike } from "../model/physics/physics"
 import { CueMesh } from "./cuemesh"
+import { PocketGeometry } from "./pocketgeometry"
+import type { View } from "./view"
 import { Mesh, Vector3, Object3D, Line } from "three"
 import { maxPower, offCenterLimit, R } from "../model/physics/constants"
 import { cueIntersectsAnything } from "../utils/cueintersect"
@@ -19,6 +21,8 @@ export class Cue {
   cueBody: Object3D
   helperMesh: Mesh
   targetLineMesh: Line
+  /** 指向 View 的引用，用于判断相机模式（第一人称时才显示被击打球辅助线） */
+  view?: View
   placerMesh: Object3D
   shadowMesh: Mesh
   t = 0
@@ -310,10 +314,21 @@ export class Cue {
     if (this.helperMesh) this.helperMesh.visible = b
   }
 
+  /**
+   * 被击打球辅助线（items 3 & 7）：
+   * - 仅当相机为第一人称（aimView）且 targetLineLength>0 时显示；
+   * - 辅助线从目标球球心沿「白球→目标球」方向（ghost ball 原理）延伸，
+   *   若该方向与某袋口夹角足够小，则实时指向该袋口。
+   */
   updateTargetLine(table: Table) {
     if (!this.targetLineMesh) return
     const len = Settings.get().targetLineLength
     if (len <= 0) {
+      this.targetLineMesh.visible = false
+      return
+    }
+    // 仅第一人称跟随视角显示辅助线
+    if (this.view && this.view.camera.mode !== this.view.camera.aimView) {
       this.targetLineMesh.visible = false
       return
     }
@@ -323,17 +338,39 @@ export class Cue {
       this.targetLineMesh.visible = false
       return
     }
-    // 目标球被击打后运动方向：从白球到目标球的方向
+    // 目标球被击打后的运动方向：从白球指向目标球
     const targetDir = norm(this.tempVec.copy(closest.ball.pos).sub(table.cueball.pos))
+    // 在 6 个袋口中找到与目标方向夹角最小（< 阈值）且在前方的袋口
+    const pockets = PocketGeometry.pocketCenters
+    let bestPocket: Vector3 | null = null
+    let bestDot = -1
+    for (const p of pockets) {
+      const toPocket = norm(this.tempVec3.copy(p).sub(closest.ball.pos))
+      const d = toPocket.dot(targetDir)
+      if (d > bestDot) {
+        bestDot = d
+        bestPocket = p
+      }
+    }
     // 线长度映射：len 1~5 → R*5 ~ R*25
     const lineLen = len * 5 * R
-    // 更新线的几何
-    const points = [
-      closest.ball.pos.clone().add(targetDir.clone().multiplyScalar(R)),
-      closest.ball.pos.clone().add(targetDir.clone().multiplyScalar(R + lineLen)),
-    ]
+    const start = closest.ball.pos.clone().add(targetDir.clone().multiplyScalar(R))
+    let endPoint: Vector3
+    if (bestPocket && bestDot > 0.7) {
+      // 方向大致对准袋口，直接指向袋口中心
+      endPoint = bestPocket.clone()
+    } else {
+      // 否则沿击球方向延伸固定长度
+      endPoint = closest.ball.pos.clone().add(targetDir.clone().multiplyScalar(R + lineLen))
+    }
+    const points = [start, endPoint]
     this.targetLineMesh.geometry.setFromPoints(points)
     this.targetLineMesh.visible = true
+  }
+
+  /** 实时更换皮肤（item 1）：重设球杆各段材质颜色 */
+  applySkin(skinId: string) {
+    CueMesh.applySkin(this.cueBody, skinId)
   }
 
   toggleHelper() {

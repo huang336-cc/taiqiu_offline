@@ -42,7 +42,17 @@ function setupOverlayControls(browserContainer: BrowserContainer) {
   }
 
   globalThis.addEventListener("message", (e: MessageEvent) => {
-    if (!e.data || e.data.type !== "billiards-settings") return
+    if (!e.data) return
+    // 对局内实时换肤（item 1）：立即刷新球杆与球台外观，无需重开
+    if (e.data.type === "billiards-apply-skin") {
+      try {
+        browserContainer.container?.view?.applySkin(e.data.skin)
+      } catch {
+        /* 尚未初始化时忽略 */
+      }
+      return
+    }
+    if (e.data.type !== "billiards-settings") return
     // 让本页缓存失效后重新读取
     Settings.reload()
     const settings = Settings.get()

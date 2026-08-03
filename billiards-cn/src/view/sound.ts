@@ -19,6 +19,13 @@ export class Sound {
   lastOutcomesRef: any[] | null = null
   loadAssets
 
+  /** 主增益节点：突破 three.js 单次 Audio 1.0 音量上限，整体提升听感 */
+  masterGain?: GainNode
+  /** 限幅压缩，避免 masterGain 过大时破音 */
+  private compressor?: DynamicsCompressorNode
+  /** 预生成的白噪声 buffer，用于合成进袋「咔哒」声 */
+  private noiseBuffer?: AudioBuffer
+
   constructor(loadAssets) {
     this.loadAssets = loadAssets
     if (!loadAssets) {
@@ -48,6 +55,54 @@ export class Sound {
 
     this.success = new Audio(this.listener)
     this.load("sounds/success.ogg", this.success)
+
+    this.setupMasterGain()
+  }
+
+  /**
+   * 插入主增益链：listener 输入 → masterGain(提升) → 压缩限幅 → 输出。
+   *
+   * 原实现 audio.setVolume(min(1, volume*vol*BOOST))，受限 three 单次 Audio
+   * 增益上限 ≈1.0，即使 BOOST=1.8 也常被钳到 1.0，手机扬声器仍偏轻。
+   * 现在把整体音量提升放到 masterGain（2.2x），并用压缩器防止削顶破音，
+   * 进袋等音效明显更响、更清脆。
+   */
+  private setupMasterGain() {
+    try {
+      const ctx = this.listener.context as unknown as AudioContext
+      const listenerInput = this.listener.getInput() as unknown as GainNode
+      this.masterGain = ctx.createGain()
+      this.masterGain.gain.value = 2.2
+      this.compressor = ctx.createDynamicsCompressor()
+      this.compressor.threshold.value = -8
+      this.compressor.knee.value = 12
+      this.compressor.ratio.value = 6
+      this.compressor.attack.value = 0.003
+      this.compressor.release.value = 0.12
+      // 解除 listener 输入到 destination 的默认直连，改走主增益链
+      try {
+        listenerInput.disconnect()
+      } catch (e) {
+        /* 未连接时忽略 */
+      }
+      listenerInput.connect(this.masterGain)
+      this.masterGain.connect(this.compressor)
+      this.compressor.connect(ctx.destination)
+      this.noiseBuffer = this.makeNoiseBuffer(ctx)
+    } catch (e) {
+      // 个别环境不支持时退回默认链路
+      this.masterGain = undefined
+    }
+  }
+
+  private makeNoiseBuffer(ctx: AudioContext): AudioBuffer {
+    const len = Math.floor(ctx.sampleRate * 0.3)
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate)
+    const data = buf.getChannelData(0)
+    for (let i = 0; i < len; i++) {
+      data[i] = Math.random() * 2 - 1
+    }
+    return buf
   }
 
   addCameraToListener(camera) {
@@ -66,21 +121,9 @@ export class Sound {
     )
   }
 
-  /**
-   * 全局音量提升系数。
-   *
-   * 玩家反馈：滑条已经拉到最大，击球声/中袋声依然不够响。
-   * 之前 audio.setVolume(volume * settings.volume)，当 settings.volume=1.0、
-   * 内部 volume 也只有 0.2~0.4 时，最终只有 0.2~0.4，对手机扬声器明显偏轻。
-   * 提升 BOOST 后，即使滑条 50% 也能达到之前的最大声量，100% 时
-   * 大约多 2 倍体感音量。WebAudio 端 1.0 即满幅，>1 会削峰，
-   * 所以再叠加 compressor 抑制失真。
-   */
-  static readonly BOOST = 1.8
-
   play(audio: Audio, volume, detune = 0) {
     if (this.loadAssets) {
-      // 设置面板中的音效开关与音量
+      // 设置面板中的音效开关与音量（提升交给 masterGain）
       const settings = Settings.get()
       if (!settings.sound || settings.volume <= 0) {
         return
@@ -92,7 +135,7 @@ export class Sound {
         }
         return
       }
-      const v = Math.min(1, volume * settings.volume * Sound.BOOST)
+      const v = Math.min(1, volume * settings.volume)
       audio.setVolume(v)
       if (audio.isPlaying) {
         audio.stop()
@@ -129,6 +172,82 @@ export class Sound {
     return { audio: this.potHeavy, vol: 1.0, detune: -600 }
   }
 
+  /**
+   * 程序合成「真实」进袋音效（item 5）。
+   *
+   * 用白噪声爆发经带通滤波 + 快速指数衰减包络，模拟木质/象牙球撞袋口的
+   * 「咔哒」碰撞声；再叠一段低频三角波「咚」增加木质厚度。
+   * 按入袋球速分轻/中/重三档（共振频率与衰减不同）。完全离线，无外部文件。
+   */
+  playPotSynth(incidentSpeed: number) {
+    if (!this.loadAssets || !this.listener || !this.noiseBuffer) return
+    const settings = Settings.get()
+    if (!settings.sound || settings.volume <= 0) return
+    const ctx = this.listener.context as unknown as AudioContext
+    if (ctx.state === "suspended") {
+      if (navigator?.userActivation?.hasBeenActive) {
+        ctx.resume()
+      } else {
+        return
+      }
+    }
+    const now = ctx.currentTime
+
+    // 分档：轻 / 中 / 重
+    let freq: number
+    let decay: number
+    let peak: number
+    if (incidentSpeed < 2.0) {
+      freq = 1100
+      decay = 0.1
+      peak = 0.85
+    } else if (incidentSpeed < 4.0) {
+      freq = 2000
+      decay = 0.14
+      peak = 1.0
+    } else {
+      freq = 3200
+      decay = 0.18
+      peak = 1.0
+    }
+    const peakGain = Math.max(0.0002, peak * settings.volume)
+
+    // 噪声「咔哒」
+    const src = ctx.createBufferSource()
+    src.buffer = this.noiseBuffer
+    src.loop = true
+    const bp = ctx.createBiquadFilter()
+    bp.type = "bandpass"
+    bp.frequency.value = freq
+    bp.Q.value = 2.2
+    const g = ctx.createGain()
+    g.gain.setValueAtTime(0.0001, now)
+    g.gain.exponentialRampToValueAtTime(peakGain, now + 0.004)
+    g.gain.exponentialRampToValueAtTime(0.0001, now + decay)
+
+    // 低频「咚」增加木质厚度
+    const osc = ctx.createOscillator()
+    osc.type = "triangle"
+    osc.frequency.setValueAtTime(freq * 0.5, now)
+    osc.frequency.exponentialRampToValueAtTime(freq * 0.3, now + decay)
+    const og = ctx.createGain()
+    og.gain.setValueAtTime(0.0001, now)
+    og.gain.exponentialRampToValueAtTime(peakGain * 0.5, now + 0.004)
+    og.gain.exponentialRampToValueAtTime(0.0001, now + decay * 0.85)
+
+    const dest = this.listener.getInput()
+    src.connect(bp)
+    bp.connect(g)
+    g.connect(dest as unknown as AudioNode)
+    osc.connect(og)
+    og.connect(dest as unknown as AudioNode)
+
+    src.start(now)
+    src.stop(now + decay + 0.02)
+    osc.start(now)
+    osc.stop(now + decay + 0.02)
+  }
+
   outcomeToSound(outcome) {
     if (outcome.type === "Pot") {
       this.vibrate(30)
@@ -144,9 +263,8 @@ export class Sound {
       )
     }
     if (outcome.type === "Pot") {
-      // 用力度档位选择音效 + 音量
-      const pick = this.pickPotBySpeed(outcome.incidentSpeed)
-      this.play(pick.audio, pick.vol, pick.detune)
+      // 进袋改用程序合成的真实木质碰撞声（item 5）
+      this.playPotSynth(outcome.incidentSpeed)
     }
     if (outcome.type === "Cushion") {
       this.play(this.cushion, outcome.incidentSpeed / 40)
