@@ -285,6 +285,46 @@ body {
   flex-shrink: 0;
 }
 
+/* 主页内容可滚动，「开始游戏」始终固定在底部可见 */
+.home-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 4px;
+}
+
+.home-scroll::-webkit-scrollbar {
+  width: 3px;
+}
+
+.home-scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+#screen-home .actions {
+  margin-top: 0;
+  padding-top: 12px;
+  position: relative;
+}
+
+/* 顶部渐隐，提示上方还有内容 */
+#screen-home .actions::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -20px;
+  height: 20px;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(6, 15, 11, 0) 0%,
+    rgba(6, 15, 11, 0.8) 100%
+  );
+}
+
 .actions-row {
   display: flex;
   gap: 10px;
