@@ -1,5 +1,6 @@
 import { R } from "../model/physics/constants"
 import { up } from "../utils/three-utils"
+import { Settings, getSkin } from "../utils/settings"
 import {
   Matrix4,
   Mesh,
@@ -11,6 +12,10 @@ import {
   PlaneGeometry,
   MeshBasicMaterial,
   ConeGeometry,
+  BufferGeometry,
+  LineBasicMaterial,
+  Line,
+  LineSegments,
 } from "three"
 
 export type CueMeshes = {
@@ -78,6 +83,26 @@ export class CueMesh {
     return mesh
   }
 
+  static createTargetLine() {
+    // 被击打球瞄准线：从目标球延伸的虚线
+    const points = [
+      new Vector3(0, 0, 0.002),
+      new Vector3(1, 0, 0.002),
+    ]
+    const geometry = new BufferGeometry().setFromPoints(points)
+    const material = new LineBasicMaterial({
+      color: 0x00ff00,
+      transparent: true,
+      opacity: 0.5,
+      linewidth: 2,
+    })
+    const line = new Line(geometry, material)
+    line.visible = false
+    line.renderOrder = -1
+    line.material.depthTest = false
+    return line
+  }
+
   static createPlacer() {
     const group = new Group()
     const pyramidGeo = new ConeGeometry(0.75 * R, 1.6 * R, 4)
@@ -136,14 +161,15 @@ export class CueMesh {
   static cueGeometry(tipRadius, buttRadius, length, segments = 9) {
     const group = new Group()
 
-    // Material Definitions
-    const ashWoodMat = new MeshPhongMaterial({ color: 0xd2b48c, shininess: 50 })
-    const ebonyMat = new MeshPhongMaterial({ color: 0x1a1a1a, shininess: 80 })
+    // Material Definitions - 根据皮肤选择颜色
+    const skin = getSkin(Settings.get().skin)
+    const ashWoodMat = new MeshPhongMaterial({ color: skin.shaftColor, shininess: 50 })
+    const ebonyMat = new MeshPhongMaterial({ color: skin.buttColor, shininess: 80 })
     const ferruleMat = new MeshPhongMaterial({
       color: 0xe5e5e5,
       shininess: 100,
     })
-    const tipMat = new MeshPhongMaterial({ color: 0x4a7c9a, shininess: 5 })
+    const tipMat = new MeshPhongMaterial({ color: skin.tipColor, shininess: 5 })
 
     // Ratios for a standard snooker cue
     const buttLength = length * 0.28

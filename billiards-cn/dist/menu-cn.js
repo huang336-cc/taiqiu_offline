@@ -39,6 +39,8 @@
     lastOpponent: "solo",
     vsBot: false,
     fpsCap: 0,
+    targetLineLength: 3,
+    skin: "classic",
   }
 
   /* ---------------- 设置存取 ---------------- */
@@ -260,6 +262,11 @@
       if (e.target.checked) buzz(20)
     })
 
+    $("setSkin").addEventListener("change", function (e) {
+      settings.skin = e.target.value
+      saveSettings(settings)
+    })
+
     $("setPracticeGuide").addEventListener("change", function (e) {
       settings.practiceGuide = e.target.checked
       saveSettings(settings)
@@ -289,6 +296,7 @@
     $("volumeVal").textContent = Math.round(settings.volume * 100) + "%"
     $("setAim").checked = !!settings.aimAssist
     $("setVibrate").checked = !!settings.vibrate
+    $("setSkin").value = settings.skin || "classic"
     $("setPracticeGuide").checked = settings.practiceGuide !== false
     $("setTurnTimer").value = String(settings.turnTimer || 0)
   }

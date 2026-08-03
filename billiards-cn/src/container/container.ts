@@ -140,6 +140,14 @@ export class Container {
     this.view.onLineDrawn = (line) => {
       this.sendEvent(new ChatEvent(this.id, "", line))
     }
+    this.view.onBallTap = (ball) => {
+      const cue = this.table.cue
+      if (!cue.aimInputs || cue.aimInputs.isDisabled()) return
+      cue.aimAtNext(this.table.cueball, ball)
+      cue.rotateAim(0, this.table)
+      cue.updateAimInput()
+      this.lastEventTime = performance.now()
+    }
     const tableSize = parseFloat(
       new URLSearchParams(globalThis.location?.search ?? "").get("tableSize") ||
         "10"

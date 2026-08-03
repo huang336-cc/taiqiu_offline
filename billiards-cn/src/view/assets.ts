@@ -11,15 +11,19 @@ import { Rules } from "../controller/rules/rules"
 import { Sound } from "./sound"
 import { TableMesh } from "./tablemesh"
 import { TableGeometry } from "./tablegeometry"
+import { Settings, getSkin } from "../utils/settings"
 
 export class Assets {
-  private static readonly tableCustomization = {
-    texturePath: "assets/wave.jpg",
-    textureRepeatU: 1,
-    textureRepeatV: 2,
-    clothColor: 0xdac39e,
-    cushionColor: 0xba934e,
-    clothshadeColor: 0x896e42,
+  private static get tableCustomization() {
+    const skin = getSkin(Settings.get().skin)
+    return {
+      texturePath: "assets/wave.jpg",
+      textureRepeatU: 1,
+      textureRepeatV: 2,
+      clothColor: skin.clothColor,
+      cushionColor: skin.cushionColor,
+      clothshadeColor: skin.clothshadeColor,
+    }
   }
 
   ready

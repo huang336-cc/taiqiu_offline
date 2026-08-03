@@ -53,6 +53,7 @@ export class Aim extends ControllerBase {
     }
     this.container.view.camera.suggestMode(this.container.view.camera.aimView)
     table.cue.updateAimInput()
+    table.cue.updateTargetLine(table)
   }
 
   override onFirst() {

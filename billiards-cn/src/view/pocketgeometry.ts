@@ -28,12 +28,12 @@ export class PocketGeometry {
   static scaleToRadius(R) {
     PocketGeometry.PX = TableGeometry.tableX + R * (0.8 / 0.5)
     PocketGeometry.PY = TableGeometry.tableY + R * (0.8 / 0.5)
-    PocketGeometry.knuckleInset = (R * 1.6) / 0.5
+    PocketGeometry.knuckleInset = (R * 1.5) / 0.5
     PocketGeometry.knuckleRadius = (R * 0.31) / 0.5
-    PocketGeometry.middleKnuckleInset = (R * 1.385) / 0.5
+    PocketGeometry.middleKnuckleInset = (R * 1.3) / 0.5
     PocketGeometry.middleKnuckleRadius = (R * 0.2) / 0.5
-    PocketGeometry.cornerRadius = (R * 1.1) / 0.5
-    PocketGeometry.middleRadius = (R * 0.9) / 0.5
+    PocketGeometry.cornerRadius = (R * 1.05) / 0.5
+    PocketGeometry.middleRadius = (R * 0.82) / 0.5
     PocketGeometry.pocketLayout(R)
     PocketGeometry.enumerateCenters()
     PocketGeometry.enumerateKnuckles()

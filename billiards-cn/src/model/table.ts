@@ -235,6 +235,7 @@ export class Table {
       scene.add(this.cue.helperMesh)
       scene.add(this.cue.placerMesh)
       scene.add(this.cue.shadowMesh)
+      scene.add(this.cue.targetLineMesh)
     }
     if (this.proximityIndicator) {
       scene.add(this.proximityIndicator.group)

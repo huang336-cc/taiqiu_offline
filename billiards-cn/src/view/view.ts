@@ -55,7 +55,8 @@ export class View {
     this.drawing = new Drawing(
       this.scene,
       this.element as HTMLCanvasElement,
-      () => this.camera.camera
+      () => this.camera.camera,
+      () => this.table.balls
     )
     this.initialiseScene()
   }
@@ -74,6 +75,10 @@ export class View {
 
   set onLineDrawn(callback: (line: LineData) => void) {
     this.drawing.onLineDrawn = callback
+  }
+
+  set onBallTap(callback: (ball: import("../model/ball").Ball) => void) {
+    this.drawing.onBallTap = callback
   }
 
   update(elapsed, aim: AimEvent) {
@@ -110,7 +115,7 @@ export class View {
   }
 
   render() {
-    if (this.isInMotionNotVisible() && !this.camera.isZoomedOut) {
+    if ((this.isInMotionNotVisible() || this.isMovingSlowly()) && !this.camera.isZoomedOut) {
       this.camera.suggestMode(this.camera.topView)
     }
     this.renderCamera(this.camera)
@@ -155,6 +160,14 @@ export class View {
     const frustum = this.viewFrustum()
     const b = this.table.balls[this.ballToCheck++ % this.table.balls.length]
     return b.inMotion() && !frustum.intersectsObject(b.ballmesh.mesh)
+  }
+
+  isMovingSlowly() {
+    // 白球击球后，球缓慢移动时切换上帝视角
+    const slowThreshold = 0.15
+    return this.table.balls.some(
+      (b) => b.inMotion() && b.vel.length() > 0 && b.vel.length() < slowThreshold
+    )
   }
 
   viewFrustum() {

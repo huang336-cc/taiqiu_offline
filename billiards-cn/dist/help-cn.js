@@ -35,6 +35,8 @@
     lastRule: "nineball",
     vsBot: false,
     fpsCap: 0,
+    targetLineLength: 3,
+    skin: "classic",
   }
 
   function load() {
@@ -106,6 +108,8 @@
     $("vol").value = String(Math.round(st.volume * 100))
     $("volv").textContent = Math.round(st.volume * 100) + "%"
     $("aim").checked = !!st.aimAssist
+    $("tline").value = String(st.targetLineLength || 3)
+    $("skin").value = st.skin || "classic"
     $("vib").checked = !!st.vibrate
   }
   sync()
@@ -126,6 +130,14 @@
   })
   $("aim").addEventListener("change", function (e) {
     st.aimAssist = e.target.checked
+    save(st)
+  })
+  $("tline").addEventListener("change", function (e) {
+    st.targetLineLength = parseInt(e.target.value, 10)
+    save(st)
+  })
+  $("skin").addEventListener("change", function (e) {
+    st.skin = e.target.value
     save(st)
   })
   $("vib").addEventListener("change", function (e) {

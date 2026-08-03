@@ -26,6 +26,10 @@ export interface GameSettings {
   vsBot: boolean
   /** 帧率上限：0 表示不限制 */
   fpsCap: number
+  /** 被击打球瞄准线长度（0=关闭，1~5=短到长） */
+  targetLineLength: number
+  /** 皮肤选择 */
+  skin: string
 }
 
 const STORAGE_KEY = "billiards_cn_settings_v1"
@@ -40,6 +44,83 @@ const DEFAULTS: GameSettings = {
   lastRule: "nineball",
   vsBot: false,
   fpsCap: 0,
+  targetLineLength: 3,
+  skin: "classic",
+}
+
+/** 皮肤列表 */
+export interface SkinDef {
+  id: string
+  name: string
+  /** 球杆前段色 */
+  shaftColor: number
+  /** 球杆后段色 */
+  buttColor: number
+  /** 杆头色 */
+  tipColor: number
+  /** 台呢色 */
+  clothColor: number
+  /** 库边色 */
+  cushionColor: number
+  /** 台呢阴影色 */
+  clothshadeColor: number
+}
+
+export const SKINS: SkinDef[] = [
+  {
+    id: "classic",
+    name: "经典原木",
+    shaftColor: 0xd2b48c,
+    buttColor: 0x1a1a1a,
+    tipColor: 0x4a7c9a,
+    clothColor: 0xdac39e,
+    cushionColor: 0xba934e,
+    clothshadeColor: 0x896e42,
+  },
+  {
+    id: "emerald",
+    name: "翡翠绿",
+    shaftColor: 0xc8b07a,
+    buttColor: 0x1a3a2a,
+    tipColor: 0x3a5a7a,
+    clothColor: 0x2a7a3a,
+    cushionColor: 0x1a5a2a,
+    clothshadeColor: 0x1a3a1a,
+  },
+  {
+    id: "crimson",
+    name: "赤焰红",
+    shaftColor: 0xd8a878,
+    buttColor: 0x4a0a0a,
+    tipColor: 0x6a0a0a,
+    clothColor: 0x8a2a2a,
+    cushionColor: 0x6a1a1a,
+    clothshadeColor: 0x4a0a0a,
+  },
+  {
+    id: "sapphire",
+    name: "蓝宝石",
+    shaftColor: 0xc0a878,
+    buttColor: 0x0a1a3a,
+    tipColor: 0x2a4a7a,
+    clothColor: 0x1a3a8a,
+    cushionColor: 0x0a2a6a,
+    clothshadeColor: 0x0a1a4a,
+  },
+  {
+    id: "golden",
+    name: "金辉",
+    shaftColor: 0xe8c878,
+    buttColor: 0x4a2a0a,
+    tipColor: 0x6a4a0a,
+    clothColor: 0x8a6a2a,
+    cushionColor: 0x6a4a1a,
+    clothshadeColor: 0x4a2a0a,
+  },
+]
+
+export function getSkin(id: string): SkinDef {
+  return SKINS.find((s) => s.id === id) ?? SKINS[0]
 }
 
 /**

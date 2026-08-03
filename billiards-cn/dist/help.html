@@ -42,13 +42,6 @@
           <li>俯视视角适合观察全局与规划走位</li>
         </ul>
       </div>
-      <div class="block">
-        <h3>键盘（外接键盘）</h3>
-        <ul>
-          <li><b>← →</b> 微调方向　<b>↑ ↓</b> 调整力度</li>
-          <li><b>空格</b> 击球　<b>Shift+方向</b> 精细微调</li>
-        </ul>
-      </div>
     </div>
 
     <!-- 设置 -->
@@ -85,11 +78,36 @@
           ></label>
         </div>
         <div class="row">
+          <label for="tline">被击打球瞄准线</label>
+          <select id="tline">
+            <option value="0">关闭</option>
+            <option value="1">短</option>
+            <option value="2">中短</option>
+            <option value="3">中</option>
+            <option value="4">中长</option>
+            <option value="5">长</option>
+          </select>
+        </div>
+        <div class="row">
           <label for="vib">震动反馈</label>
           <label class="sw"
             ><input type="checkbox" id="vib" /><span></span
           ></label>
         </div>
+      </div>
+      <div class="block">
+        <h3>皮肤</h3>
+        <div class="row">
+          <label for="skin">球杆/球台皮肤</label>
+          <select id="skin">
+            <option value="classic">经典原木</option>
+            <option value="emerald">翡翠绿</option>
+            <option value="crimson">赤焰红</option>
+            <option value="sapphire">蓝宝石</option>
+            <option value="golden">金辉</option>
+          </select>
+        </div>
+        <p class="hint">更换皮肤后返回主菜单重新开局即可生效。</p>
       </div>
       <div class="block">
         <a class="menu-link" href="menu.html">← 返回主菜单</a>

@@ -19,6 +19,8 @@ export class AimInputs {
   readonly cuePowerPercentElement: HTMLElement | null
   readonly tiltSliderContainerElement
   readonly openElevationElement
+  readonly resetSpinElement
+  readonly fineTuneElement
   readonly cueTiltElement: AngleInput
   /** Shared button for both "Hit" and "Place Ball" actions. */
   readonly cueHitElement
@@ -46,6 +48,8 @@ export class AimInputs {
     this.cuePowerPercentElement = id("powerPercent")
     this.tiltSliderContainerElement = id("tiltSliderContainer")
     this.openElevationElement = id("openElevation") as HTMLButtonElement
+    this.resetSpinElement = id("resetSpin") as HTMLButtonElement
+    this.fineTuneElement = id("fineTune") as HTMLInputElement
     this.cueTiltElement = id("cueTilt") as AngleInput
     this.cueHitElement = id("cueHit") as HTMLButtonElement
     if (this.cueHitElement) {
@@ -84,8 +88,11 @@ export class AimInputs {
     })
     this.cueBallElement?.addEventListener("dblclick", this.toggleTiltControl)
     this.openElevationElement?.addEventListener("click", this.toggleTiltControl)
+    this.resetSpinElement?.addEventListener("click", this.resetSpin)
     this.cueHitElement?.addEventListener("click", this.hit)
     this.cuePowerElement?.addEventListener("input", this.powerChanged)
+    this.fineTuneElement?.addEventListener("input", this.fineTuneChanged)
+    this.fineTuneElement?.addEventListener("change", this.fineTuneReleased)
     this.cueTiltElement?.addEventListener("input", this.tiltChanged)
     if (!("ontouchstart" in globalThis)) {
       id("viewP1")?.addEventListener("dblclick", this.hit)
@@ -157,6 +164,20 @@ export class AimInputs {
         this.controlsDisabled
       )
     }
+    const fineTuneContainer = id("fineTuneContainer")
+    if (fineTuneContainer) {
+      fineTuneContainer.classList.toggle(
+        "is-disabled",
+        this.controlsDisabled
+      )
+    }
+    if (this.fineTuneElement) {
+      this.fineTuneElement.disabled = this.controlsDisabled
+      this.fineTuneElement.classList.toggle(
+        "is-disabled",
+        this.controlsDisabled
+      )
+    }
   }
 
   private updateTiltElement() {
@@ -174,6 +195,9 @@ export class AimInputs {
     }
     if (this.openElevationElement) {
       this.openElevationElement.disabled = this.controlsDisabled
+    }
+    if (this.resetSpinElement) {
+      this.resetSpinElement.disabled = this.controlsDisabled
     }
   }
 
@@ -216,6 +240,15 @@ export class AimInputs {
       ),
       this.container.table
     )
+    this.container.lastEventTime = performance.now()
+  }
+
+  resetSpin = (_) => {
+    if (this.controlsDisabled) {
+      return
+    }
+    this.container.table.cue.setSpin(new Vector3(0, 0, 0), this.container.table)
+    this.updateVisualState(0, 0)
     this.container.lastEventTime = performance.now()
   }
 
@@ -403,6 +436,24 @@ export class AimInputs {
     if (this.cuePowerPercentElement) {
       this.cuePowerPercentElement.innerText = Math.round(percent) + "%"
     }
+  }
+
+  fineTuneChanged = (e) => {
+    if (this.controlsDisabled) {
+      return
+    }
+    const val = Number((e.target as HTMLInputElement).value)
+    if (val !== 0) {
+      // 每次拖动产生一个小角度旋转，灵敏度系数
+      const delta = val * 0.002
+      this.container.table.cue.rotateAim(delta, this.container.table)
+      this.container.lastEventTime = performance.now()
+    }
+  }
+
+  fineTuneReleased = (e) => {
+    // 松手后回中
+    ;(e.target as HTMLInputElement).value = "0"
   }
 
   mousewheel = (e) => {

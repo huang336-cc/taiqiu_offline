@@ -13,20 +13,7 @@ export class Keyboard {
   private readonly disabled: boolean
 
   getEvents() {
-    const keys = Object.keys(this.pressed)
-      .filter((key) => !/Shift/.test(key))
-      .filter((key) => !/Control/.test(key))
-    const shift = Object.keys(this.pressed).some((key) => /Shift/.test(key))
-    const control = Object.keys(this.pressed).some((key) => /Control/.test(key))
     const result: Input[] = []
-
-    keys.forEach((k) => {
-      const t = performance.now() - this.pressed[k]
-      result.push(new Input(control ? t / 3 : t, shift ? "Shift" + k : k))
-      if (k != "Space") {
-        this.pressed[k] = performance.now()
-      }
-    })
 
     Object.keys(this.released).forEach((key) =>
       result.push(new Input(this.released[key], key + "Up"))
@@ -40,28 +27,6 @@ export class Keyboard {
     this.flipX = new URLSearchParams(globalThis.location?.search).has("flip")
     this.disabled = opts.disabled ?? false
     this.addHandlers(element)
-    if (!/Android|iPhone/i.test(navigator.userAgent)) {
-      element.contentEditable = "true"
-    }
-  }
-
-  keydown = (e) => {
-    if (this.disabled) return
-    this.pressed[e.code] ??= performance.now()
-    e.stopImmediatePropagation()
-    if (e.key !== "F12") {
-      e.preventDefault()
-    }
-  }
-
-  keyup = (e) => {
-    if (this.disabled) return
-    this.released[e.code] = performance.now() - this.pressed[e.code]
-    delete this.pressed[e.code]
-    e.stopImmediatePropagation()
-    if (e.key !== "F12") {
-      e.preventDefault()
-    }
   }
 
   mousetouch = (e) => {
@@ -78,10 +43,7 @@ export class Keyboard {
   }
 
   private addHandlers(element: HTMLCanvasElement) {
-    element.addEventListener("keydown", this.keydown)
-    element.addEventListener("keyup", this.keyup)
     element.addEventListener("dragstart", (e) => e.preventDefault())
-    element.focus()
 
     interact(element).draggable({
       mouseButtons: 1,

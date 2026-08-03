@@ -7,16 +7,18 @@ import { AimInputs } from "./dom/aiminputs"
 import { Ball, State } from "../model/ball"
 import { cueStrike } from "../model/physics/physics"
 import { CueMesh } from "./cuemesh"
-import { Mesh, Vector3, Object3D } from "three"
+import { Mesh, Vector3, Object3D, Line } from "three"
 import { maxPower, offCenterLimit, R } from "../model/physics/constants"
 import { cueIntersectsAnything } from "../utils/cueintersect"
 import { id } from "../utils/dom"
+import { Settings } from "../utils/settings"
 
 export class Cue {
   mesh: Object3D
   tiltMesh: Object3D
   cueBody: Object3D
   helperMesh: Mesh
+  targetLineMesh: Line
   placerMesh: Object3D
   shadowMesh: Mesh
   t = 0
@@ -53,6 +55,7 @@ export class Cue {
       this.tiltMesh = cue.tiltMesh
       this.cueBody = cue.cueBody
       this.helperMesh = CueMesh.createHelper()
+      this.targetLineMesh = CueMesh.createTargetLine()
       this.placerMesh = CueMesh.createPlacer()
       this.shadowMesh = CueMesh.createShadow(this.length)
     }
@@ -74,6 +77,7 @@ export class Cue {
     if (this.shadowMesh) this.shadowMesh.rotation.z = this.aim.angle
     this.aimInputs.showOverlap()
     this.avoidCueTouchingOtherBall(table)
+    this.updateTargetLine(table)
   }
 
   adjustPower(delta) {
@@ -304,6 +308,32 @@ export class Cue {
 
   showHelper(b) {
     if (this.helperMesh) this.helperMesh.visible = b
+  }
+
+  updateTargetLine(table: Table) {
+    if (!this.targetLineMesh) return
+    const len = Settings.get().targetLineLength
+    if (len <= 0) {
+      this.targetLineMesh.visible = false
+      return
+    }
+    const dir = unitAtAngle(this.aim.angle, this.tempVec2)
+    const closest = table.cue.aimInputs?.overlap.getFirst(table.cueball, dir)
+    if (!closest) {
+      this.targetLineMesh.visible = false
+      return
+    }
+    // 目标球被击打后运动方向：从白球到目标球的方向
+    const targetDir = norm(this.tempVec.copy(closest.ball.pos).sub(table.cueball.pos))
+    // 线长度映射：len 1~5 → R*5 ~ R*25
+    const lineLen = len * 5 * R
+    // 更新线的几何
+    const points = [
+      closest.ball.pos.clone().add(targetDir.clone().multiplyScalar(R)),
+      closest.ball.pos.clone().add(targetDir.clone().multiplyScalar(R + lineLen)),
+    ]
+    this.targetLineMesh.geometry.setFromPoints(points)
+    this.targetLineMesh.visible = true
   }
 
   toggleHelper() {

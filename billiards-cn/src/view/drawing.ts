@@ -12,6 +12,8 @@ import {
 } from "three"
 import { LineData } from "../events/chatevent"
 import { Session } from "../network/client/session"
+import { Ball } from "../model/ball"
+import { R } from "../model/physics/constants"
 
 export class Drawing {
   private readonly scene: Scene
@@ -20,27 +22,26 @@ export class Drawing {
   private readonly raycaster = new Raycaster()
   private readonly tablePlane = new Plane(new Vector3(0, 0, 1), 0)
   private readonly lines: Line[] = []
+  private readonly balls: () => Ball[]
 
   private isDrawing = false
   private startPoint: Vector3 | null = null
   private previewLine: Line | null = null
 
   onLineDrawn?: (line: LineData) => void
+  onBallTap?: (ball: Ball) => void
 
-  constructor(scene: Scene, canvas: HTMLCanvasElement, camera: () => Camera) {
+  constructor(scene: Scene, canvas: HTMLCanvasElement, camera: () => Camera, balls: () => Ball[]) {
     this.scene = scene
     this.canvas = canvas
     this.camera = camera
+    this.balls = balls
     this.addListeners()
   }
 
   private addListeners() {
     if (!this.canvas) return
     this.canvas.addEventListener("pointerdown", this.onPointerDown)
-    this.canvas.addEventListener("pointermove", this.onPointerMove)
-    this.canvas.addEventListener("pointerup", this.onPointerUp)
-    this.canvas.addEventListener("pointercancel", this.onPointerUp)
-    this.canvas.addEventListener("contextmenu", (e) => e.preventDefault())
   }
 
   private toTable(clientX: number, clientY: number): Vector3 | null {
@@ -52,6 +53,28 @@ export class Drawing {
     this.raycaster.setFromCamera(ndc, this.camera())
     const hit = new Vector3()
     return this.raycaster.ray.intersectPlane(this.tablePlane, hit) ? hit : null
+  }
+
+  private onPointerDown = (e: PointerEvent) => {
+    if (e.button !== 0) return
+    const point = this.toTable(e.clientX, e.clientY)
+    if (!point) return
+    // 找到点击位置最近的球（距离 < 球半径）
+    const balls = this.balls()
+    const cueball = balls[0]
+    let closest: Ball | null = null
+    let closestDist = Infinity
+    for (const ball of balls) {
+      if (ball === cueball) continue
+      const d = ball.pos.distanceTo(point)
+      if (d < R * 1.5 && d < closestDist) {
+        closestDist = d
+        closest = ball
+      }
+    }
+    if (closest) {
+      this.onBallTap?.(closest)
+    }
   }
 
   private onPointerDown = (e: PointerEvent) => {
