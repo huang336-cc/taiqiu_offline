@@ -332,7 +332,7 @@
     })
 
     var v = $("versionText")
-    if (v) v.textContent = "版本 " + (window.__BILLIARDS_VERSION__ || "1.0.0")
+    if (v) v.style.display = "none"
 
     // 首次进入自动展示操作介绍
     if (!settings.seenGuide) {
