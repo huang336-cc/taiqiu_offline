@@ -61,6 +61,7 @@ aapt2 link -o base.apk \
 
 # ---------- 4. 编译 Java 并转 dex ----------
 echo "[4/6] javac + d8"
+mkdir -p obj/dex            # d8 要求输出目录必须已存在
 javac -source 1.8 -target 1.8 -nowarn \
   -cp "$PLATFORM" -d obj \
   src/$PKG_PATH/*.java
@@ -73,7 +74,12 @@ cd apk_content
 unzip -oq ../base.apk
 cp ../obj/dex/classes.dex .
 cp -r ../assets .
-zip -qr ../unsigned.apk . -x '.*'
+
+# 关键：从 Android 11（API 30）起，resources.arsc 必须以 STORED（不压缩）方式存放
+# 且 4 字节对齐，否则安装时报 INSTALL_PARSE_FAILED_RESOURCES_ARSC_COMPRESSED（错误码 -124）。
+# zipalign 只做对齐、不会解压，救不回来，所以必须在打包这一步就分开处理。
+zip -qr ../unsigned.apk . -x 'resources.arsc' -x '.*'   # 其余文件正常压缩
+zip -q -Z store ../unsigned.apk resources.arsc          # resources.arsc 不压缩
 cd ..
 
 # ---------- 6. 对齐与签名 ----------
@@ -93,11 +99,37 @@ apksigner sign \
   --out "$OUT_APK" aligned.apk
 
 # ---------- 校验 ----------
+fail=0
+
+echo
+echo "=== resources.arsc 必须未压缩（否则安装报 -124）==="
+method=$(unzip -v "$OUT_APK" | awk '$NF=="resources.arsc"{print $2}')
+if [ "$method" = "Stored" ]; then
+  echo "  Stored ✓"
+else
+  echo "  $method ✗ —— 该包在 Android 11+ 上无法安装"; fail=1
+fi
+
+echo
+echo "=== 对齐校验 ==="
+if zipalign -c -v 4 "$OUT_APK" >/dev/null 2>&1; then
+  echo "  4 字节对齐 ✓"
+else
+  echo "  对齐失败 ✗"; fail=1
+fi
+
 echo
 echo "=== 签名校验 ==="
 apksigner verify --print-certs "$OUT_APK" | head -5
+
 echo
 echo "=== 权限检查（应为空，本应用零权限）==="
 aapt2 dump badging "$OUT_APK" | grep -E "^uses-permission" || echo "  无任何权限声明 ✓"
+
 echo
-echo "构建完成：$(pwd)/$OUT_APK  ($(du -h "$OUT_APK" | cut -f1))"
+if [ "$fail" = "0" ]; then
+  echo "构建完成：$(pwd)/$OUT_APK  ($(du -h "$OUT_APK" | cut -f1))"
+else
+  echo "构建产物存在问题，请勿分发。" >&2
+  exit 1
+fi
