@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.tailuge.billiards.cn"
-    android:versionCode="26080303"
-    android:versionName="1.0.0">
+    android:versionCode="26080401"
+    android:versionName="1.0.1">
 
     <!-- 明确声明 SDK 版本，避免 aapt2 按旧版兼容规则隐式追加存储/电话权限 -->
-    <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
+    <!-- targetSdkVersion 提升到 35，适配 Android 15/16 安装器策略 -->
+    <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="35" />
 
     <!-- 纯单机离线应用，不需要任何权限 -->
     <!-- 刻意不声明 INTERNET / ACCESS_NETWORK_STATE / 存储 / 电话 -->
