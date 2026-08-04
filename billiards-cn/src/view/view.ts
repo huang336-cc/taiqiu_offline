@@ -85,7 +85,8 @@ export class View {
   applySkin(skinId: string) {
     this.table.cue.applySkin(skinId)
     if (this.assets.table) {
-      this.assets.recolorTable(this.assets.table)
+      // 必须把 skinId 透传下去，桌台不能去读带缓存的 Settings
+      this.assets.recolorTable(this.assets.table, skinId)
     }
   }
 

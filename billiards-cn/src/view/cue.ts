@@ -21,7 +21,7 @@ export class Cue {
   cueBody: Object3D
   helperMesh: Mesh
   targetLineMesh: Line
-  /** 指向 View 的引用，用于判断相机模式（第一人称时才显示被击打球辅助线） */
+  /** 指向 View 的引用（实时换肤等需要访问场景的场合使用） */
   view?: View
   placerMesh: Object3D
   shadowMesh: Mesh
@@ -46,6 +46,8 @@ export class Cue {
   private readonly tempVec = new Vector3()
   private readonly tempVec2 = new Vector3()
   private readonly tempVec3 = new Vector3()
+  /** findAimedBall 专用，避免与上面几个临时向量互相覆盖 */
+  private readonly tempVecAim = new Vector3()
   hitAnimationWeight: number = 0
 
   constructor() {
@@ -315,10 +317,46 @@ export class Cue {
   }
 
   /**
+   * 找出当前瞄准方向上最先被击中的球。
+   *
+   * 不复用 Overlap.getFirst：它的判定阈值是碰撞用的 perpendicular < 2R，
+   * 只有几乎正中球心才成立，稍微偏一点就返回空 —— 表现为「辅助线在
+   * 绝大多数角度下完全不出现」。辅助线是预测性提示，需要更宽的容差，
+   * 因此这里用 2.6R，并且只考虑白球前方（投影距离为正）的在台球。
+   */
+  private findAimedBall(table: Table, dir: Vector3) {
+    const cueball = table.cueball
+    let best: { ball: Ball; distance: number } | null = null
+    for (const ball of table.balls) {
+      if (ball === cueball) continue
+      if (!ball.onTable()) continue
+      // 用独立的临时向量，避免与 updateTargetLine 里的 tempVec 互相踩踏
+      const toBall = this.tempVecAim.copy(ball.pos).sub(cueball.pos)
+      const along = toBall.dot(dir)
+      if (along <= 0) continue // 在身后
+      // 点到射线的垂距
+      const perp = Math.sqrt(Math.max(0, toBall.lengthSq() - along * along))
+      if (perp > 2.6 * R) continue
+      if (!best || along < best.distance) {
+        best = { ball, distance: along }
+      }
+    }
+    return best
+  }
+
+  /**
    * 被击打球辅助线（items 3 & 7）：
-   * - 仅当相机为第一人称（aimView）且 targetLineLength>0 时显示；
+   * - targetLineLength>0 时显示，在跟随（第一人称）与俯视视角下均可见；
    * - 辅助线从目标球球心沿「白球→目标球」方向（ghost ball 原理）延伸，
    *   若该方向与某袋口夹角足够小，则实时指向该袋口。
+   *
+   * 说明：v1.0.6 曾限制「仅第一人称显示」，但游戏默认进入的是俯视视角，
+   * 结果辅助线在任何角度都看不到。俯视恰恰是最需要看进球线路的视角，
+   * 因此改为两种主视角都显示。
+   *
+   * 另：瞄准方向上没有球时不再直接隐藏，而是画出白球自身的行进线。
+   * 九球开局白球距球堆约 1.5m，整个球堆张角仅约 ±2.5°，稍微偏一点
+   * 前方就真的没有球 —— 若此时隐藏，主观感受就是「任何角度都没有辅助线」。
    */
   updateTargetLine(table: Table) {
     if (!this.targetLineMesh) return
@@ -327,44 +365,61 @@ export class Cue {
       this.targetLineMesh.visible = false
       return
     }
-    // 仅第一人称跟随视角显示辅助线
-    if (this.view && this.view.camera.mode !== this.view.camera.aimView) {
-      this.targetLineMesh.visible = false
-      return
-    }
     const dir = unitAtAngle(this.aim.angle, this.tempVec2)
-    const closest = table.cue.aimInputs?.overlap.getFirst(table.cueball, dir)
+    const closest = this.findAimedBall(table, dir)
     if (!closest) {
+      // 前方无球：画白球自身的行进线，保证任何角度都有视觉反馈
+      const cueStart = table.cueball.pos.clone().addScaledVector(dir, R)
+      const cueEnd = table.cueball.pos
+        .clone()
+        .addScaledVector(dir, R + len * 8 * R)
+      this.targetLineMesh.geometry.setFromPoints([cueStart, cueEnd])
+      this.targetLineMesh.geometry.computeBoundingSphere()
+      this.targetLineMesh.visible = true
+      return
+    }
+
+    // 目标球被击打后的运动方向（ghost ball 原理）：白球球心 → 目标球球心。
+    // 注意：绝对不能用工具函数 norm()，它内部返回的是模块级共享的同一个
+    // Vector3 实例，连续调用会就地覆写先前的结果，导致下面的点乘恒等于 1。
+    const targetDir = this.tempVec
+      .copy(closest.ball.pos)
+      .sub(table.cueball.pos)
+    if (targetDir.lengthSq() < 1e-9) {
       this.targetLineMesh.visible = false
       return
     }
-    // 目标球被击打后的运动方向：从白球指向目标球
-    const targetDir = norm(this.tempVec.copy(closest.ball.pos).sub(table.cueball.pos))
-    // 在 6 个袋口中找到与目标方向夹角最小（< 阈值）且在前方的袋口
+    targetDir.normalize()
+
+    // 在 6 个袋口中找与目标球运动方向夹角最小的那个
     const pockets = PocketGeometry.pocketCenters
     let bestPocket: Vector3 | null = null
     let bestDot = -1
     for (const p of pockets) {
-      const toPocket = norm(this.tempVec3.copy(p).sub(closest.ball.pos))
+      const toPocket = this.tempVec3.copy(p).sub(closest.ball.pos)
+      if (toPocket.lengthSq() < 1e-9) continue
+      toPocket.normalize()
       const d = toPocket.dot(targetDir)
       if (d > bestDot) {
         bestDot = d
         bestPocket = p
       }
     }
+
     // 线长度映射：len 1~5 → R*5 ~ R*25
     const lineLen = len * 5 * R
-    const start = closest.ball.pos.clone().add(targetDir.clone().multiplyScalar(R))
+    const start = closest.ball.pos.clone().addScaledVector(targetDir, R)
     let endPoint: Vector3
     if (bestPocket && bestDot > 0.7) {
       // 方向大致对准袋口，直接指向袋口中心
       endPoint = bestPocket.clone()
+      endPoint.z = start.z
     } else {
       // 否则沿击球方向延伸固定长度
-      endPoint = closest.ball.pos.clone().add(targetDir.clone().multiplyScalar(R + lineLen))
+      endPoint = closest.ball.pos.clone().addScaledVector(targetDir, R + lineLen)
     }
-    const points = [start, endPoint]
-    this.targetLineMesh.geometry.setFromPoints(points)
+    this.targetLineMesh.geometry.setFromPoints([start, endPoint])
+    this.targetLineMesh.geometry.computeBoundingSphere()
     this.targetLineMesh.visible = true
   }
 

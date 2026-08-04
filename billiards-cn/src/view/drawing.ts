@@ -55,35 +55,43 @@ export class Drawing {
     return this.raycaster.ray.intersectPlane(this.tablePlane, hit) ? hit : null
   }
 
+  /**
+   * 指针按下：
+   * - 左键 / 触摸：点击球体自动将球杆对准该球（点击瞄准）
+   * - 右键：起笔画战术线
+   *
+   * 注意：此前这里误写成两个同名的 onPointerDown 字段，后者直接覆盖前者，
+   * 导致「点击球自动对准」完全失效。必须合并为一个处理函数。
+   */
   private onPointerDown = (e: PointerEvent) => {
+    if (e.button === 2) {
+      const point = this.toTable(e.clientX, e.clientY)
+      if (point) {
+        this.isDrawing = true
+        this.startPoint = point
+        this.canvas.setPointerCapture(e.pointerId)
+      }
+      return
+    }
     if (e.button !== 0) return
     const point = this.toTable(e.clientX, e.clientY)
     if (!point) return
-    // 找到点击位置最近的球（距离 < 球半径）
+    // 找到点击位置最近的球（放宽到 2.2R，手指点击精度有限）
     const balls = this.balls()
     const cueball = balls[0]
     let closest: Ball | null = null
     let closestDist = Infinity
     for (const ball of balls) {
       if (ball === cueball) continue
+      if (!ball.onTable()) continue
       const d = ball.pos.distanceTo(point)
-      if (d < R * 1.5 && d < closestDist) {
+      if (d < R * 2.2 && d < closestDist) {
         closestDist = d
         closest = ball
       }
     }
     if (closest) {
       this.onBallTap?.(closest)
-    }
-  }
-
-  private onPointerDown = (e: PointerEvent) => {
-    if (e.button !== 2) return
-    const point = this.toTable(e.clientX, e.clientY)
-    if (point) {
-      this.isDrawing = true
-      this.startPoint = point
-      this.canvas.setPointerCapture(e.pointerId)
     }
   }
 
