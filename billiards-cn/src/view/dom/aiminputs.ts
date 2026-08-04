@@ -90,7 +90,14 @@ export class AimInputs {
     this.openElevationElement?.addEventListener("click", this.toggleTiltControl)
     this.resetSpinElement?.addEventListener("click", this.resetSpin)
     this.cueHitElement?.addEventListener("click", this.hit)
+    // item 1：力度条 / 微调条按住期间 = 正在瞄准，按下开始、松开结束。
+    // 仅靠 input 事件做超时判断会在手指按住不动时丢失事件流而误判松手，
+    // 因此用 pointerdown/up 精确反映「按住」状态。
+    this.cuePowerElement?.addEventListener("pointerdown", this.beginAim)
+    this.cuePowerElement?.addEventListener("pointerup", this.endAim)
     this.cuePowerElement?.addEventListener("input", this.powerChanged)
+    this.fineTuneElement?.addEventListener("pointerdown", this.beginAim)
+    this.fineTuneElement?.addEventListener("pointerup", this.endAim)
     this.fineTuneElement?.addEventListener("input", this.fineTuneChanged)
     this.fineTuneElement?.addEventListener("change", this.fineTuneReleased)
     this.cueTiltElement?.addEventListener("input", this.tiltChanged)
@@ -214,6 +221,21 @@ export class AimInputs {
     return this.controlsDisabled
   }
 
+  /** item 1：标记「正在瞄准」开始（按住滑条）。 */
+  private beginAim = () => {
+    this.container.table.cue.beginAimInteraction()
+  }
+
+  /** item 1：标记「正在瞄准」结束（松开滑条）。 */
+  private endAim = () => {
+    this.container.table.cue.endAimInteraction()
+  }
+
+  /** item 1：瞬时交互（滚轮 / 点球）→ 给辅助线一个短暂的可见窗口。 */
+  private flashAim = () => {
+    this.container.table.cue.flashAimInteraction()
+  }
+
   mousemove = (e) => {
     e.buttons === 1 && this.adjustSpin(e)
   }
@@ -309,6 +331,7 @@ export class AimInputs {
     if (this.controlsDisabled) {
       return
     }
+    this.flashAim()
     this.container.table.cue.setPower(Number(this.cuePowerElement.value))
     this.updatePowerProgress()
   }
@@ -442,6 +465,7 @@ export class AimInputs {
     if (this.controlsDisabled) {
       return
     }
+    this.flashAim()
     const val = Number((e.target as HTMLInputElement).value)
     if (val !== 0) {
       // 每次拖动产生一个小角度旋转，灵敏度系数
@@ -465,6 +489,7 @@ export class AimInputs {
       return
     }
     if (this.cuePowerElement) {
+      this.flashAim()
       this.cuePowerElement.value = (
         Number(this.cuePowerElement.value) -
         Math.sign(e.deltaY) / 10

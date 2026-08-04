@@ -8,6 +8,7 @@ import { Grid } from "./grid"
 import { renderer } from "../utils/webgl"
 import { Assets } from "./assets"
 import { Snooker } from "../controller/rules/snooker"
+import { Settings, getEnvScene } from "../utils/settings"
 
 export class View {
   readonly scene = new Scene()
@@ -23,6 +24,7 @@ export class View {
   loadAssets = true
   assets: Assets
   drawing: Drawing
+  private ambient?: AmbientLight
 
   // Reuse objects to reduce garbage collection pressure in high-frequency rendering
   private readonly frustum = new Frustum()
@@ -90,6 +92,11 @@ export class View {
     }
   }
 
+  /** 实时切换球杆主题（item 2） */
+  applyCueTheme(themeId: string) {
+    this.table.cue.applyCueTheme(themeId)
+  }
+
   update(elapsed, aim: AimEvent) {
     this.camera.update(elapsed, aim)
   }
@@ -153,7 +160,8 @@ export class View {
   }
 
   private initialiseScene() {
-    this.scene.add(new AmbientLight(0x009922, 0.3))
+    this.ambient = new AmbientLight(0x009922, 0.3)
+    this.scene.add(this.ambient)
     if (this.assets.background) {
       this.scene.add(this.assets.background)
     }
@@ -161,6 +169,18 @@ export class View {
     this.table.mesh = this.assets.table
     const isSnooker = this.assets.rules.asset === Snooker.tablemodel
     this.scene.add(new Grid().generateLineSegments(isSnooker))
+    // 初始应用环境场景（item 4）
+    this.applyScene(Settings.get().scene)
+  }
+
+  /** 应用环境场景（item 4）：墙面贴图 + 环境光色调 */
+  applyScene(sceneId: string) {
+    this.assets.recolorScene(sceneId)
+    if (this.ambient) {
+      const def = getEnvScene(sceneId)
+      this.ambient.color.setHex(def.amb)
+      this.ambient.intensity = def.ambI
+    }
   }
 
   ballToCheck = 0

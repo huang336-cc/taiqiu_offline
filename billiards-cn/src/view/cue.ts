@@ -50,6 +50,21 @@ export class Cue {
   private readonly tempVecAim = new Vector3()
   hitAnimationWeight: number = 0
 
+  /**
+   * 辅助线显示状态（item 1：仅在玩家调整瞄准时显示）。
+   *
+   * 分两类交互，缺一不可：
+   * - 持续型（按住画布拖动、拖微调条/力度条）：用计数器，按下 +1 松开 -1。
+   *   不能用「最后一次事件 + 超时」来判断，否则手指按住不动时事件流中断，
+   *   辅助线会误判为已松手而闪烁。
+   * - 瞬时型（点球自动对准、滚轮微调）：没有松手事件，给一个短暂的保留窗口，
+   *   否则用户点完球根本来不及看见辅助线。
+   */
+  private aimHoldCount = 0
+  private aimFlashUntil = 0
+  /** 瞬时交互后辅助线保留的时长（毫秒） */
+  private static readonly AIM_FLASH_MS = 1200
+
   constructor() {
     if (typeof document !== "undefined") {
       const cue = CueMesh.createCue(
@@ -287,6 +302,47 @@ export class Cue {
   update(t) {
     this.t += t
     this.moveTo(this.aim.pos)
+    this.refreshTargetLineVisibility()
+  }
+
+  /** 持续型瞄准交互开始（按住画布拖动、按住滑条） */
+  beginAimInteraction() {
+    this.aimHoldCount++
+  }
+
+  /** 持续型瞄准交互结束 */
+  endAimInteraction() {
+    this.aimHoldCount = Math.max(0, this.aimHoldCount - 1)
+  }
+
+  /** 瞬时型瞄准交互（点球对准、滚轮），给一个短暂的可见窗口 */
+  flashAimInteraction() {
+    this.aimFlashUntil = performance.now() + Cue.AIM_FLASH_MS
+  }
+
+  /** 立即收起辅助线：击球、摆球、回放等离开瞄准的场合 */
+  hideTargetLine() {
+    this.aimHoldCount = 0
+    this.aimFlashUntil = 0
+    if (this.targetLineMesh) this.targetLineMesh.visible = false
+  }
+
+  /** 玩家此刻是否正在调整瞄准 */
+  private isAiming(): boolean {
+    return this.aimHoldCount > 0 || performance.now() < this.aimFlashUntil
+  }
+
+  /**
+   * 每帧收敛辅助线可见性。
+   *
+   * updateTargetLine 只负责算几何、在该显示时置 visible=true；
+   * 这里负责「不该显示时收起来」，两者职责分开，避免各处调用点漏判。
+   */
+  private refreshTargetLineVisibility() {
+    if (!this.targetLineMesh) return
+    if (!this.isAiming()) {
+      this.targetLineMesh.visible = false
+    }
   }
 
   placeBallMode() {
@@ -365,6 +421,11 @@ export class Cue {
       this.targetLineMesh.visible = false
       return
     }
+    // item 1：只有玩家正在调整瞄准时才画，其余时刻一律收起
+    if (!this.isAiming()) {
+      this.targetLineMesh.visible = false
+      return
+    }
     const dir = unitAtAngle(this.aim.angle, this.tempVec2)
     const closest = this.findAimedBall(table, dir)
     if (!closest) {
@@ -423,9 +484,15 @@ export class Cue {
     this.targetLineMesh.visible = true
   }
 
-  /** 实时更换皮肤（item 1）：重设球杆各段材质颜色 */
+  /** 实时更换皮肤（item 1）：重设球杆各段材质颜色，并套用当前球杆主题 */
   applySkin(skinId: string) {
     CueMesh.applySkin(this.cueBody, skinId)
+    CueMesh.applyCueTheme(this.cueBody, Settings.get().cueTheme, skinId)
+  }
+
+  /** 单独切换球杆主题（item 2），颜色按当前皮肤恢复 */
+  applyCueTheme(themeId: string) {
+    CueMesh.applyCueTheme(this.cueBody, themeId, Settings.get().skin)
   }
 
   toggleHelper() {

@@ -126,6 +126,15 @@ export class Container {
     this.table.cue.aimInputs = new AimInputs(this)
     if (keyboard) {
       this.keyboard = keyboard
+      // item 1：画布拖动的按下/松手直接驱动辅助线显隐
+      keyboard.onDragStart = () => {
+        const cue = this.table.cue
+        if (!cue.aimInputs || cue.aimInputs.isDisabled()) return
+        cue.beginAimInteraction()
+      }
+      keyboard.onDragEnd = () => {
+        this.table.cue.endAimInteraction()
+      }
     }
     this.sound = assets.sound
     this.chat = new Chat(this.sendChat)
@@ -144,6 +153,8 @@ export class Container {
       const cue = this.table.cue
       if (!cue.aimInputs || cue.aimInputs.isDisabled()) return
       cue.aimAtNext(this.table.cueball, ball)
+      // 点球对准是瞬时操作，没有松手事件，给一个短暂的辅助线可见窗口
+      cue.flashAimInteraction()
       cue.rotateAim(0, this.table)
       cue.updateAimInput()
       this.lastEventTime = performance.now()

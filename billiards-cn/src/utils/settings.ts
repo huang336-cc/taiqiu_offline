@@ -30,6 +30,10 @@ export interface GameSettings {
   targetLineLength: number
   /** 皮肤选择 */
   skin: string
+  /** 球杆主题（item 2）：auto=随台面，其余为独立主题贴图 */
+  cueTheme: string
+  /** 环境场景（item 4）：room=室内，其余为新增主题 */
+  scene: string
 }
 
 const STORAGE_KEY = "billiards_cn_settings_v1"
@@ -46,6 +50,8 @@ const DEFAULTS: GameSettings = {
   fpsCap: 0,
   targetLineLength: 3,
   skin: "classic",
+  cueTheme: "auto",
+  scene: "room",
 }
 
 /** 皮肤列表 */
@@ -70,8 +76,8 @@ export const SKINS: SkinDef[] = [
   {
     id: "classic",
     name: "经典原木",
-    shaftColor: 0xd2b48c,
-    buttColor: 0x1a1a1a,
+    shaftColor: 0xe3c79a,
+    buttColor: 0x6a4a1a,
     tipColor: 0x4a7c9a,
     clothColor: 0xdac39e,
     cushionColor: 0xba934e,
@@ -80,8 +86,8 @@ export const SKINS: SkinDef[] = [
   {
     id: "emerald",
     name: "翡翠绿",
-    shaftColor: 0xc8b07a,
-    buttColor: 0x1a3a2a,
+    shaftColor: 0x4f8f5e,
+    buttColor: 0x11401f,
     tipColor: 0x3a5a7a,
     clothColor: 0x2a7a3a,
     cushionColor: 0x1a5a2a,
@@ -90,8 +96,8 @@ export const SKINS: SkinDef[] = [
   {
     id: "crimson",
     name: "赤焰红",
-    shaftColor: 0xd8a878,
-    buttColor: 0x4a0a0a,
+    shaftColor: 0xb56a55,
+    buttColor: 0x5a1414,
     tipColor: 0x6a0a0a,
     clothColor: 0x8a2a2a,
     cushionColor: 0x6a1a1a,
@@ -100,8 +106,8 @@ export const SKINS: SkinDef[] = [
   {
     id: "sapphire",
     name: "蓝宝石",
-    shaftColor: 0xc0a878,
-    buttColor: 0x0a1a3a,
+    shaftColor: 0x5a78b8,
+    buttColor: 0x0a1840,
     tipColor: 0x2a4a7a,
     clothColor: 0x1a3a8a,
     cushionColor: 0x0a2a6a,
@@ -121,6 +127,102 @@ export const SKINS: SkinDef[] = [
 
 export function getSkin(id: string): SkinDef {
   return SKINS.find((s) => s.id === id) ?? SKINS[0]
+}
+
+/**
+ * 球杆主题（item 2：增加球杆元素）。
+ * - auto：球杆颜色跟随所选台面皮肤（修复「球杆颜色不随球桌变化」）。
+ * - 其余：程序化贴图主题，见 cuetexturefactory.ts。
+ * kind 决定贴图生成方式；accent 用于 UI 色块与（auto 时）强调色。
+ */
+export interface CueThemeDef {
+  id: string
+  name: string
+  kind: "auto" | "dragon" | "azure" | "minions" | "peppa" | "qilin"
+  /** UI 色块渐变（左=杆身，右=杆尾） */
+  swatch: string
+  accent: number
+}
+
+export const CUE_THEMES: CueThemeDef[] = [
+  {
+    id: "auto",
+    name: "随台面",
+    kind: "auto",
+    swatch: "linear-gradient(135deg,#d2b48c 0%,#1a1a1a 100%)",
+    accent: 0xd2b48c,
+  },
+  {
+    id: "dragon",
+    name: "屠龙斩",
+    kind: "dragon",
+    swatch: "linear-gradient(135deg,#caa23a 0%,#3a0d0d 100%)",
+    accent: 0xcaa23a,
+  },
+  {
+    id: "azure",
+    name: "青龙",
+    kind: "azure",
+    swatch: "linear-gradient(135deg,#5fd0e0 0%,#093b54 100%)",
+    accent: 0x5fd0e0,
+  },
+  {
+    id: "minions",
+    name: "小黄人",
+    kind: "minions",
+    swatch: "linear-gradient(135deg,#f4d000 0%,#1f6fb2 100%)",
+    accent: 0xf4d000,
+  },
+  {
+    id: "peppa",
+    name: "小猪佩奇",
+    kind: "peppa",
+    swatch: "linear-gradient(135deg,#ff9ec4 0%,#ff6fa8 100%)",
+    accent: 0xff9ec4,
+  },
+  {
+    id: "qilin",
+    name: "火麒麟",
+    kind: "qilin",
+    swatch: "linear-gradient(135deg,#ffd24a 0%,#d8320a 100%)",
+    accent: 0xff7a1f,
+  },
+]
+
+export function getCueTheme(id: string): CueThemeDef {
+  return CUE_THEMES.find((t) => t.id === id) ?? CUE_THEMES[0]
+}
+
+/**
+ * 环境场景（item 4）。背景是一个「盒子房间」（背景 cube），切换场景即
+ * 替换盒子的材质贴图 + 调整环境光色调。全部为程序化生成，无外部贴图资源。
+ * - wallA/wallB：墙面渐变两端色（顶/底）。
+ * - amb/ambI：环境光颜色与强度，营造不同氛围。
+ * - kind：墙面程序化图案类型（见 scenetexturefactory.ts）。
+ */
+export interface EnvSceneDef {
+  id: string
+  name: string
+  wallA: number
+  wallB: number
+  amb: number
+  ambI: number
+  kind: "room" | "beach" | "forest" | "snow" | "desert" | "office" | "cybercafe"
+  swatch: string
+}
+
+export const ENV_SCENES: EnvSceneDef[] = [
+  { id: "room", name: "室内", wallA: 0x3a3f4b, wallB: 0x2a2e38, amb: 0xbfcad6, ambI: 0.55, kind: "room", swatch: "linear-gradient(135deg,#3a3f4b,#2a2e38)" },
+  { id: "beach", name: "沙滩", wallA: 0xf4d9a0, wallB: 0xe0a85e, amb: 0xfff0d0, ambI: 0.72, kind: "beach", swatch: "linear-gradient(135deg,#f4d9a0,#e0a85e)" },
+  { id: "forest", name: "原始森林", wallA: 0x2f5d34, wallB: 0x183218, amb: 0xcfeccf, ambI: 0.55, kind: "forest", swatch: "linear-gradient(135deg,#2f5d34,#183218)" },
+  { id: "snow", name: "雪山", wallA: 0xdbe7f0, wallB: 0xa6bace, amb: 0xeaf2ff, ambI: 0.82, kind: "snow", swatch: "linear-gradient(135deg,#dbe7f0,#a6bace)" },
+  { id: "desert", name: "沙漠", wallA: 0xe8c98a, wallB: 0xc2934f, amb: 0xffe9c0, ambI: 0.72, kind: "desert", swatch: "linear-gradient(135deg,#e8c98a,#c2934f)" },
+  { id: "office", name: "办公室", wallA: 0xc9d2dc, wallB: 0x92a0b0, amb: 0xeef2f7, ambI: 0.62, kind: "office", swatch: "linear-gradient(135deg,#c9d2dc,#92a0b0)" },
+  { id: "cybercafe", name: "网吧", wallA: 0x281a4a, wallB: 0x0a0618, amb: 0x6a3cff, ambI: 0.52, kind: "cybercafe", swatch: "linear-gradient(135deg,#281a4a,#0a0618)" },
+]
+
+export function getEnvScene(id: string): EnvSceneDef {
+  return ENV_SCENES.find((s) => s.id === id) ?? ENV_SCENES[0]
 }
 
 /**

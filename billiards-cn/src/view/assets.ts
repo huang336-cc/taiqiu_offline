@@ -11,7 +11,8 @@ import { Rules } from "../controller/rules/rules"
 import { Sound } from "./sound"
 import { TableMesh } from "./tablemesh"
 import { TableGeometry } from "./tablegeometry"
-import { Settings, getSkin } from "../utils/settings"
+import { Settings, getSkin, getEnvScene } from "../utils/settings"
+import { getSceneTexture } from "./scenetexturefactory"
 
 export class Assets {
   /**
@@ -37,6 +38,8 @@ export class Assets {
   rules: Rules
   background: Mesh
   table: Mesh
+  /** 背景未就绪时暂存的场景 id（item 4） */
+  pendingScene: string | null = null
 
   sound: Sound
 
@@ -50,6 +53,8 @@ export class Assets {
     this.sound = new Sound(true)
     importGltf("models/background.gltf", (m) => {
       this.background = m.scene
+      this.applySceneToBackground(this.pendingScene ?? Settings.get().scene)
+      this.pendingScene = null
       this.done()
     })
     importGltf(this.rules.asset, (m) => {
@@ -128,6 +133,33 @@ export class Assets {
    */
   recolorTable(scene, skinId?: string): void {
     this.paintTable(scene, Assets.tableCustomizationFor(skinId), false)
+  }
+
+  /**
+   * 应用环境场景（item 4）：把程序化墙面贴图套到背景盒子房间的内壁上。
+   * 背景为异步加载，未就绪时暂存，待加载完成回调里补应用。
+   */
+  recolorScene(sceneId: string): void {
+    this.applySceneToBackground(sceneId)
+  }
+
+  private applySceneToBackground(sceneId: string): void {
+    if (!this.background) {
+      this.pendingScene = sceneId
+      return
+    }
+    const tex = getSceneTexture(sceneId)
+    this.background.traverse((child) => {
+      if (!child.isMesh) return
+      const mats = Array.isArray(child.material)
+        ? child.material
+        : [child.material]
+      for (const mat of mats) {
+        mat.map = tex
+        mat.color.setHex(0xffffff)
+        mat.needsUpdate = true
+      }
+    })
   }
 
   /** 桌台上色的唯一实现，首次加载与实时换肤共用，避免两份逻辑走偏 */

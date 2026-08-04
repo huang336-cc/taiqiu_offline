@@ -1,6 +1,7 @@
 import { R } from "../model/physics/constants"
 import { up } from "../utils/three-utils"
 import { Settings, getSkin } from "../utils/settings"
+import { getCueTexture } from "./cuetexturefactory"
 import {
   Matrix4,
   Mesh,
@@ -155,6 +156,8 @@ export class CueMesh {
     tiltGroup.rotation.y = this.baseTilt
     tiltGroup.add(cueBody)
     mesh.add(tiltGroup)
+    // 初始套用球杆主题（item 2）：auto 用皮肤色，具体主题套程序化贴图
+    this.applyCueTheme(cueBody, Settings.get().cueTheme, Settings.get().skin)
     return { mesh, tiltMesh: tiltGroup, cueBody }
   }
 
@@ -255,6 +258,34 @@ export class CueMesh {
           break
         default:
           break
+      }
+      mat.needsUpdate = true
+    })
+  }
+
+  /**
+   * 应用球杆主题（item 2）。
+   * - auto：清除贴图，颜色由 applySkin 按皮肤设置（球杆随台面变化）。
+   * - 具体主题：套用程序化贴图，并把材质色设为白，让贴图本色显示。
+   * 颜色恢复在 auto 分支内完成，因此单独切换主题也不会留下上一次的白色。
+   */
+  static applyCueTheme(group: Group, themeId: string, skinId: string) {
+    const tex = getCueTexture(themeId)
+    const skin = getSkin(skinId)
+    group.traverse((child) => {
+      const mesh = child as Mesh
+      if (!(mesh as any).isMesh) return
+      if (mesh.name !== "cueShaft" && mesh.name !== "cueButt") return
+      const mat = mesh.material as MeshPhongMaterial
+      if (!mat) return
+      if (tex) {
+        mat.map = tex
+        mat.color.setHex(0xffffff)
+      } else {
+        mat.map = null
+        mat.color.setHex(
+          mesh.name === "cueButt" ? skin.buttColor : skin.shaftColor
+        )
       }
       mat.needsUpdate = true
     })
