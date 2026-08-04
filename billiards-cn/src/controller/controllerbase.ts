@@ -85,6 +85,8 @@ export abstract class ControllerBase extends Controller {
     this.container.table.hit()
     this.container.view.camera.suggestMode(this.container.view.camera.aimView)
     this.container.table.cue.showHelper(false)
+    // item 1：击球即离开瞄准，立即收起被击球辅助线
+    this.container.table.cue.hideTargetLine()
   }
 
   commonKeyHandler(input) {

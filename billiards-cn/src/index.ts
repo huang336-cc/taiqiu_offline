@@ -61,6 +61,27 @@ function setupOverlayControls(browserContainer: BrowserContainer) {
       }
       return
     }
+    if (e.data.type === "billiards-apply-cuetheme") {
+      try {
+        Settings.reload()
+        Settings.set("cueTheme", e.data.cueTheme)
+        browserContainer.container?.view?.applyCueTheme(e.data.cueTheme)
+      } catch {
+        /* 尚未初始化时忽略 */
+      }
+      return
+    }
+    // 对局内实时切换环境场景（item 4）：刷新背景贴图与氛围光
+    if (e.data.type === "billiards-apply-scene") {
+      try {
+        Settings.reload()
+        Settings.set("scene", e.data.scene)
+        browserContainer.container?.view?.applyScene(e.data.scene)
+      } catch {
+        /* 尚未初始化时忽略 */
+      }
+      return
+    }
     if (e.data.type !== "billiards-settings") return
     // 让本页缓存失效后重新读取
     Settings.reload()
@@ -68,6 +89,12 @@ function setupOverlayControls(browserContainer: BrowserContainer) {
     applyQualityClass(settings.lod)
     try {
       browserContainer.container?.table?.cue?.showHelper(settings.aimAssist)
+      // 浮层可能改了球杆主题，重新套用
+      browserContainer.container?.table?.cue?.applyCueTheme(
+        settings.cueTheme
+      )
+      // 浮层可能改了环境场景，重新套用
+      browserContainer.container?.view?.applyScene(settings.scene)
     } catch {
       /* 尚未初始化时忽略 */
     }

@@ -41,6 +41,8 @@
     fpsCap: 0,
     targetLineLength: 3,
     skin: "classic",
+    cueTheme: "auto",
+    scene: "room",
   }
 
   /* ---------------- 设置存取 ---------------- */
@@ -262,6 +264,16 @@
       saveSettings(settings)
     })
 
+    $("setCueTheme").addEventListener("change", function (e) {
+      settings.cueTheme = e.target.value
+      saveSettings(settings)
+    })
+
+    $("setScene").addEventListener("change", function (e) {
+      settings.scene = e.target.value
+      saveSettings(settings)
+    })
+
     $("setPracticeGuide").addEventListener("change", function (e) {
       settings.practiceGuide = e.target.checked
       saveSettings(settings)
@@ -292,6 +304,8 @@
     $("setAim").checked = !!settings.aimAssist
     $("setVibrate").checked = !!settings.vibrate
     $("setSkin").value = settings.skin || "classic"
+    $("setCueTheme").value = settings.cueTheme || "auto"
+    $("setScene").value = settings.scene || "room"
     $("setPracticeGuide").checked = settings.practiceGuide !== false
     $("setTurnTimer").value = String(settings.turnTimer || 0)
   }
@@ -348,6 +362,8 @@
     initOpponents()
     initSettingsPanel()
     initSkins()
+    initCueThemes()
+    initScenes()
 
     $("btnStart").addEventListener("click", function () {
       buzz(15)
@@ -403,6 +419,58 @@
     Array.prototype.forEach.call(cards, function (c) {
       c.addEventListener("click", function () {
         settings.skin = c.getAttribute("data-skin")
+        saveSettings(settings)
+        syncActive()
+        buzz(10)
+      })
+    })
+    syncActive()
+  }
+
+  /* ---------------- 球杆主题卡片（item 2） ---------------- */
+
+  function initCueThemes() {
+    var cards = document.querySelectorAll("#cueThemeCards .skin-card")
+    if (!cards.length) return
+    function syncActive() {
+      Array.prototype.forEach.call(cards, function (c) {
+        c.classList.toggle(
+          "active",
+          c.getAttribute("data-cuetheme") === (settings.cueTheme || "auto")
+        )
+      })
+      var sel = $("setCueTheme")
+      if (sel) sel.value = settings.cueTheme || "auto"
+    }
+    Array.prototype.forEach.call(cards, function (c) {
+      c.addEventListener("click", function () {
+        settings.cueTheme = c.getAttribute("data-cuetheme")
+        saveSettings(settings)
+        syncActive()
+        buzz(10)
+      })
+    })
+    syncActive()
+  }
+
+  /* ---------------- 环境场景卡片（item 4） ---------------- */
+
+  function initScenes() {
+    var cards = document.querySelectorAll("#sceneCards .skin-card")
+    if (!cards.length) return
+    function syncActive() {
+      Array.prototype.forEach.call(cards, function (c) {
+        c.classList.toggle(
+          "active",
+          c.getAttribute("data-scene") === (settings.scene || "room")
+        )
+      })
+      var sel = $("setScene")
+      if (sel) sel.value = settings.scene || "room"
+    }
+    Array.prototype.forEach.call(cards, function (c) {
+      c.addEventListener("click", function () {
+        settings.scene = c.getAttribute("data-scene")
         saveSettings(settings)
         syncActive()
         buzz(10)

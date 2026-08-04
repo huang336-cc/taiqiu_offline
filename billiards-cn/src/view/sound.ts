@@ -263,8 +263,10 @@ export class Sound {
       )
     }
     if (outcome.type === "Pot") {
-      // 进袋改用程序合成的真实木质碰撞声（item 5）
-      this.playPotSynth(outcome.incidentSpeed)
+      // 进袋改用真实录音素材（item 3：替换原先偏弱的合成音）。
+      // 仍按入袋球速分轻/中/重三档，并加随机变调，避免重复感。
+      const pick = this.pickPotBySpeed(outcome.incidentSpeed)
+      this.play(pick.audio, pick.vol, pick.detune + MathUtils.randFloat(-120, 120))
     }
     if (outcome.type === "Cushion") {
       this.play(this.cushion, outcome.incidentSpeed / 40)

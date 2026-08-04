@@ -12,6 +12,16 @@ export class Keyboard {
   private readonly flipX: boolean
   private readonly disabled: boolean
 
+  /**
+   * 画布拖动的起止回调。
+   *
+   * 辅助线要求「仅在玩家拖动瞄准时显示」，只靠 move 事件做超时判断会在
+   * 手指按住不动时误判为已松手，导致辅助线闪烁。interact.js 的 start/end
+   * 能精确反映按住状态，因此把这两个时机透出去。
+   */
+  onDragStart?: () => void
+  onDragEnd?: () => void
+
   getEvents() {
     const result: Input[] = []
 
@@ -48,15 +58,27 @@ export class Keyboard {
     interact(element).draggable({
       mouseButtons: 1,
       listeners: {
+        start: () => {
+          this.onDragStart?.()
+        },
         move: (e) => {
           this.mousetouch(e)
+        },
+        end: () => {
+          this.onDragEnd?.()
         },
       },
     })
     interact(element).gesturable({
+      onstart: () => {
+        this.onDragStart?.()
+      },
       onmove: (e) => {
         e.dx /= 3
         this.mousetouch(e)
+      },
+      onend: () => {
+        this.onDragEnd?.()
       },
     })
   }
