@@ -3,6 +3,7 @@ import { up, zero, unitAtAngle } from "../utils/three-utils"
 import { AimEvent } from "../events/aimevent"
 import { CameraTop } from "./cameratop"
 import { R } from "../model/physics/constants"
+import { Settings } from "../utils/settings"
 
 export class Camera {
   static defaultHeight = R * 8
@@ -287,6 +288,25 @@ export class Camera {
   }
 
   cycleMode(balls: any[], aim: AimEvent) {
+    // v1.1.8：关闭「保留三个视角」时，只在第一/二人称（跟随 / 俯视）间切换，
+    // 跳过母球视角（aimz 拉远），避免不想要的拉远操作。
+    const keepAll = Settings.get().keepAllViews
+    if (!keepAll) {
+      if (this.mode === this.topView) {
+        this.restoreSavedDistance()
+        this.mode = this.aimView
+        this.mainMode = this.aimView
+        this.isZoomedOut = false
+        this.updateCameraButtonClass("aim")
+      } else {
+        this.restoreSavedDistance()
+        this.mode = this.topView
+        this.mainMode = this.topView
+        this.isZoomedOut = false
+        this.updateCameraButtonClass("topview")
+      }
+      return
+    }
     if (this.mode === this.aimView && !this.isZoomedOut) {
       this.stepBackToFitAllBalls(balls, aim)
       if (this.savedDistance === undefined) {

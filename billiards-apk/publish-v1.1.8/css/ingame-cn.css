@@ -1,0 +1,410 @@
+/* ==========================================================================
+   台球大师 · 离线版 —— 游戏内中文界面与手机适配
+   在原版样式之后加载，只做“覆盖”，不改动原有布局逻辑。
+   ========================================================================== */
+
+:root {
+  --cn-gold: #e8c37a;
+  --cn-felt: #0d5c3a;
+  --cn-panel-top: #0a2a3d;
+  --cn-panel-bottom: #04070f;
+  --cn-safe-top: env(safe-area-inset-top, 0px);
+  --cn-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --cn-safe-left: env(safe-area-inset-left, 0px);
+  --cn-safe-right: env(safe-area-inset-right, 0px);
+}
+
+/* --------------------------------------------------------------------------
+   1. 全局：禁止选中/长按菜单/回弹，手机上更像原生 App
+   -------------------------------------------------------------------------- */
+html,
+body {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
+  font-family: var(--font-family-primary);
+}
+
+body {
+  padding-left: 0;
+  padding-right: 0;
+  box-sizing: border-box;
+}
+
+/* 画布不做像素化处理，保留高画质渲染 */
+canvas {
+  image-rendering: auto;
+}
+
+/* --------------------------------------------------------------------------
+   2. 底部操作面板
+   -------------------------------------------------------------------------- */
+.panel {
+  background: linear-gradient(180deg, var(--cn-panel-top), var(--cn-panel-bottom));
+  border-top: 1px solid rgb(232 195 122 / 25%);
+  padding-left: 0;
+  padding-right: 0;
+  padding-bottom: var(--cn-safe-bottom);
+  height: calc(70px + var(--cn-safe-bottom));
+}
+
+.hitButton {
+  font-family: var(--font-family-primary);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: #08130c;
+  background: linear-gradient(180deg, #ffe6a8, var(--cn-gold));
+  border: 1px solid #b8905180;
+  border-radius: 0;
+  text-shadow: none;
+  /* v1.1.8：由圆角矩形改为带切角的「多边形体」（八边形），并做内凹立体效果，
+     更好地贴合刘海屏 / 灵动岛的圆角区域。父级 .panel 已用 safe-area-inset
+     留出安全区，按钮始终落在可点区域。 */
+  clip-path: polygon(
+    16px 0,
+    calc(100% - 16px) 0,
+    100% 16px,
+    100% calc(100% - 16px),
+    calc(100% - 16px) 100%,
+    16px 100%,
+    0 calc(100% - 16px),
+    0 16px
+  );
+  box-shadow:
+    inset 0 3px 6px rgba(92, 60, 14, 0.55),
+    inset 0 -2px 4px rgba(255, 240, 200, 0.55);
+}
+
+.hitButton:active {
+  filter: brightness(0.92);
+}
+
+.menuButton {
+  color: var(--cn-gold);
+}
+
+.powerPercent {
+  font-family: var(--font-family-mono, monospace);
+  color: var(--cn-gold);
+}
+
+/* --------------------------------------------------------------------------
+   3. 比分 / 提示条
+   -------------------------------------------------------------------------- */
+#snookerScore,
+.breakScore {
+  color: var(--cn-gold);
+  font-family: var(--font-family-primary);
+}
+
+.p1Score,
+.p2Score {
+  font-family: var(--font-family-primary);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.tray-score-container {
+  padding-bottom: var(--cn-safe-bottom);
+}
+
+/* --------------------------------------------------------------------------
+   4. 通知面板（犯规 / 结算）中文排版
+   -------------------------------------------------------------------------- */
+#notification {
+  font-family: var(--font-family-primary);
+  line-height: 1.6;
+}
+
+#notification .notification-title,
+#notification h2 {
+  letter-spacing: 0.08em;
+}
+
+.notification-btn {
+  font-family: var(--font-family-primary);
+  font-size: 14px;
+  padding: 9px 18px;
+  min-height: 40px;
+  border-radius: 8px;
+  letter-spacing: 0.05em;
+}
+
+/* --------------------------------------------------------------------------
+   5. 帮助 / 设置浮层
+   -------------------------------------------------------------------------- */
+#helpOverlay {
+  width: min(94%, 420px);
+  height: min(88%, 680px);
+  background: #0b1418;
+  border: 1px solid rgb(232 195 122 / 30%);
+}
+
+.help-footer {
+  font-family: var(--font-family-primary);
+  gap: 8px;
+}
+
+.help-text {
+  flex: 1;
+  text-align: center;
+  color: #8fa3a8;
+}
+
+.lobby-btn,
+#helpClose {
+  font-family: var(--font-family-primary);
+  min-height: 34px;
+  padding: 6px 12px;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   6. 手机横屏：压缩面板高度，把控件挪到两侧，尽量给球桌让出空间
+   -------------------------------------------------------------------------- */
+@media (orientation: landscape) and (max-height: 500px) {
+  .panel {
+    height: calc(58px + var(--cn-safe-bottom));
+  }
+
+  .hitButton {
+    font-size: 13px;
+  }
+
+  #snookerScore {
+    font-size: 24px;
+  }
+
+  .breakScore {
+    font-size: 24px;
+  }
+
+  #helpOverlay {
+    width: min(92%, 560px);
+    height: 92%;
+  }
+}
+
+/* 小屏竖屏：缩小提示文字，避免遮挡球桌 */
+@media (orientation: portrait) and (max-width: 420px) {
+  .notification-btn {
+    font-size: 13px;
+    padding: 8px 14px;
+  }
+
+  .p1Score,
+  .p2Score {
+    font-size: 12px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   7. 低画质档位：关闭一些昂贵的合成效果（由 JS 给 body 加类）
+   -------------------------------------------------------------------------- */
+body.lod-low #snookerScore,
+body.lod-low .breakScore {
+  filter: none;
+}
+
+body.lod-low .panel {
+  background: #061020;
+}
+
+body.lod-low .hitButton {
+  background: var(--cn-gold);
+}
+
+/* --------------------------------------------------------------------------
+   8. 聊天区在离线版无用，彻底隐藏，避免占位
+   -------------------------------------------------------------------------- */
+.chatarea {
+  display: none !important;
+}
+
+/* --------------------------------------------------------------------------
+   9. 分步实操新手引导横幅（item 6）
+   -------------------------------------------------------------------------- */
+.tutorial-banner {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  max-width: calc(100% - 24px);
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: rgba(15, 28, 24, 0.92);
+  border: 1px solid var(--cn-gold, #e8c87a);
+  color: #f2f3ef;
+  font-size: 15px;
+  line-height: 1.5;
+  text-align: center;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  animation: tut-pop 0.25s ease-out;
+}
+.tutorial-banner .tut-text b {
+  color: var(--cn-gold, #e8c87a);
+}
+@keyframes tut-pop {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   10. 横向瞄准角度滑动条（2D UI）
+   位于底部面板内、与力度框并排；半透明 + 细高度，和力度框视觉一致。
+   -------------------------------------------------------------------------- */
+.aim-angle-bar {
+  position: relative;
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 120px;
+  height: 60%;
+  margin: 6px 0;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  box-sizing: border-box;
+  border-radius: 14px;
+  background: rgba(4, 12, 20, 0.5);
+  border: 1px solid rgba(232, 195, 122, 0.28);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.aim-angle-bar[hidden] {
+  display: none;
+}
+
+.aim-angle-bar.is-disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.aim-nudge {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  line-height: 1;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--cn-gold, #e8c37a);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(232, 195, 122, 0.3);
+  border-radius: 7px;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.aim-nudge:active {
+  background: rgba(232, 195, 122, 0.25);
+  transform: scale(0.94);
+}
+
+.aim-angle-track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+/* 轨道底纹：中间亮一点，提示「居中 = 初始瞄准方向」 */
+.aim-angle-track::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    rgba(232, 195, 122, 0.18) 0%,
+    rgba(232, 195, 122, 0.4) 50%,
+    rgba(232, 195, 122, 0.18) 100%
+  );
+  pointer-events: none;
+}
+
+.aim-angle-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2px;
+  height: 12px;
+  margin-left: -1px;
+  margin-top: -6px;
+  background: rgba(255, 255, 255, 0.55);
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+input[type="range"].aim-angle-slider {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 24px;
+  margin: 0;
+  background: transparent;
+  outline: none;
+  cursor: ew-resize;
+  position: relative;
+  z-index: 2;
+  touch-action: none;
+}
+
+input[type="range"].aim-angle-slider::-webkit-slider-runnable-track {
+  height: 24px;
+  background: transparent;
+}
+
+input[type="range"].aim-angle-slider::-moz-range-track {
+  height: 24px;
+  background: transparent;
+}
+
+input[type="range"].aim-angle-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 20px;
+  margin-top: 2px;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #ffe6a8, var(--cn-gold, #e8c37a));
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  cursor: ew-resize;
+}
+
+input[type="range"].aim-angle-slider::-moz-range-thumb {
+  width: 16px;
+  height: 20px;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #ffe6a8, var(--cn-gold, #e8c37a));
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  cursor: ew-resize;
+}
+
+/* 手机横屏：条更窄一点，别压到球桌 */
+@media (orientation: landscape) and (max-height: 500px) {
+  .aim-angle-bar {
+    min-width: 90px;
+    height: 60%;
+  }
+
+  .aim-nudge {
+    height: 20px;
+    font-size: 15px;
+  }
+}

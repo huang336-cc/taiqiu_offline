@@ -53,6 +53,8 @@ export class Aim extends ControllerBase {
       table.cue.aim.elevation = 0
     }
     this.container.view.camera.suggestMode(this.container.view.camera.aimView)
+    // 横向滑动条的「居中 = 初始正向瞄准」基准：进入瞄准状态时锁定当前角度
+    table.cue.setAimBase(table.cue.aim.angle)
     table.cue.updateAimInput()
     table.cue.updateTargetLine(table)
   }
@@ -65,7 +67,9 @@ export class Aim extends ControllerBase {
     // 分步实操新手引导：仅首次安装自动显示，或带 tutorial=1 强制显示
     const forceTutorial =
       new URLSearchParams(globalThis.location?.search).get("tutorial") === "1"
-    if (!Settings.get().seenGuide || forceTutorial) {
+    // v1.1.11：与 Tutorial.start 内部判断保持一致，用 hasSeenGuide()（含独立 key 兜底）。
+    // 避免真机主 key 写入失败时，seenGuide 内存判定与 start 内部不一致导致每杆重显。
+    if (!Settings.hasSeenGuide() || forceTutorial) {
       Tutorial.start(forceTutorial)
     }
   }
@@ -118,6 +122,8 @@ export class Aim extends ControllerBase {
 
   playShot() {
     this.container.inputQueue.length = 0
+    // 出杆瞬间立刻收起全部辅助线，不等下一帧
+    this.container.table.cue.hideTargetLine()
     this.container.table.cue.aimInputs.setDisabled(true)
     // 完成击球 → 结束新手引导
     Tutorial.notifyShot()

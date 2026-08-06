@@ -13,10 +13,6 @@ import {
   PlaneGeometry,
   MeshBasicMaterial,
   ConeGeometry,
-  BufferGeometry,
-  LineBasicMaterial,
-  Line,
-  LineSegments,
 } from "three"
 
 export type CueMeshes = {
@@ -82,26 +78,6 @@ export class CueMesh {
     mesh.renderOrder = -1
     mesh.material.depthTest = false
     return mesh
-  }
-
-  static createTargetLine() {
-    // 被击打球瞄准线：从目标球延伸的虚线
-    const points = [
-      new Vector3(0, 0, 0.002),
-      new Vector3(1, 0, 0.002),
-    ]
-    const geometry = new BufferGeometry().setFromPoints(points)
-    const material = new LineBasicMaterial({
-      color: 0x00ff00,
-      transparent: true,
-      opacity: 0.5,
-      linewidth: 2,
-    })
-    const line = new Line(geometry, material)
-    line.visible = false
-    line.renderOrder = -1
-    line.material.depthTest = false
-    return line
   }
 
   static createPlacer() {

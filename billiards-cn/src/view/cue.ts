@@ -7,9 +7,9 @@ import { AimInputs } from "./dom/aiminputs"
 import { Ball, State } from "../model/ball"
 import { cueStrike } from "../model/physics/physics"
 import { CueMesh } from "./cuemesh"
-import { PocketGeometry } from "./pocketgeometry"
+import { AimLine } from "./aimline"
 import type { View } from "./view"
-import { Mesh, Vector3, Object3D, Line } from "three"
+import { Mesh, Vector3, Object3D } from "three"
 import { maxPower, offCenterLimit, R } from "../model/physics/constants"
 import { cueIntersectsAnything } from "../utils/cueintersect"
 import { id } from "../utils/dom"
@@ -20,7 +20,8 @@ export class Cue {
   tiltMesh: Object3D
   cueBody: Object3D
   helperMesh: Mesh
-  targetLineMesh: Line
+  /** 进球辅助线（两段：实线 + 虚线），纯 3D 场景内渲染 */
+  aimLine: AimLine
   /** 指向 View 的引用（实时换肤等需要访问场景的场合使用） */
   view?: View
   placerMesh: Object3D
@@ -46,8 +47,6 @@ export class Cue {
   private readonly tempVec = new Vector3()
   private readonly tempVec2 = new Vector3()
   private readonly tempVec3 = new Vector3()
-  /** findAimedBall 专用，避免与上面几个临时向量互相覆盖 */
-  private readonly tempVecAim = new Vector3()
   hitAnimationWeight: number = 0
 
   /**
@@ -65,6 +64,26 @@ export class Cue {
   /** 瞬时交互后辅助线保留的时长（毫秒） */
   private static readonly AIM_FLASH_MS = 1200
 
+  /**
+   * 逐帧重绘辅助线需要拿到牌桌，而 update(t) 拿不到，
+   * 这里缓存最近一次 updateTargetLine 传进来的引用。
+   */
+  private lastTable: Table | null = null
+
+  /**
+   * 横向瞄准滑动条的基准角（滑块居中 = 初始正向瞄准方向）。
+   * 进入瞄准状态时由 Aim 控制器写入。
+   */
+  aimBase = 0
+
+  /**
+   * 横向微调滑动条的角度半幅（弧度）。
+   * 滑块拉到两端 = 当前瞄准角 ±2°，仅用于极精细的微调，不再覆盖整圈 ±180°。
+   * 滑块静止时永远居中（基准锁定为当前瞄准角），因此每次拖动的修正量都
+   * 相对「当前方向」的 ±2°，松手即归中。
+   */
+  private static readonly AIM_FINE_HALF_RANGE = (2 * Math.PI) / 180
+
   constructor() {
     if (typeof document !== "undefined") {
       const cue = CueMesh.createCue(
@@ -76,7 +95,7 @@ export class Cue {
       this.tiltMesh = cue.tiltMesh
       this.cueBody = cue.cueBody
       this.helperMesh = CueMesh.createHelper()
-      this.targetLineMesh = CueMesh.createTargetLine()
+      this.aimLine = new AimLine()
       this.placerMesh = CueMesh.createPlacer()
       this.shadowMesh = CueMesh.createShadow(this.length)
     }
@@ -97,8 +116,66 @@ export class Cue {
     if (this.helperMesh) this.helperMesh.rotation.z = this.aim.angle
     if (this.shadowMesh) this.shadowMesh.rotation.z = this.aim.angle
     this.aimInputs.showOverlap()
+    this.aimInputs.updateAimAngleSlider?.()
     this.avoidCueTouchingOtherBall(table)
     this.updateTargetLine(table)
+  }
+
+  /**
+   * 直接把瞄准角设到目标值（横向滑动条用）。
+   * 复用 rotateAim，保证球杆网格、重叠指示、辅助线与限位逻辑全部一致。
+   */
+  setAimAngle(angle: number, table: Table) {
+    this.rotateAim(angle - this.aim.angle, table)
+  }
+
+  /** 记录「初始正向瞄准」基准角，滑块居中即对应该角度 */
+  setAimBase(angle: number) {
+    this.aimBase = angle
+  }
+
+  /** 当前瞄准角相对基准的偏移，规整到 (-π, π]。
+   *  ±π 这一对等价值有歧义：在边界上让符号与滑动条方向保持一致
+   *  （滑块 +1 → +180°，滑块 -1 → -180°），避免「拖到右边却显示 -180°」。 */
+  aimAngleOffset(): number {
+    let d = this.aim.angle - this.aimBase
+    while (d > Math.PI) d -= 2 * Math.PI
+    while (d < -Math.PI) d += 2 * Math.PI
+    // d 现在落在 [-π, π]，但滑动条的方向是「-π ↔ +π」，
+    // 若滑动条希望 +1 对应 +π、-1 对应 -π，这里直接返回即可。
+    return d
+  }
+
+  /**
+   * 滑动条归一化位置 [-1, 1]：
+   * 0 = 当前瞄准方向（滑块静止时永远居中，基准锁定为当前瞄准角），
+   * 两端 = 当前方向 ±AIM_FINE_HALF_RANGE（普通对局 ±2°，仅微调）。
+   * 分析模式则收窄到 aimLimits 给出的窗口。位置与角度线性一一对应。
+   */
+  aimSliderValue(): number {
+    if (this.aimLimits) {
+      const { angleMin, angleMax } = this.aimLimits
+      const half = (angleMax - angleMin) / 2
+      if (half < 1e-6) return 0
+      const mid = (angleMin + angleMax) / 2
+      return Math.max(-1, Math.min(1, (this.aim.angle - mid) / half))
+    }
+    return Math.max(
+      -1,
+      Math.min(1, this.aimAngleOffset() / Cue.AIM_FINE_HALF_RANGE)
+    )
+  }
+
+  /** 滑动条位置 → 目标瞄准角（aimSliderValue 的逆运算，普通对局为微调窗口） */
+  aimAngleFromSlider(value: number): number {
+    const v = Math.max(-1, Math.min(1, value))
+    if (this.aimLimits) {
+      const { angleMin, angleMax } = this.aimLimits
+      const half = (angleMax - angleMin) / 2
+      const mid = (angleMin + angleMax) / 2
+      return mid + v * half
+    }
+    return this.aimBase + v * Cue.AIM_FINE_HALF_RANGE
   }
 
   adjustPower(delta) {
@@ -159,6 +236,8 @@ export class Cue {
     this.aim.offset.copy(roundVec(offset))
     this.avoidCueTouchingOtherBall(table)
     this.updateAimInput()
+    // 高低杆 / 加塞打点变化时同步重绘辅助线
+    this.updateTargetLine(table)
   }
 
   setElevation(value: number) {
@@ -195,6 +274,8 @@ export class Cue {
     this.aimInputs?.updatePowerSlider(this.aim.power / maxPower)
     this.aimInputs?.updateTiltSlider?.(this.aim.elevation)
     this.aimInputs?.showOverlap()
+    // 三处角度输入（滑动条 / 拖拽 / 微调按钮）共用同一份数据，此处统一回灌
+    this.aimInputs?.updateAimAngleSlider?.()
   }
 
   private updateCueRotation() {
@@ -302,7 +383,7 @@ export class Cue {
   update(t) {
     this.t += t
     this.moveTo(this.aim.pos)
-    this.refreshTargetLineVisibility()
+    this.refreshTargetLine()
   }
 
   /** 持续型瞄准交互开始（按住画布拖动、按住滑条） */
@@ -324,7 +405,7 @@ export class Cue {
   hideTargetLine() {
     this.aimHoldCount = 0
     this.aimFlashUntil = 0
-    if (this.targetLineMesh) this.targetLineMesh.visible = false
+    this.aimLine?.hide()
   }
 
   /** 玩家此刻是否正在调整瞄准 */
@@ -333,15 +414,20 @@ export class Cue {
   }
 
   /**
-   * 每帧收敛辅助线可见性。
+   * 每帧刷新辅助线。
    *
-   * updateTargetLine 只负责算几何、在该显示时置 visible=true；
-   * 这里负责「不该显示时收起来」，两者职责分开，避免各处调用点漏判。
+   * 逐帧重算而不是「事件触发时重算」，是因为需求要求转动视角、改打点、
+   * 摆球移动母球时线路都要实时跟上；每帧只涉及十几个球与 6 个袋口的
+   * 向量运算，代价可以忽略，却省掉了到处补调用点的遗漏风险。
    */
-  private refreshTargetLineVisibility() {
-    if (!this.targetLineMesh) return
+  private refreshTargetLine() {
+    if (!this.aimLine) return
     if (!this.isAiming()) {
-      this.targetLineMesh.visible = false
+      this.aimLine.hide()
+      return
+    }
+    if (this.lastTable) {
+      this.updateTargetLine(this.lastTable)
     }
   }
 
@@ -373,115 +459,32 @@ export class Cue {
   }
 
   /**
-   * 找出当前瞄准方向上最先被击中的球。
+   * 进球辅助线（两段式）：
+   *   ① 实线：母球球心 → 目标球碰撞接触点（并在撞击位置画幽灵球圆环）
+   *   ② 虚线：碰撞接触点 → 球袋进球中心点
    *
-   * 不复用 Overlap.getFirst：它的判定阈值是碰撞用的 perpendicular < 2R，
-   * 只有几乎正中球心才成立，稍微偏一点就返回空 —— 表现为「辅助线在
-   * 绝大多数角度下完全不出现」。辅助线是预测性提示，需要更宽的容差，
-   * 因此这里用 2.6R，并且只考虑白球前方（投影距离为正）的在台球。
-   */
-  private findAimedBall(table: Table, dir: Vector3) {
-    const cueball = table.cueball
-    let best: { ball: Ball; distance: number } | null = null
-    for (const ball of table.balls) {
-      if (ball === cueball) continue
-      if (!ball.onTable()) continue
-      // 用独立的临时向量，避免与 updateTargetLine 里的 tempVec 互相踩踏
-      const toBall = this.tempVecAim.copy(ball.pos).sub(cueball.pos)
-      const along = toBall.dot(dir)
-      if (along <= 0) continue // 在身后
-      // 点到射线的垂距
-      const perp = Math.sqrt(Math.max(0, toBall.lengthSq() - along * along))
-      if (perp > 2.6 * R) continue
-      if (!best || along < best.distance) {
-        best = { ball, distance: along }
-      }
-    }
-    return best
-  }
-
-  /**
-   * 被击打球辅助线（items 3 & 7）：
-   * - targetLineLength>0 时显示，在跟随（第一人称）与俯视视角下均可见；
-   * - 辅助线从目标球球心沿「白球→目标球」方向（ghost ball 原理）延伸，
-   *   若该方向与某袋口夹角足够小，则实时指向该袋口。
+   * 具体几何、截断（撞球 / 撞库 / 落袋）与 ribbon 网格构建都在 AimLine 里，
+   * 这里只负责「该不该画」以及把当前瞄准状态喂进去。
    *
-   * 说明：v1.0.6 曾限制「仅第一人称显示」，但游戏默认进入的是俯视视角，
-   * 结果辅助线在任何角度都看不到。俯视恰恰是最需要看进球线路的视角，
-   * 因此改为两种主视角都显示。
-   *
-   * 另：瞄准方向上没有球时不再直接隐藏，而是画出白球自身的行进线。
-   * 九球开局白球距球堆约 1.5m，整个球堆张角仅约 ±2.5°，稍微偏一点
-   * 前方就真的没有球 —— 若此时隐藏，主观感受就是「任何角度都没有辅助线」。
+   * 触发时机：仅在玩家调整瞄准（按住拖动 / 拖滑条 / 点球后的短暂窗口）时显示，
+   * 出杆瞬间由 hideTargetLine() 立刻收起。
    */
   updateTargetLine(table: Table) {
-    if (!this.targetLineMesh) return
-    const len = Settings.get().targetLineLength
-    if (len <= 0) {
-      this.targetLineMesh.visible = false
+    this.lastTable = table
+    if (!this.aimLine) return
+    const settings = Settings.get()
+    // 设置面板总开关，或长度档位拖到 0，都视为关闭本功能
+    if (!settings.aimLine || settings.targetLineLength <= 0) {
+      this.aimLine.hide()
       return
     }
-    // item 1：只有玩家正在调整瞄准时才画，其余时刻一律收起
     if (!this.isAiming()) {
-      this.targetLineMesh.visible = false
+      this.aimLine.hide()
       return
     }
-    const dir = unitAtAngle(this.aim.angle, this.tempVec2)
-    const closest = this.findAimedBall(table, dir)
-    if (!closest) {
-      // 前方无球：画白球自身的行进线，保证任何角度都有视觉反馈
-      const cueStart = table.cueball.pos.clone().addScaledVector(dir, R)
-      const cueEnd = table.cueball.pos
-        .clone()
-        .addScaledVector(dir, R + len * 8 * R)
-      this.targetLineMesh.geometry.setFromPoints([cueStart, cueEnd])
-      this.targetLineMesh.geometry.computeBoundingSphere()
-      this.targetLineMesh.visible = true
-      return
-    }
-
-    // 目标球被击打后的运动方向（ghost ball 原理）：白球球心 → 目标球球心。
-    // 注意：绝对不能用工具函数 norm()，它内部返回的是模块级共享的同一个
-    // Vector3 实例，连续调用会就地覆写先前的结果，导致下面的点乘恒等于 1。
-    const targetDir = this.tempVec
-      .copy(closest.ball.pos)
-      .sub(table.cueball.pos)
-    if (targetDir.lengthSq() < 1e-9) {
-      this.targetLineMesh.visible = false
-      return
-    }
-    targetDir.normalize()
-
-    // 在 6 个袋口中找与目标球运动方向夹角最小的那个
-    const pockets = PocketGeometry.pocketCenters
-    let bestPocket: Vector3 | null = null
-    let bestDot = -1
-    for (const p of pockets) {
-      const toPocket = this.tempVec3.copy(p).sub(closest.ball.pos)
-      if (toPocket.lengthSq() < 1e-9) continue
-      toPocket.normalize()
-      const d = toPocket.dot(targetDir)
-      if (d > bestDot) {
-        bestDot = d
-        bestPocket = p
-      }
-    }
-
-    // 线长度映射：len 1~5 → R*5 ~ R*25
-    const lineLen = len * 5 * R
-    const start = closest.ball.pos.clone().addScaledVector(targetDir, R)
-    let endPoint: Vector3
-    if (bestPocket && bestDot > 0.7) {
-      // 方向大致对准袋口，直接指向袋口中心
-      endPoint = bestPocket.clone()
-      endPoint.z = start.z
-    } else {
-      // 否则沿击球方向延伸固定长度
-      endPoint = closest.ball.pos.clone().addScaledVector(targetDir, R + lineLen)
-    }
-    this.targetLineMesh.geometry.setFromPoints([start, endPoint])
-    this.targetLineMesh.geometry.computeBoundingSphere()
-    this.targetLineMesh.visible = true
+    // 档位 1~5 → 无袋口可指时线条最长 0.4~2.0 米
+    const maxLen = settings.targetLineLength * 0.4
+    this.aimLine.update(table, this.aim.angle, maxLen)
   }
 
   /** 实时更换皮肤（item 1）：重设球杆各段材质颜色，并套用当前球杆主题 */

@@ -7,6 +7,7 @@ import { unitAtAngle } from "../../utils/three-utils"
 import { id } from "../../utils/dom"
 import { TimeoutButton } from "../timeoutbutton"
 import { AngleInput } from "./angleinput"
+import { AimSlider } from "./aimslider"
 import { maxPower } from "../../model/physics/constants"
 
 export class AimInputs {
@@ -20,7 +21,6 @@ export class AimInputs {
   readonly tiltSliderContainerElement
   readonly openElevationElement
   readonly resetSpinElement
-  readonly fineTuneElement
   readonly cueTiltElement: AngleInput
   /** Shared button for both "Hit" and "Place Ball" actions. */
   readonly cueHitElement
@@ -28,6 +28,8 @@ export class AimInputs {
   readonly objectBallOverlap: HTMLElement | null
   readonly container: Container
   readonly overlap: Overlap
+  /** 横向瞄准角度滑动条（悬浮 2D UI） */
+  aimSlider: AimSlider | undefined
 
   ballWidth
   ballHeight
@@ -49,7 +51,6 @@ export class AimInputs {
     this.tiltSliderContainerElement = id("tiltSliderContainer")
     this.openElevationElement = id("openElevation") as HTMLButtonElement
     this.resetSpinElement = id("resetSpin") as HTMLButtonElement
-    this.fineTuneElement = id("fineTune") as HTMLInputElement
     this.cueTiltElement = id("cueTilt") as AngleInput
     this.cueHitElement = id("cueHit") as HTMLButtonElement
     if (this.cueHitElement) {
@@ -75,6 +76,8 @@ export class AimInputs {
     }
     this.updateTiltSlider(this.container.table.cue.aim.elevation)
     this.addListeners()
+    // 必须在 addListeners 之后构造：它内部会读一次当前角度做初始同步
+    this.aimSlider = new AimSlider(this.container)
     this.updateVisualState(0, 0)
     if (Session.isSpectator()) {
       this.setDisabled(true)
@@ -96,10 +99,6 @@ export class AimInputs {
     this.cuePowerElement?.addEventListener("pointerdown", this.beginAim)
     this.cuePowerElement?.addEventListener("pointerup", this.endAim)
     this.cuePowerElement?.addEventListener("input", this.powerChanged)
-    this.fineTuneElement?.addEventListener("pointerdown", this.beginAim)
-    this.fineTuneElement?.addEventListener("pointerup", this.endAim)
-    this.fineTuneElement?.addEventListener("input", this.fineTuneChanged)
-    this.fineTuneElement?.addEventListener("change", this.fineTuneReleased)
     this.cueTiltElement?.addEventListener("input", this.tiltChanged)
     if (!("ontouchstart" in globalThis)) {
       id("viewP1")?.addEventListener("dblclick", this.hit)
@@ -118,6 +117,7 @@ export class AimInputs {
     this.updateTiltElement()
     this.updateCueBall()
     this.updateBallContainer()
+    this.aimSlider?.setDisabled(this.controlsDisabled)
     if (this.objectBallStyle) {
       if (this.controlsDisabled) {
         this.objectBallStyle.visibility = "hidden"
@@ -167,20 +167,6 @@ export class AimInputs {
     if (this.cuePowerElement) {
       this.cuePowerElement.disabled = this.controlsDisabled
       this.cuePowerElement.classList.toggle(
-        "is-disabled",
-        this.controlsDisabled
-      )
-    }
-    const fineTuneContainer = id("fineTuneContainer")
-    if (fineTuneContainer) {
-      fineTuneContainer.classList.toggle(
-        "is-disabled",
-        this.controlsDisabled
-      )
-    }
-    if (this.fineTuneElement) {
-      this.fineTuneElement.disabled = this.controlsDisabled
-      this.fineTuneElement.classList.toggle(
         "is-disabled",
         this.controlsDisabled
       )
@@ -315,6 +301,16 @@ export class AimInputs {
         }
       }
     }
+  }
+
+  /** 角度数据回灌到横向滑动条（Cue 在任何角度变化后调用） */
+  updateAimAngleSlider() {
+    this.aimSlider?.sync()
+  }
+
+  /** 设置面板改了「横向瞄准滑动条」开关后重新应用显隐 */
+  applyAimSliderVisibility() {
+    this.aimSlider?.applyVisibility()
   }
 
   private updatePowerProgress() {
@@ -459,25 +455,6 @@ export class AimInputs {
     if (this.cuePowerPercentElement) {
       this.cuePowerPercentElement.innerText = Math.round(percent) + "%"
     }
-  }
-
-  fineTuneChanged = (e) => {
-    if (this.controlsDisabled) {
-      return
-    }
-    this.flashAim()
-    const val = Number((e.target as HTMLInputElement).value)
-    if (val !== 0) {
-      // 每次拖动产生一个小角度旋转，灵敏度系数
-      const delta = val * 0.002
-      this.container.table.cue.rotateAim(delta, this.container.table)
-      this.container.lastEventTime = performance.now()
-    }
-  }
-
-  fineTuneReleased = (e) => {
-    // 松手后回中
-    ;(e.target as HTMLInputElement).value = "0"
   }
 
   mousewheel = (e) => {

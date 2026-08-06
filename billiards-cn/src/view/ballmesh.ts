@@ -21,6 +21,7 @@ import { Trace } from "./trace"
 import { BallMaterialFactory } from "./ballmaterialfactory"
 import { Session } from "../network/client/session"
 import { BallAppearance } from "./ballappearance"
+import { Settings } from "../utils/settings"
 
 export class BallMesh {
   private static _ballGeometry: IcosahedronGeometry
@@ -155,12 +156,17 @@ export class BallMesh {
     }
     this.mesh = new Mesh(geometry, material)
     this.mesh.name = "ball"
+    // Req 3：球体投射真实阴影（雪景中由户外太阳光投到台呢/雪原）。
+    // 非雪景无 castShadow 灯光，零额外开销。
+    this.mesh.castShadow = true
     this.updateRotation(new Vector3().random(), 100)
 
     this.shadow = new Mesh(
       BallMesh.getShadowGeometry(),
       BallMesh.getShadowMaterial()
     )
+    // 雪景改用真实太阳光阴影，隐藏程序化接触阴影，避免双重阴影
+    this.shadow.visible = Settings.get().scene !== "snow"
     this.spinAxisArrow = new ArrowHelper(up, zero, 2, 0x000000, 0.01, 0.01)
     this.spinAxisArrow.visible = false
     this.trace = new Trace(500, color)

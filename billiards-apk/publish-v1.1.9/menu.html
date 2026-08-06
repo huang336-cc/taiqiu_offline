@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover"
+    />
+    <title>中式台球 · 离线版</title>
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <link rel="stylesheet" href="css/menu-cn.css" />
+  </head>
+  <body>
+    <div class="app">
+      <!-- 主体：玩法选择（已移除顶部标题，所有按钮平铺一屏，无需下翻） -->
+      <main id="screen-home" class="screen active">
+        <section class="section sec-mode">
+          <div class="mode-grid" id="modeGrid">
+            <button class="mode-card" data-rule="nineball" data-tint="#ffb648">
+              <span class="mode-card-band"></span>
+              <img src="assets/nineball.png" alt="" class="mode-icon" />
+              <span class="mode-name">九球</span>
+            </button>
+            <button class="mode-card" data-rule="eightball" data-tint="#3aa3ff">
+              <span class="mode-card-band"></span>
+              <img src="assets/eightball.png" alt="" class="mode-icon" />
+              <span class="mode-name">八球</span>
+            </button>
+            <button class="mode-card" data-rule="snooker" data-tint="#e85a5a">
+              <span class="mode-card-band"></span>
+              <img src="assets/snooker.png" alt="" class="mode-icon" />
+              <span class="mode-name">斯诺克</span>
+            </button>
+            <button class="mode-card" data-rule="threecushion" data-tint="#7e5ad6">
+              <span class="mode-card-band"></span>
+              <img src="assets/threecushion.png" alt="" class="mode-icon" />
+              <span class="mode-name">三库开伦</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="section sec-opponent">
+          <div class="seg" id="opponentSeg" role="tablist">
+            <button class="seg-btn active" data-opponent="solo">
+              <span class="seg-icon">●</span>自己练习
+            </button>
+            <button class="seg-btn" data-opponent="ClawBreak">
+              <span class="seg-icon">●</span>电脑 · 稳健
+            </button>
+            <button class="seg-btn" data-opponent="TheFarJaw">
+              <span class="seg-icon">●</span>电脑 · 激进
+            </button>
+          </div>
+        </section>
+
+        <section class="section sec-custom">
+          <h2 class="section-title">外观定制</h2>
+          <div class="menu-rows menu-tiles" id="customRows">
+            <button class="menu-row" data-target="scene">
+              <span class="menu-thumb skin-swatch" id="thumbScene"></span>
+              <span class="menu-row-text">
+                <span class="menu-row-title">环境场景</span>
+                <span class="menu-row-val" id="valScene">室内</span>
+              </span>
+            </button>
+            <button class="menu-row" data-target="cuetheme">
+              <span class="menu-thumb skin-swatch" id="thumbCue"></span>
+              <span class="menu-row-text">
+                <span class="menu-row-title">球杆主题</span>
+                <span class="menu-row-val" id="valCue">随台面</span>
+              </span>
+            </button>
+            <button class="menu-row" data-target="skin">
+              <span class="menu-thumb skin-swatch" id="thumbSkin"></span>
+              <span class="menu-row-text">
+                <span class="menu-row-title">台球桌颜色</span>
+                <span class="menu-row-val" id="valSkin">经典原木</span>
+              </span>
+            </button>
+          </div>
+        </section>
+
+        <div class="actions">
+          <button class="btn btn-primary btn-start" id="btnStart">
+            <span class="btn-start-icon">▶</span>
+            <span class="btn-start-text">开始游戏</span>
+          </button>
+          <div class="actions-row">
+            <button class="btn btn-ghost" id="btnGuide">操作介绍</button>
+            <button class="btn btn-ghost" id="btnSettings">游戏设置</button>
+          </div>
+        </div>
+      </main>
+
+      <!-- 环境场景二级菜单 -->
+      <section id="screen-scene" class="screen">
+        <h2 class="screen-title">环境场景</h2>
+        <div class="scroll">
+          <p class="seg-hint">点击色块即可实时切换球桌周围的背景与氛围光</p>
+          <div class="skin-cards" id="sceneCards">
+            <button class="skin-card" data-scene="room" data-pattern="room" data-c1="#3a3f4b" data-c2="#2a2e38" disabled>
+              <span class="skin-swatch"></span><span class="skin-name">室内</span><span class="lock-badge">暂不可用</span>
+            </button>
+            <button class="skin-card" data-scene="beach" data-pattern="beach" data-c1="#f4d9a0" data-c2="#e0a85e" disabled>
+              <span class="skin-swatch"></span><span class="skin-name">沙滩</span><span class="lock-badge">暂不可用</span>
+            </button>
+            <button class="skin-card" data-scene="forest" data-pattern="forest" data-c1="#2f5d34" data-c2="#183218" disabled>
+              <span class="skin-swatch"></span><span class="skin-name">原始森林</span><span class="lock-badge">暂不可用</span>
+            </button>
+            <button class="skin-card" data-scene="snow" data-pattern="snow" data-c1="#dbe7f0" data-c2="#a6bace" data-photo="assets/scenes/snow.jpg">
+              <span class="skin-swatch"></span><span class="skin-name">雪山</span>
+            </button>
+            <button class="skin-card" data-scene="football" data-pattern="football" data-c1="#2f7d32" data-c2="#183d1a" data-photo="assets/scenes/football.jpg" disabled>
+              <span class="skin-swatch"></span><span class="skin-name">足球场</span><span class="lock-badge">暂不可用</span>
+            </button>
+            <button class="skin-card" data-scene="basketball" data-pattern="basketball" data-c1="#caa05a" data-c2="#9a6a2a" data-photo="assets/scenes/basketball.jpg" disabled>
+              <span class="skin-swatch"></span><span class="skin-name">篮球场</span><span class="lock-badge">暂不可用</span>
+            </button>
+            <button class="skin-card" data-scene="office" data-pattern="office" data-c1="#c9d2dc" data-c2="#92a0b0" disabled>
+              <span class="skin-swatch"></span><span class="skin-name">办公室</span><span class="lock-badge">暂不可用</span>
+            </button>
+            <button class="skin-card" data-scene="cybercafe" data-pattern="cybercafe" data-c1="#281a4a" data-c2="#0a0618" disabled>
+              <span class="skin-swatch"></span><span class="skin-name">网吧</span><span class="lock-badge">暂不可用</span>
+            </button>
+          </div>
+        </div>
+        <button class="btn btn-primary back-btn" data-back>返回</button>
+      </section>
+
+      <!-- 球杆主题二级菜单 -->
+      <section id="screen-cuetheme" class="screen">
+        <h2 class="screen-title">球杆主题</h2>
+        <div class="scroll">
+          <p class="seg-hint">「随台面」时球杆颜色跟随台球桌颜色；也可单独换成主题贴图</p>
+          <div class="skin-cards" id="cueThemeCards">
+            <button class="skin-card" data-cuetheme="auto" data-pattern="auto" data-c1="#d2b48c" data-c2="#1a1a1a">
+              <span class="skin-swatch"></span><span class="skin-name">随台面</span>
+            </button>
+            <button class="skin-card" data-cuetheme="dragon" data-pattern="dragon" data-c1="#caa23a" data-c2="#3a0d0d">
+              <span class="skin-swatch"></span><span class="skin-name">屠龙斩</span>
+            </button>
+            <button class="skin-card" data-cuetheme="azure" data-pattern="azure" data-c1="#5fd0e0" data-c2="#093b54">
+              <span class="skin-swatch"></span><span class="skin-name">青龙</span>
+            </button>
+            <button class="skin-card" data-cuetheme="minions" data-pattern="minions" data-c1="#f4d000" data-c2="#1f6fb2">
+              <span class="skin-swatch"></span><span class="skin-name">小黄人</span>
+            </button>
+            <button class="skin-card" data-cuetheme="peppa" data-pattern="peppa" data-c1="#ff9ec4" data-c2="#ff6fa8">
+              <span class="skin-swatch"></span><span class="skin-name">小猪佩奇</span>
+            </button>
+            <button class="skin-card" data-cuetheme="qilin" data-pattern="qilin" data-c1="#ffd24a" data-c2="#d8320a">
+              <span class="skin-swatch"></span><span class="skin-name">火麒麟</span>
+            </button>
+          </div>
+        </div>
+        <button class="btn btn-primary back-btn" data-back>返回</button>
+      </section>
+
+      <!-- 台球桌颜色二级菜单 -->
+      <section id="screen-skin" class="screen">
+        <h2 class="screen-title">台球桌颜色</h2>
+        <div class="scroll">
+          <p class="seg-hint">点击色块即可实时更换球台台呢与球杆外观</p>
+          <div class="skin-cards" id="skinCards">
+            <button class="skin-card" data-skin="classic" data-felt="#dac39e">
+              <span class="skin-swatch"></span><span class="skin-name">经典原木</span>
+            </button>
+            <button class="skin-card" data-skin="emerald" data-felt="#2a7a3a">
+              <span class="skin-swatch"></span><span class="skin-name">翡翠绿</span>
+            </button>
+            <button class="skin-card" data-skin="crimson" data-felt="#8a2a2a">
+              <span class="skin-swatch"></span><span class="skin-name">赤焰红</span>
+            </button>
+            <button class="skin-card" data-skin="sapphire" data-felt="#1a3a8a">
+              <span class="skin-swatch"></span><span class="skin-name">蓝宝石</span>
+            </button>
+            <button class="skin-card" data-skin="golden" data-felt="#8a6a2a">
+              <span class="skin-swatch"></span><span class="skin-name">金辉</span>
+            </button>
+          </div>
+        </div>
+        <button class="btn btn-primary back-btn" data-back>返回</button>
+      </section>
+
+      <!-- 操作介绍 -->
+      <section id="screen-guide" class="screen">
+        <h2 class="screen-title">操作介绍</h2>
+        <div class="scroll">
+          <div class="guide-block">
+            <h3>基本操作</h3>
+            <ul class="guide-list">
+              <li><b>旋转视角</b>：在球桌上单指左右拖动</li>
+              <li><b>调整俯仰</b>：单指上下拖动</li>
+              <li><b>缩放画面</b>：双指捏合放大 / 缩小</li>
+              <li><b>击球</b>：点击右下角的「击球」按钮</li>
+              <li><b>力度</b>：拖动力度滑条，百分比实时显示</li>
+            </ul>
+          </div>
+
+          <div class="guide-block">
+            <h3>加塞与杆法</h3>
+            <ul class="guide-list">
+              <li>
+                <b>击球点</b>：在白色母球图示上点选，偏上为高杆（跟进），偏下为低杆（缩杆），左右为左右塞
+              </li>
+              <li>
+                <b>抬杆角度</b>：点击母球图示旁的「+」，可调整球杆抬起角度，用于跳球或加强弧线
+              </li>
+              <li><b>复位</b>：双击母球图示可将击球点恢复到正中心</li>
+            </ul>
+          </div>
+
+          <div class="guide-block">
+            <h3>摆球（自由球）</h3>
+            <ul class="guide-list">
+              <li>对手犯规后你将获得自由球，可拖动母球到任意合法位置</li>
+              <li>确定位置后点击「击球」进入瞄准</li>
+            </ul>
+          </div>
+
+          <div class="guide-block">
+            <h3>视角切换</h3>
+            <ul class="guide-list">
+              <li>
+                点击右下角 🎥 按钮循环切换：跟随视角 → 俯视全局 → 母球视角
+              </li>
+              <li>俯视视角便于观察整体球型和走位路线</li>
+            </ul>
+          </div>
+
+          <div class="guide-block tip">
+            <h3>小技巧</h3>
+            <ul class="guide-list">
+              <li>击球前先切到俯视，规划好下一颗球的走位</li>
+              <li>低杆可让母球回撤，高杆使其跟进，善用可控制走位</li>
+              <li>力度并非越大越好，很多球轻推反而更准</li>
+            </ul>
+          </div>
+        </div>
+        <button class="btn btn-primary back-btn" data-back>返回</button>
+        <button class="btn btn-primary guide-start-btn" id="btnGuideStart" style="display:none">看完，开始游戏</button>
+      </section>
+      <!-- 游戏设置 -->
+      <section id="screen-settings" class="screen">
+        <h2 class="screen-title">游戏设置</h2>
+        <div class="scroll">
+          <div class="setting-group">
+            <h3>画面</h3>
+            <div class="setting-row">
+              <label for="setQuality">画质档位</label>
+              <select id="setQuality" class="select"></select>
+            </div>
+            <p class="setting-hint" id="qualityHint"></p>
+            <div class="setting-row">
+              <span>自动检测推荐画质</span>
+              <button class="btn btn-mini" id="btnAutoQuality">重新检测</button>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <h3>声音</h3>
+            <div class="setting-row">
+              <label for="setSound">音效开关</label>
+              <label class="switch">
+                <input type="checkbox" id="setSound" />
+                <span class="slider-ui"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <label for="setVolume">音量</label>
+              <input
+                type="range"
+                id="setVolume"
+                min="0"
+                max="100"
+                step="5"
+                class="range"
+              />
+              <span class="range-val" id="volumeVal">80%</span>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <h3>操作</h3>
+            <div class="setting-row">
+              <label for="setAim">瞄准辅助线</label>
+              <label class="switch">
+                <input type="checkbox" id="setAim" />
+                <span class="slider-ui"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <label for="setVibrate">震动反馈</label>
+              <label class="switch">
+                <input type="checkbox" id="setVibrate" />
+                <span class="slider-ui"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <label for="setAimLine">进球辅助线</label>
+              <label class="switch">
+                <input type="checkbox" id="setAimLine" />
+                <span class="slider-ui"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <label for="setTLine">辅助线长度</label>
+              <input
+                type="range"
+                id="setTLine"
+                min="0"
+                max="5"
+                step="1"
+                value="3"
+                class="range"
+              />
+              <span class="range-val" id="setTLineVal">中</span>
+            </div>
+            <p class="setting-hint">没有正对袋口时辅助线的延伸长度，拖到最左可关闭。</p>
+            <div class="setting-row">
+              <label for="setAimSlider">横向瞄准滑动条</label>
+              <label class="switch">
+                <input type="checkbox" id="setAimSlider" />
+                <span class="slider-ui"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <label for="setKeepViews">保留三个视角</label>
+              <label class="switch">
+                <input type="checkbox" id="setKeepViews" />
+                <span class="slider-ui"></span>
+              </label>
+            </div>
+            <p class="setting-hint">关闭后，🎥 仅在「跟随 / 俯视」两视角间切换，不再拉远到母球视角。</p>
+          </div>
+
+            <div class="setting-group">
+            <h3>台球桌颜色</h3>
+            <div class="setting-row">
+              <label for="setSkin">台球桌颜色</label>
+              <select id="setSkin">
+                <option value="classic">经典原木</option>
+                <option value="emerald">翡翠绿</option>
+                <option value="crimson">赤焰红</option>
+                <option value="sapphire">蓝宝石</option>
+                <option value="golden">金辉</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <label for="setCueTheme">球杆主题</label>
+              <select id="setCueTheme">
+                <option value="auto">随台面</option>
+                <option value="dragon">屠龙斩</option>
+                <option value="azure">青龙</option>
+                <option value="minions">小黄人</option>
+                <option value="peppa">小猪佩奇</option>
+                <option value="qilin">火麒麟</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <label for="setScene">环境场景</label>
+              <select id="setScene">
+                <option value="room" disabled>室内</option>
+                <option value="beach" disabled>沙滩</option>
+                <option value="forest" disabled>原始森林</option>
+                <option value="snow">雪山</option>
+                <option value="football" disabled>足球场</option>
+                <option value="basketball" disabled>篮球场</option>
+                <option value="office" disabled>办公室</option>
+                <option value="cybercafe" disabled>网吧</option>
+              </select>
+            </div>
+            <p class="about-text dim" style="margin-top:6px">
+              选择后会立即在主菜单高亮，进入对局即生效；对局中经本页或设置页更换也会实时刷新。
+            </p>
+          </div>
+
+          <div class="setting-group">
+            <h3>训练</h3>
+            <div class="setting-row">
+              <label for="setPracticeGuide">练习时显示分步引导</label>
+              <label class="switch">
+                <input type="checkbox" id="setPracticeGuide" />
+                <span class="slider-ui"></span>
+              </label>
+            </div>
+            <p class="about-text dim" style="margin-top:6px">
+              仅在安装后第一次进入对局时自动显示一次分步引导，引导你实做「瞄准→击球」。
+              之后不再自动弹出，可随时点击下方按钮重新观看。
+            </p>
+            <div class="setting-row" style="margin-top:10px">
+              <span>手动重看引导</span>
+              <button class="btn btn-mini" id="btnReplayTutorial">重新打开新手引导</button>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <h3>电脑对战</h3>
+            <div class="setting-row">
+              <label for="setTurnTimer">每回合时间限制</label>
+              <select id="setTurnTimer" class="select-inline">
+                <option value="0">无限制</option>
+                <option value="10">10 秒</option>
+                <option value="20">20 秒</option>
+                <option value="30">30 秒</option>
+              </select>
+            </div>
+            <p class="about-text dim" style="margin-top:6px">
+              仅在「电脑·稳健 / 电脑·激进」模式下生效。超时未击球则本回合判负。
+            </p>
+          </div>
+
+          <div class="setting-group">
+            <h3>关于</h3>
+            <p class="about-text">
+              本游戏为完全离线的单机版本，<b>不需要联网</b>、<b>无任何广告</b>、<b>不收集任何个人信息</b>。
+            </p>
+            <p class="about-text dim">
+              本作品是开源项目
+              <b>tailuge/billiards</b> 的衍生作品，遵循 GPL-3.0 协议。
+              物理引擎实现了真实的球体碰撞、旋转、库边反弹与摩擦模型。
+            </p>
+            <table class="key-table">
+              <tr><td>开发者</td><td>huang336</td></tr>
+              <tr><td>版本</td><td id="versionCell">1.0.17</td></tr>
+              <tr><td>协议</td><td>GNU GPL v3.0</td></tr>
+              <tr>
+                <td>项目源码</td>
+                <td>
+                  <a
+                    class="ext-link"
+                    href="https://github.com/huang336-cc/taiqiu_offline"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >github.com/huang336-cc/taiqiu_offline</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>上游项目</td>
+                <td>
+                  <a
+                    class="ext-link"
+                    href="https://github.com/tailuge/billiards"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >github.com/tailuge/billiards</a
+                  >
+                </td>
+              </tr>
+            </table>
+            <p class="about-text dim" id="versionText"></p>
+            <p class="about-text dim">
+              本游戏<b>不申请任何权限</b>（包括联网权限），因此无法自动检查更新。
+              如需获取最新版本，请自行前往 GitHub 的 Release 页面下载：
+            </p>
+            <div class="link-actions">
+              <button
+                class="btn btn-mini github"
+                id="btnReleases"
+                data-url="https://github.com/huang336-cc/taiqiu_offline/releases"
+              >
+                <svg class="gh-mark" viewBox="0 0 16 16" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
+                  />
+                </svg>
+                查看 GitHub Release 更新
+              </button>
+            </div>
+            <div class="link-actions">
+              <button
+                class="btn btn-mini github"
+                id="btnGithub"
+                data-url="https://github.com/huang336-cc/taiqiu_offline"
+              >
+                <svg class="gh-mark" viewBox="0 0 16 16" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
+                  />
+                </svg>
+                打开 GitHub 项目页
+              </button>
+              <button class="btn btn-mini" id="btnCopyGithub">复制链接</button>
+            </div>
+            <button class="btn btn-mini" id="btnLicense">
+              开源许可与致谢
+            </button>
+            <button class="btn btn-mini danger" id="btnReset">
+              恢复默认设置
+            </button>
+          </div>
+        </div>
+        <button class="btn btn-primary back-btn" data-back>返回</button>
+      </section>
+
+      <!-- 开源许可与致谢 -->
+      <section id="screen-license" class="screen">
+        <h2 class="screen-title">开源许可与致谢</h2>
+        <div class="scroll">
+          <div class="setting-group">
+            <h3>原始项目</h3>
+            <p class="about-text">
+              本作品是开源项目 <b>tailuge/billiards</b> 的衍生作品。
+            </p>
+            <table class="key-table">
+              <tr><td>项目</td><td>tailuge/billiards</td></tr>
+              <tr><td>作者</td><td>tailuge</td></tr>
+              <tr><td>协议</td><td>GNU GPL v3.0</td></tr>
+              <tr><td>基线</td><td>0.3.1</td></tr>
+            </table>
+            <p class="about-text dim">
+              物理引擎、渲染管线、规则判定与电脑对手等核心实现均来自该项目，
+              版权归原作者及其贡献者所有。在此致谢。
+            </p>
+            <p class="about-text dim">
+              项目地址：<a
+                class="ext-link"
+                href="https://github.com/tailuge/billiards"
+                target="_blank"
+                rel="noopener noreferrer"
+                >github.com/tailuge/billiards</a
+              >
+            </p>
+            <p class="about-text dim">
+              本衍生版源码：<a
+                class="ext-link"
+                href="https://github.com/huang336-cc/taiqiu_offline"
+                target="_blank"
+                rel="noopener noreferrer"
+                >github.com/huang336-cc/taiqiu_offline</a
+              >
+            </p>
+          </div>
+
+          <div class="setting-group">
+            <h3>修改声明</h3>
+            <table class="key-table">
+              <tr><td>修改者</td><td>huang336</td></tr>
+              <tr><td>衍生版本</td><td>奥特曼的台球 · 离线版</td></tr>
+              <tr><td>修改日期</td><td>2026 年 8 月 3 日</td></tr>
+            </table>
+            <p class="about-text dim">
+              本作品由 huang336 基于 tailuge/billiards 修改而来。
+              主要改动：全中文本地化、移除全部联网功能、新增六档画质系统与移动端适配、
+              新增操作介绍与设置面板、封装为安卓离线应用。
+            </p>
+          </div>
+
+          <div class="setting-group">
+            <h3>协议义务</h3>
+            <p class="about-text dim">
+              本作品整体依据 GPL-3.0 发布。依据协议第 6 条，
+              分发二进制形式时须同时提供对应完整源代码，
+              该源码已随发布页附件一并提供。
+            </p>
+            <p class="about-text dim">
+              你有权自由运行、研究、修改和再分发本作品，
+              但再分发时须遵循同样的 GPL-3.0 条款。
+              协议全文：gnu.org/licenses/gpl-3.0.html
+            </p>
+          </div>
+
+          <div class="setting-group">
+            <h3>第三方组件</h3>
+            <table class="key-table">
+              <tr><td>three.js 0.185.1</td><td>MIT</td></tr>
+              <tr><td>JSONCrush 1.1.8</td><td>MIT</td></tr>
+              <tr><td>interact.js 1.10.28</td><td>MIT</td></tr>
+            </table>
+            <p class="about-text dim">
+              以上组件版权归各自作者所有，依 MIT 协议使用。
+            </p>
+          </div>
+
+          <div class="setting-group">
+            <h3>无担保声明</h3>
+            <p class="about-text dim">
+              本程序不提供任何担保。在适用法律允许的最大范围内，
+              版权持有者以「原样」提供本程序，不作任何明示或默示的担保，
+              使用风险由你自行承担。
+            </p>
+          </div>
+        </div>
+        <button class="btn btn-primary back-btn" data-back="settings">返回</button>
+      </section>
+    </div>
+
+    <script>
+      window.__BILLIARDS_VERSION__ = "1.1.9-26080501";
+    </script>
+    <script src="menu-cn.js"></script>
+  </body>
+</html>

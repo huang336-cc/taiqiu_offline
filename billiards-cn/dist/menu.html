@@ -12,161 +12,175 @@
   </head>
   <body>
     <div class="app">
-      <!-- 顶部标题 -->
-      <header class="hero">
-        <h1 class="hero-title">奥特曼的台球</h1>
-        <p class="hero-sub">真实物理引擎 · 纯离线 · 无广告</p>
-      </header>
-
-      <!-- 主体：玩法选择 -->
+      <!-- 主体：玩法选择（已移除顶部标题，所有按钮平铺一屏，无需下翻） -->
       <main id="screen-home" class="screen active">
-        <div class="scroll home-scroll">
-        <section class="section">
-          <h2 class="section-title">选择玩法</h2>
+        <section class="section sec-mode">
           <div class="mode-grid" id="modeGrid">
-            <button class="mode-card" data-rule="nineball">
+            <button class="mode-card" data-rule="nineball" data-tint="#ffb648">
+              <span class="mode-card-band"></span>
               <img src="assets/nineball.png" alt="" class="mode-icon" />
               <span class="mode-name">九球</span>
-              <span class="mode-desc">按号码顺序击球，先进9号者胜</span>
             </button>
-            <button class="mode-card" data-rule="eightball">
+            <button class="mode-card" data-rule="eightball" data-tint="#3aa3ff">
+              <span class="mode-card-band"></span>
               <img src="assets/eightball.png" alt="" class="mode-icon" />
               <span class="mode-name">八球</span>
-              <span class="mode-desc">清完己方半区，再打黑8获胜</span>
             </button>
-            <button class="mode-card" data-rule="snooker">
+            <button class="mode-card" data-rule="snooker" data-tint="#e85a5a">
+              <span class="mode-card-band"></span>
               <img src="assets/snooker.png" alt="" class="mode-icon" />
               <span class="mode-name">斯诺克</span>
-              <span class="mode-desc">红球彩球交替，比拼总分</span>
             </button>
-            <button class="mode-card" data-rule="threecushion">
+            <button class="mode-card" data-rule="threecushion" data-tint="#7e5ad6">
+              <span class="mode-card-band"></span>
               <img src="assets/threecushion.png" alt="" class="mode-icon" />
               <span class="mode-name">三库开伦</span>
-              <span class="mode-desc">无袋台，碰三库后撞两球得分</span>
             </button>
           </div>
         </section>
 
-        <section class="section">
-          <h2 class="section-title">对手</h2>
+        <section class="section sec-opponent">
           <div class="seg" id="opponentSeg" role="tablist">
             <button class="seg-btn active" data-opponent="solo">
-              自己练习
+              <span class="seg-icon">●</span>自己练习
             </button>
             <button class="seg-btn" data-opponent="ClawBreak">
-              电脑 · 稳健
+              <span class="seg-icon">●</span>电脑 · 稳健
             </button>
             <button class="seg-btn" data-opponent="TheFarJaw">
-              电脑 · 激进
-            </button>
-          </div>
-          <p class="seg-hint" id="opponentHint">
-            自由练习模式，不计胜负，适合熟悉手感与走位。
-          </p>
-        </section>
-
-        <section class="section">
-          <h2 class="section-title">皮肤</h2>
-          <p class="seg-hint">点击色块即可实时更换球杆与球台外观</p>
-          <div class="skin-cards" id="skinCards">
-            <button class="skin-card" data-skin="classic">
-              <span class="skin-swatch" style="background:linear-gradient(135deg,#e3c79a 0%,#6a4a1a 100%)"></span>
-              <span class="skin-name">经典原木</span>
-            </button>
-            <button class="skin-card" data-skin="emerald">
-              <span class="skin-swatch" style="background:linear-gradient(135deg,#4f8f5e 0%,#11401f 100%)"></span>
-              <span class="skin-name">翡翠绿</span>
-            </button>
-            <button class="skin-card" data-skin="crimson">
-              <span class="skin-swatch" style="background:linear-gradient(135deg,#b56a55 0%,#5a1414 100%)"></span>
-              <span class="skin-name">赤焰红</span>
-            </button>
-            <button class="skin-card" data-skin="sapphire">
-              <span class="skin-swatch" style="background:linear-gradient(135deg,#5a78b8 0%,#0a1840 100%)"></span>
-              <span class="skin-name">蓝宝石</span>
-            </button>
-            <button class="skin-card" data-skin="golden">
-              <span class="skin-swatch" style="background:linear-gradient(135deg,#e8c878 0%,#4a2a0a 100%)"></span>
-              <span class="skin-name">金辉</span>
+              <span class="seg-icon">●</span>电脑 · 激进
             </button>
           </div>
         </section>
 
-        <section class="section">
-          <h2 class="section-title">球杆主题</h2>
-          <p class="seg-hint">「随台面」时球杆颜色跟随上方皮肤；也可单独换成主题贴图</p>
-          <div class="skin-cards" id="cueThemeCards">
-            <button class="skin-card" data-cuetheme="auto">
-              <span class="skin-swatch" style="background:linear-gradient(135deg,#d2b48c 0%,#1a1a1a 100%)"></span>
-              <span class="skin-name">随台面</span>
+        <section class="section sec-custom">
+          <h2 class="section-title">外观定制</h2>
+          <div class="menu-rows menu-tiles" id="customRows">
+            <button class="menu-row" data-target="scene">
+              <span class="menu-thumb skin-swatch" id="thumbScene"></span>
+              <span class="menu-row-text">
+                <span class="menu-row-title">环境场景</span>
+                <span class="menu-row-val" id="valScene">室内</span>
+              </span>
             </button>
-            <button class="skin-card" data-cuetheme="dragon">
-              <span class="skin-swatch" style="background:linear-gradient(135deg,#caa23a 0%,#3a0d0d 100%)"></span>
-              <span class="skin-name">屠龙斩</span>
+            <button class="menu-row" data-target="cuetheme">
+              <span class="menu-thumb skin-swatch" id="thumbCue"></span>
+              <span class="menu-row-text">
+                <span class="menu-row-title">球杆主题</span>
+                <span class="menu-row-val" id="valCue">随台面</span>
+              </span>
             </button>
-            <button class="skin-card" data-cuetheme="azure">
-              <span class="skin-swatch" style="background:linear-gradient(135deg,#5fd0e0 0%,#093b54 100%)"></span>
-              <span class="skin-name">青龙</span>
-            </button>
-            <button class="skin-card" data-cuetheme="minions">
-              <span class="skin-swatch" style="background:linear-gradient(135deg,#f4d000 0%,#1f6fb2 100%)"></span>
-              <span class="skin-name">小黄人</span>
-            </button>
-            <button class="skin-card" data-cuetheme="peppa">
-              <span class="skin-swatch" style="background:linear-gradient(135deg,#ff9ec4 0%,#ff6fa8 100%)"></span>
-              <span class="skin-name">小猪佩奇</span>
-            </button>
-            <button class="skin-card" data-cuetheme="qilin">
-              <span class="skin-swatch" style="background:linear-gradient(135deg,#ffd24a 0%,#d8320a 100%)"></span>
-              <span class="skin-name">火麒麟</span>
+            <button class="menu-row" data-target="skin">
+              <span class="menu-thumb skin-swatch" id="thumbSkin"></span>
+              <span class="menu-row-text">
+                <span class="menu-row-title">台球桌颜色</span>
+                <span class="menu-row-val" id="valSkin">经典原木</span>
+              </span>
             </button>
           </div>
         </section>
-
-        <section class="section">
-          <h2 class="section-title">环境场景</h2>
-          <p class="seg-hint">点击色块即可实时切换球桌周围的背景与氛围光</p>
-          <div class="skin-cards" id="sceneCards">
-            <button class="skin-card" data-scene="room">
-              <span class="skin-swatch" style="background:linear-gradient(135deg,#3a3f4b 0%,#2a2e38 100%)"></span>
-              <span class="skin-name">室内</span>
-            </button>
-            <button class="skin-card" data-scene="beach">
-              <span class="skin-swatch" style="background:linear-gradient(135deg,#f4d9a0 0%,#e0a85e 100%)"></span>
-              <span class="skin-name">沙滩</span>
-            </button>
-            <button class="skin-card" data-scene="forest">
-              <span class="skin-swatch" style="background:linear-gradient(135deg,#2f5d34 0%,#183218 100%)"></span>
-              <span class="skin-name">原始森林</span>
-            </button>
-            <button class="skin-card" data-scene="snow">
-              <span class="skin-swatch" style="background:linear-gradient(135deg,#dbe7f0 0%,#a6bace 100%)"></span>
-              <span class="skin-name">雪山</span>
-            </button>
-            <button class="skin-card" data-scene="desert">
-              <span class="skin-swatch" style="background:linear-gradient(135deg,#e8c98a 0%,#c2934f 100%)"></span>
-              <span class="skin-name">沙漠</span>
-            </button>
-            <button class="skin-card" data-scene="office">
-              <span class="skin-swatch" style="background:linear-gradient(135deg,#c9d2dc 0%,#92a0b0 100%)"></span>
-              <span class="skin-name">办公室</span>
-            </button>
-            <button class="skin-card" data-scene="cybercafe">
-              <span class="skin-swatch" style="background:linear-gradient(135deg,#281a4a 0%,#0a0618 100%)"></span>
-              <span class="skin-name">网吧</span>
-            </button>
-          </div>
-        </section>
-        </div>
 
         <div class="actions">
-          <button class="btn btn-primary" id="btnStart">开始游戏</button>
+          <button class="btn btn-primary btn-start" id="btnStart">
+            <span class="btn-start-icon">▶</span>
+            <span class="btn-start-text">开始游戏</span>
+          </button>
           <div class="actions-row">
             <button class="btn btn-ghost" id="btnGuide">操作介绍</button>
             <button class="btn btn-ghost" id="btnSettings">游戏设置</button>
           </div>
         </div>
       </main>
+
+      <!-- 环境场景二级菜单 -->
+      <section id="screen-scene" class="screen">
+        <h2 class="screen-title">环境场景</h2>
+        <div class="scroll">
+          <p class="seg-hint">点击色块即可实时切换球桌周围的背景与氛围光</p>
+          <div class="skin-cards" id="sceneCards">
+            <button class="skin-card" data-scene="room" data-pattern="room" data-c1="#3a3f4b" data-c2="#2a2e38" disabled>
+              <span class="skin-swatch"></span><span class="skin-name">室内</span><span class="lock-badge">暂不可用</span>
+            </button>
+            <button class="skin-card" data-scene="beach" data-pattern="beach" data-c1="#f4d9a0" data-c2="#e0a85e" disabled>
+              <span class="skin-swatch"></span><span class="skin-name">沙滩</span><span class="lock-badge">暂不可用</span>
+            </button>
+            <button class="skin-card" data-scene="forest" data-pattern="forest" data-c1="#2f5d34" data-c2="#183218" disabled>
+              <span class="skin-swatch"></span><span class="skin-name">原始森林</span><span class="lock-badge">暂不可用</span>
+            </button>
+            <button class="skin-card" data-scene="snow" data-pattern="snow" data-c1="#dbe7f0" data-c2="#a6bace" data-photo="assets/scenes/snow.jpg">
+              <span class="skin-swatch"></span><span class="skin-name">雪山</span>
+            </button>
+            <button class="skin-card" data-scene="football" data-pattern="football" data-c1="#2f7d32" data-c2="#183d1a" data-photo="assets/scenes/football.jpg" disabled>
+              <span class="skin-swatch"></span><span class="skin-name">足球场</span><span class="lock-badge">暂不可用</span>
+            </button>
+            <button class="skin-card" data-scene="basketball" data-pattern="basketball" data-c1="#caa05a" data-c2="#9a6a2a" data-photo="assets/scenes/basketball.jpg" disabled>
+              <span class="skin-swatch"></span><span class="skin-name">篮球场</span><span class="lock-badge">暂不可用</span>
+            </button>
+            <button class="skin-card" data-scene="office" data-pattern="office" data-c1="#c9d2dc" data-c2="#92a0b0" disabled>
+              <span class="skin-swatch"></span><span class="skin-name">办公室</span><span class="lock-badge">暂不可用</span>
+            </button>
+            <button class="skin-card" data-scene="cybercafe" data-pattern="cybercafe" data-c1="#281a4a" data-c2="#0a0618" disabled>
+              <span class="skin-swatch"></span><span class="skin-name">网吧</span><span class="lock-badge">暂不可用</span>
+            </button>
+          </div>
+        </div>
+        <button class="btn btn-primary back-btn" data-back>返回</button>
+      </section>
+
+      <!-- 球杆主题二级菜单 -->
+      <section id="screen-cuetheme" class="screen">
+        <h2 class="screen-title">球杆主题</h2>
+        <div class="scroll">
+          <p class="seg-hint">「随台面」时球杆颜色跟随台球桌颜色；也可单独换成主题贴图</p>
+          <div class="skin-cards" id="cueThemeCards">
+            <button class="skin-card" data-cuetheme="auto" data-pattern="auto" data-c1="#d2b48c" data-c2="#1a1a1a">
+              <span class="skin-swatch"></span><span class="skin-name">随台面</span>
+            </button>
+            <button class="skin-card" data-cuetheme="dragon" data-pattern="dragon" data-c1="#caa23a" data-c2="#3a0d0d">
+              <span class="skin-swatch"></span><span class="skin-name">屠龙斩</span>
+            </button>
+            <button class="skin-card" data-cuetheme="azure" data-pattern="azure" data-c1="#5fd0e0" data-c2="#093b54">
+              <span class="skin-swatch"></span><span class="skin-name">青龙</span>
+            </button>
+            <button class="skin-card" data-cuetheme="minions" data-pattern="minions" data-c1="#f4d000" data-c2="#1f6fb2">
+              <span class="skin-swatch"></span><span class="skin-name">小黄人</span>
+            </button>
+            <button class="skin-card" data-cuetheme="peppa" data-pattern="peppa" data-c1="#ff9ec4" data-c2="#ff6fa8">
+              <span class="skin-swatch"></span><span class="skin-name">小猪佩奇</span>
+            </button>
+            <button class="skin-card" data-cuetheme="qilin" data-pattern="qilin" data-c1="#ffd24a" data-c2="#d8320a">
+              <span class="skin-swatch"></span><span class="skin-name">火麒麟</span>
+            </button>
+          </div>
+        </div>
+        <button class="btn btn-primary back-btn" data-back>返回</button>
+      </section>
+
+      <!-- 台球桌颜色二级菜单 -->
+      <section id="screen-skin" class="screen">
+        <h2 class="screen-title">台球桌颜色</h2>
+        <div class="scroll">
+          <p class="seg-hint">点击色块即可实时更换球台台呢与球杆外观</p>
+          <div class="skin-cards" id="skinCards">
+            <button class="skin-card" data-skin="classic" data-felt="#dac39e">
+              <span class="skin-swatch"></span><span class="skin-name">经典原木</span>
+            </button>
+            <button class="skin-card" data-skin="emerald" data-felt="#2a7a3a">
+              <span class="skin-swatch"></span><span class="skin-name">翡翠绿</span>
+            </button>
+            <button class="skin-card" data-skin="crimson" data-felt="#8a2a2a">
+              <span class="skin-swatch"></span><span class="skin-name">赤焰红</span>
+            </button>
+            <button class="skin-card" data-skin="sapphire" data-felt="#1a3a8a">
+              <span class="skin-swatch"></span><span class="skin-name">蓝宝石</span>
+            </button>
+            <button class="skin-card" data-skin="golden" data-felt="#8a6a2a">
+              <span class="skin-swatch"></span><span class="skin-name">金辉</span>
+            </button>
+          </div>
+        </div>
+        <button class="btn btn-primary back-btn" data-back>返回</button>
+      </section>
 
       <!-- 操作介绍 -->
       <section id="screen-guide" class="screen">
@@ -282,12 +296,48 @@
                 <span class="slider-ui"></span>
               </label>
             </div>
+            <div class="setting-row">
+              <label for="setAimLine">进球辅助线</label>
+              <label class="switch">
+                <input type="checkbox" id="setAimLine" />
+                <span class="slider-ui"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <label for="setTLine">辅助线长度</label>
+              <input
+                type="range"
+                id="setTLine"
+                min="0"
+                max="5"
+                step="1"
+                value="3"
+                class="range"
+              />
+              <span class="range-val" id="setTLineVal">中</span>
+            </div>
+            <p class="setting-hint">没有正对袋口时辅助线的延伸长度，拖到最左可关闭。</p>
+            <div class="setting-row">
+              <label for="setAimSlider">横向瞄准滑动条</label>
+              <label class="switch">
+                <input type="checkbox" id="setAimSlider" />
+                <span class="slider-ui"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <label for="setKeepViews">保留三个视角</label>
+              <label class="switch">
+                <input type="checkbox" id="setKeepViews" />
+                <span class="slider-ui"></span>
+              </label>
+            </div>
+            <p class="setting-hint">关闭后，🎥 仅在「跟随 / 俯视」两视角间切换，不再拉远到母球视角。</p>
           </div>
 
             <div class="setting-group">
-            <h3>皮肤</h3>
+            <h3>台球桌颜色</h3>
             <div class="setting-row">
-              <label for="setSkin">球杆/球台皮肤</label>
+              <label for="setSkin">台球桌颜色</label>
               <select id="setSkin">
                 <option value="classic">经典原木</option>
                 <option value="emerald">翡翠绿</option>
@@ -310,13 +360,14 @@
             <div class="setting-row">
               <label for="setScene">环境场景</label>
               <select id="setScene">
-                <option value="room">室内</option>
-                <option value="beach">沙滩</option>
-                <option value="forest">原始森林</option>
+                <option value="room" disabled>室内</option>
+                <option value="beach" disabled>沙滩</option>
+                <option value="forest" disabled>原始森林</option>
                 <option value="snow">雪山</option>
-                <option value="desert">沙漠</option>
-                <option value="office">办公室</option>
-                <option value="cybercafe">网吧</option>
+                <option value="football" disabled>足球场</option>
+                <option value="basketball" disabled>篮球场</option>
+                <option value="office" disabled>办公室</option>
+                <option value="cybercafe" disabled>网吧</option>
               </select>
             </div>
             <p class="about-text dim" style="margin-top:6px">
@@ -371,10 +422,72 @@
             </p>
             <table class="key-table">
               <tr><td>开发者</td><td>huang336</td></tr>
-              <tr><td>版本</td><td id="versionCell">1.0.7</td></tr>
+              <tr><td>版本</td><td id="versionCell">1.0.17</td></tr>
               <tr><td>协议</td><td>GNU GPL v3.0</td></tr>
+              <tr>
+                <td>项目源码</td>
+                <td>
+                  <a
+                    class="ext-link"
+                    href="https://github.com/huang336-cc/taiqiu_offline"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >github.com/huang336-cc/taiqiu_offline</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>上游项目</td>
+                <td>
+                  <a
+                    class="ext-link"
+                    href="https://github.com/tailuge/billiards"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >github.com/tailuge/billiards</a
+                  >
+                </td>
+              </tr>
             </table>
             <p class="about-text dim" id="versionText"></p>
+            <p class="about-text dim">
+              本游戏<b>不申请任何权限</b>（包括联网权限），因此无法自动检查更新。
+              如需获取最新版本，请自行前往 GitHub 的 Release 页面下载：
+            </p>
+            <div class="link-actions">
+              <button
+                class="btn btn-mini github"
+                id="btnReleases"
+                data-url="https://github.com/huang336-cc/taiqiu_offline/releases"
+              >
+                <svg class="gh-mark" viewBox="0 0 16 16" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
+                  />
+                </svg>
+                查看 GitHub Release 更新
+              </button>
+            </div>
+            <div class="link-actions">
+              <button
+                class="btn btn-mini github"
+                id="btnGithub"
+                data-url="https://github.com/huang336-cc/taiqiu_offline"
+              >
+                <svg class="gh-mark" viewBox="0 0 16 16" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
+                  />
+                </svg>
+                打开 GitHub 项目页
+              </button>
+              <button class="btn btn-mini" id="btnCopyGithub">复制链接</button>
+            </div>
+            <button class="btn btn-mini" id="btnChangelog">
+              变更履历
+            </button>
             <button class="btn btn-mini" id="btnLicense">
               开源许可与致谢
             </button>
@@ -406,7 +519,22 @@
               版权归原作者及其贡献者所有。在此致谢。
             </p>
             <p class="about-text dim">
-              项目地址：github.com/tailuge/billiards
+              项目地址：<a
+                class="ext-link"
+                href="https://github.com/tailuge/billiards"
+                target="_blank"
+                rel="noopener noreferrer"
+                >github.com/tailuge/billiards</a
+              >
+            </p>
+            <p class="about-text dim">
+              本衍生版源码：<a
+                class="ext-link"
+                href="https://github.com/huang336-cc/taiqiu_offline"
+                target="_blank"
+                rel="noopener noreferrer"
+                >github.com/huang336-cc/taiqiu_offline</a
+              >
             </p>
           </div>
 
@@ -461,10 +589,197 @@
         </div>
         <button class="btn btn-primary back-btn" data-back="settings">返回</button>
       </section>
+
+      <!-- 变更履历（v1.1.12 加入）：展示本应用自 v1.0.4 以来的全部版本变更 -->
+      <section id="screen-changelog" class="screen">
+        <h2 class="screen-title">变更履历</h2>
+        <div class="scroll">
+          <p class="about-text dim">
+            本应用自 v1.0.4（2026-08-03）起的全部版本变更记录，新版本置顶。详细条目可在每个版本下展开。
+          </p>
+
+          <div class="setting-group">
+            <h3>v1.1.12 · 2026-08-06</h3>
+            <p class="about-text dim"><b>画质锯齿修复 + 关于页增加变更履历按钮。</b></p>
+            <ul class="changelog-list">
+              <li>画质：WebGL <code>DPR</code> 上限按 <code>lod</code> 0~4 调整为 1 / 1.25 / 1.5 / 2 / 2.5，默认档（lod=1）渲染像素从 <code>0.75x</code> 提升到 <code>1.25x</code>，球移动时的边缘锯齿显著缓解。</li>
+              <li>渲染：<code>antialias</code> 阈值从 <code>lod ≥ 4</code> 放宽到 <code>lod ≥ 1</code>，默认档即开启 MSAA，与上调后的 DPR 叠加后画面明显清晰。</li>
+              <li>关于页：新增「变更履历」按钮，进入后可浏览本应用全部版本的变更记录。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.11 · 2026-08-06</h3>
+            <p class="about-text dim"><b>修复新手引导每次击球都从第一步重新显示。</b></p>
+            <ul class="changelog-list">
+              <li>教程：<code>Tutorial.start(force=true)</code> 在本局内只显示一次（<code>shownThisGame</code> 守护），force 不再等于每杆重显。</li>
+              <li>教程：<code>Aim.ts OnFirst()</code> 改用 <code>Settings.hasSeenGuide()</code> 统一判定，与 <code>Tutorial.start()</code> 内部判断一致。</li>
+              <li>设置：本地存储主 key 写入失败时，新增独立 <code>billiards_cn_seenGuide_v1</code> 兜底 key，避免下次启动再次触发教程。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.10 · 2026-08-06</h3>
+            <p class="about-text dim"><b>折叠屏适配 + 进入游戏短暂黑屏 + 训练引导循环回到第一步 一次性修复。</b></p>
+            <ul class="changelog-list">
+              <li>WebGL：折叠瞬间容器 0×0 不再永久放弃，改用 <code>requestAnimationFrame</code> 惰性重试；尺寸恢复后由 <code>View.ensureRendererAndRender()</code> 主动重建 renderer。</li>
+              <li>设置：foldable / 横竖屏切换时主动触发一次渲染器重建，避免短暂黑屏。</li>
+              <li>设置页：关键交互按 <code>max-width:720px</code> 居中；横屏加底部安全区，避免被导航条遮挡。</li>
+              <li>渲染：默认 LOD 按档位限制 <code>DPR</code> 上限、阴影贴图缩到 1024²，减少中低端 GPU 上下文丢失（黑屏）。</li>
+              <li>UI：进入游戏前显示加载浮层（Spinner），资产加载完成才淡出。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.9 · 2026-08-06</h3>
+            <p class="about-text dim"><b>新增雪山户外场景。</b></p>
+            <ul class="changelog-list">
+              <li>场景：雪山用真正搭建的几何 3D 环境（蓝天穹顶 + 远景雪山 + 地面雪原），配套太阳光、半球光、雾、大气透视与 ACES 色调映射防过曝。</li>
+              <li>雪景：阴影由程序化接触阴影改为真实太阳光阴影。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.8 · 2026-08-06</h3>
+            <p class="about-text dim"><b>练习模式单独入口与训练引导闭环。</b></p>
+            <ul class="changelog-list">
+              <li>模式：练习模式单独入口，强制显示新手引导（首次进入 + 手动重放）。</li>
+              <li>设置：新增 <code>practiceGuide</code> 选项控制是否在练习模式显示引导。</li>
+              <li>教程：菜单在开启 <code>practiceGuide</code> 或首次进入时给跳转 URL 加 <code>?tutorial=1</code>。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.7 · 2026-08-05</h3>
+            <p class="about-text dim"><b>球杆主题系统。</b></p>
+            <ul class="changelog-list">
+              <li>设置：球杆主题切换独立于台球桌颜色，可选多套（含自定义）。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.6 · 2026-08-05</h3>
+            <p class="about-text dim"><b>雪景过曝 / 阴影 / 雾微调。</b></p>
+            <ul class="changelog-list">
+              <li>雪景：太阳光强度由 2.4 降到 1.8；ACES 色调映射曝光 0.95；阴影锥缩到 ±4 仅覆盖台呢；雾起点推远避免近景雾糊。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.5 · 2026-08-05</h3>
+            <p class="about-text dim"><b>环境场景实时切换。</b></p>
+            <ul class="changelog-list">
+              <li>设置：环境场景（室内 / 足球场 / 篮球场 / 雪山）切换不重启游戏，立即生效。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.4 · 2026-08-05</h3>
+            <p class="about-text dim"><b>台球桌颜色卡片化与实时换肤。</b></p>
+            <ul class="changelog-list">
+              <li>设置：台球桌颜色用色块卡片显示，点击即时切换，无需重启。</li>
+              <li>修复：换肤时缓存的 <code>Settings.get().skin</code> 不再导致桌台着色与所选不一致。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.3 · 2026-08-05</h3>
+            <p class="about-text dim"><b>中文全量本地化与设置面板。</b></p>
+            <ul class="changelog-list">
+              <li>UI：菜单、设置、规则、教程、错误提示等全部中文。</li>
+              <li>设置：图形 / 音效 / 规则 / LOD 等多档设置。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.2 · 2026-08-05</h3>
+            <p class="about-text dim"><b>触屏瞄准交互优化。</b></p>
+            <ul class="changelog-list">
+              <li>操作：触屏长按进入瞄准态，可拖动球杆方向。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.1 · 2026-08-05</h3>
+            <p class="about-text dim"><b>桌面浏览器适配。</b></p>
+            <ul class="changelog-list">
+              <li>UI：横屏布局自适应 1280×720 与更高分辨率。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.0 · 2026-08-05</h3>
+            <p class="about-text dim"><b>Web 打包 + APK 离线封装。</b></p>
+            <ul class="changelog-list">
+              <li>构建：webpack 5 + TypeScript 编译，<code>dist/</code> 由 APK 打包。</li>
+              <li>APK：aapt2 / d8 / zipalign / apksigner 离线构建，零权限声明。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.0.21 · 2026-08-05</h3>
+            <p class="about-text dim"><b>电脑对手 AI 升级。</b></p>
+            <ul class="changelog-list">
+              <li>AI：稳健 / 激进 两种策略，保留本地决策无联网。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.0.20 · 2026-08-05</h3>
+            <p class="about-text dim"><b>斯诺克规则完整化。</b></p>
+            <ul class="changelog-list">
+              <li>规则：斯诺克犯规判罚、自由球、置球点等完整支持。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.0.19 · 2026-08-04</h3>
+            <p class="about-text dim"><b>三库开伦模式。</b></p>
+            <ul class="changelog-list">
+              <li>规则：新增三库开伦（Carom）模式。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.0.18 · 2026-08-04</h3>
+            <p class="about-text dim"><b>九球规则完整化。</b></p>
+            <ul class="changelog-list">
+              <li>规则：九球 push-out / 跳球等扩展规则。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.0.17 · 2026-08-04</h3>
+            <p class="about-text dim"><b>八球规则与训练入口。</b></p>
+            <ul class="changelog-list">
+              <li>规则：八球规则完整支持（含开球与重置）。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.0.8 · 2026-08-04</h3>
+            <p class="about-text dim"><b>三大交互修复（v1.0.7 用户反馈）。</b></p>
+            <ul class="changelog-list">
+              <li>修复：选皮肤进游戏台布不变。</li>
+              <li>修复：被击球辅助线任何角度都不显示。</li>
+              <li>修复：俯视图点击非白球无法自动对准。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.0.4 · 2026-08-03</h3>
+            <p class="about-text dim"><b>离线中文初始版。</b></p>
+            <ul class="changelog-list">
+              <li>基础：基于 tailuge/billiards 改造，中文 UI + 离线化 + Android 封装。</li>
+            </ul>
+          </div>
+        </div>
+        <button class="btn btn-primary back-btn" data-back="settings">返回</button>
+      </section>
     </div>
 
     <script>
-      window.__BILLIARDS_VERSION__ = "1.0.7-26080407";
+      window.__BILLIARDS_VERSION__ = "1.1.12-26080603";
     </script>
     <script src="menu-cn.js"></script>
   </body>

@@ -89,6 +89,9 @@ p {
   -webkit-user-drag: none;
   user-select: none;
   position: relative;
+  /* v1.1.10：折叠屏内屏展开（超宽）时居中限制最大宽度，避免 3D 画布拉伸过宽 */
+  max-width: 720px;
+  margin: 0 auto;
 }
 
 .view3d:focus {
@@ -105,12 +108,14 @@ canvas {
 
 .panel {
   width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
   height: 70px;
   display: flex;
   flex-direction: row;
   align-items: flex-end;
   gap: 0;
-  padding: 0;
+  padding: 0 env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px);
   background: linear-gradient(rgb(0 64 94), #000214);
   border-radius: 0;
   border-top: 1px solid #2d1e16;

@@ -24,11 +24,21 @@ export class Notification {
   overlay: HTMLDivElement | null
   timeoutId: number | null = null
   actionHandlers: NotificationActionHandlers = {}
+  /** 是否允许触碰屏幕关闭（仅对无操作按钮的提示生效） */
+  private touchDismiss = false
+  /** 触碰关闭锁定期截止时间（ms），期间忽略触碰以免把触发提示的那一下也关掉 */
+  private touchLockUntil = 0
 
   constructor() {
     this.overlay = id("notificationOverlay") as HTMLDivElement | null
     this.element = id("notification") as HTMLDivElement
     this.bindActions()
+    // 屏幕触碰即关闭：仅对无操作按钮的提示（如「祝你好运」、犯规）生效。
+    // 带确认/继续/上传等按钮的提示（认输、结算、破纪录）不受影响。
+    const dismiss = this.dismissOnTouch
+    this.overlay?.addEventListener("pointerdown", dismiss)
+    this.element.addEventListener("pointerdown", dismiss)
+    document.addEventListener("pointerdown", dismiss)
   }
 
   private getIcon(data: NotificationData): string {
@@ -53,6 +63,8 @@ export class Notification {
     if (typeof data === "string") {
       content = this.renderStringContent(data)
       typeClass = "type-Info"
+      // 纯文本提示（如「祝你好运」）允许触碰关闭
+      this.touchDismiss = true
     } else {
       const result = this.processData(data)
       content = result.content
@@ -60,6 +72,9 @@ export class Notification {
       if (data.duration !== undefined) {
         duration = data.duration
       }
+      // 带操作按钮 / 上传按钮的提示（认输、结算、破纪录）不要触碰即关，
+      // 否则会挡住用户点击按钮。
+      this.touchDismiss = !this.hasActionButtons(data)
     }
 
     this.display(content, typeClass, duration)
@@ -191,6 +206,8 @@ export class Notification {
     if (this.overlay) {
       this.overlay.style.pointerEvents = "auto"
     }
+    // 锁定一小段时间，避免触发本次提示的那一下触摸被误判为「关闭」
+    this.touchLockUntil = performance.now() + 400
 
     if (this.timeoutId) {
       globalThis.clearTimeout(this.timeoutId)
@@ -270,9 +287,36 @@ export class Notification {
       this.overlay.style.pointerEvents = "none"
     }
     this.actionHandlers = {}
+    this.touchDismiss = false
     if (this.timeoutId) {
       globalThis.clearTimeout(this.timeoutId)
       this.timeoutId = null
+    }
+  }
+
+  /** 提示框当前是否处于显示状态 */
+  private isVisible(): boolean {
+    return this.element?.style.display === "flex"
+  }
+
+  /** 提示是否带可点击的操作 / 上传按钮（这类提示不应触碰即关） */
+  private hasActionButtons(data: NotificationData): boolean {
+    if (data.highBreaks && data.highBreaks.length > 0) return true
+    if (data.extra && data.extra.includes("data-notification-action")) {
+      return true
+    }
+    return false
+  }
+
+  /**
+   * 触碰屏幕任意位置（遮罩 / 提示框本身 / 文档）即关闭提示。
+   * 仅当 touchDismiss 为真且已过锁定期，且提示当前可见时生效。
+   */
+  private dismissOnTouch = () => {
+    if (!this.touchDismiss) return
+    if (performance.now() < this.touchLockUntil) return
+    if (this.isVisible()) {
+      this.clear()
     }
   }
 }

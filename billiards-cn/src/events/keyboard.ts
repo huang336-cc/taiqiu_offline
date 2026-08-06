@@ -55,8 +55,13 @@ export class Keyboard {
   private addHandlers(element: HTMLCanvasElement) {
     element.addEventListener("dragstart", (e) => e.preventDefault())
 
+    // 悬浮 2D 控件（横向瞄准滑动条）位于 #viewP1 之内，
+    // 若不排除，在其上拖动会同时触发画布拖动瞄准，角度被叠加两次。
+    const ignoreFrom = ".aim-angle-bar, #helpOverlay"
+
     interact(element).draggable({
       mouseButtons: 1,
+      ignoreFrom,
       listeners: {
         start: () => {
           this.onDragStart?.()
@@ -70,6 +75,7 @@ export class Keyboard {
       },
     })
     interact(element).gesturable({
+      ignoreFrom,
       onstart: () => {
         this.onDragStart?.()
       },

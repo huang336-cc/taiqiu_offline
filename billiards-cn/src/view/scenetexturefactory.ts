@@ -68,16 +68,42 @@ function build(sceneId: string): CanvasTexture {
         ctx.fill()
       }
       break
-    case "desert":
-      // 沙丘弧线
-      ctx.globalAlpha = 0.15
-      ctx.strokeStyle = "#5a3c14"
-      ctx.lineWidth = 10
-      for (let i = 0; i < 5; i++) {
-        ctx.beginPath()
-        ctx.arc(W / 2, H + i * 140 - 40, 360, Math.PI, 0)
-        ctx.stroke()
+    case "football":
+      // 足球场：草地球场 + 白色场地线 + 中圈
+      ctx.fillStyle = "#1f5a22"
+      for (let y = 0; y < H; y += 34) {
+        ctx.fillRect(0, y, W, 17) // 深浅草条纹
       }
+      ctx.globalAlpha = 0.92
+      ctx.strokeStyle = "#ffffff"
+      ctx.lineWidth = 6
+      // 外框
+      ctx.strokeRect(26, 26, W - 52, H - 52)
+      // 中线
+      ctx.beginPath(); ctx.moveTo(26, H / 2); ctx.lineTo(W - 26, H / 2); ctx.stroke()
+      // 中圈
+      ctx.beginPath(); ctx.arc(W / 2, H / 2, 78, 0, Math.PI * 2); ctx.stroke()
+      ctx.fillStyle = "#ffffff"
+      ctx.beginPath(); ctx.arc(W / 2, H / 2, 9, 0, Math.PI * 2); ctx.fill()
+      ctx.globalAlpha = 1
+      break
+    case "basketball":
+      // 篮球场：木地板 + 球场线 + 三分弧 + 罚球区
+      ctx.globalAlpha = 0.06
+      ctx.strokeStyle = "#3a230c"
+      for (let x = 24; x < W; x += 40) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke()
+      }
+      ctx.globalAlpha = 0.95
+      ctx.strokeStyle = "#fff4e0"
+      ctx.lineWidth = 6
+      ctx.strokeRect(26, 26, W - 52, H - 52)
+      // 罚球区（矩形）
+      ctx.strokeRect(W / 2 - 70, 26, 140, 150)
+      ctx.fillStyle = "#fff4e0"
+      ctx.beginPath(); ctx.arc(W / 2, 176, 9, 0, Math.PI * 2); ctx.fill()
+      // 三分弧（下半场）
+      ctx.beginPath(); ctx.arc(W / 2, 176, 150, 0.18 * Math.PI, 0.82 * Math.PI); ctx.stroke()
       ctx.globalAlpha = 1
       break
     case "office":

@@ -1,9 +1,16 @@
 import {
   Mesh,
+  MeshBasicMaterial,
   TextureLoader,
+  Texture,
+  CanvasTexture,
+  BoxGeometry,
+  SRGBColorSpace,
   RepeatWrapping,
   Float32BufferAttribute,
   BufferGeometry,
+  Group,
+  BackSide,
 } from "three"
 import { RuleFactory } from "../controller/rules/rulefactory"
 import { importGltf } from "../utils/gltf"
@@ -13,6 +20,30 @@ import { TableMesh } from "./tablemesh"
 import { TableGeometry } from "./tablegeometry"
 import { Settings, getSkin, getEnvScene } from "../utils/settings"
 import { getSceneTexture } from "./scenetexturefactory"
+import { buildSceneEnvironment } from "./sceneenvironment"
+
+function hex(n: number): string {
+  return "#" + (n >>> 0).toString(16).padStart(6, "0").slice(-6)
+}
+
+/** 生成一面竖向渐变墙面贴图（顶 wallA → 底 wallB），用于 3D 房间四周。 */
+function makeWallTexture(def: {
+  wallA: number
+  wallB: number
+}): CanvasTexture {
+  const cv = document.createElement("canvas")
+  cv.width = 16
+  cv.height = 256
+  const ctx = cv.getContext("2d")!
+  const g = ctx.createLinearGradient(0, 0, 0, 256)
+  g.addColorStop(0, hex(def.wallA))
+  g.addColorStop(1, hex(def.wallB))
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, 16, 256)
+  const tex = new CanvasTexture(cv)
+  tex.colorSpace = SRGBColorSpace
+  return tex
+}
 
 export class Assets {
   /**
@@ -41,6 +72,20 @@ export class Assets {
   /** 背景未就绪时暂存的场景 id（item 4） */
   pendingScene: string | null = null
 
+  /**
+   * 实景照片缓存（Request D-v2）：命中 photo 的场景加载真实照片，
+   * 贴到 3D 房间（天空盒）的地面，营造「台球桌放在真实场景里」的 3D 效果；
+   * 其余场景地面用程序化贴图。以 scene id 为键缓存，避免重复请求。
+   */
+  private static photoCache = new Map<string, Texture>()
+
+  /**
+   * 当前 3D 场景环境（Request D-v3）：足球场/篮球场/雪山场景的真实几何环境。
+   * 用几何体（不是照片）从零搭建，台球桌坐在真正的地面上，避免"照片贴面"造成的
+   * 透视错乱（用户反馈 v1.0.14 足球场看起来像无限延伸的纯色平面）。
+   */
+  sceneEnv: Group | null = null
+
   sound: Sound
 
   constructor(ruletype) {
@@ -51,12 +96,25 @@ export class Assets {
   loadFromWeb(ready) {
     this.ready = ready
     this.sound = new Sound(true)
-    importGltf("models/background.gltf", (m) => {
-      this.background = m.scene
-      this.applySceneToBackground(this.pendingScene ?? Settings.get().scene)
-      this.pendingScene = null
-      this.done()
-    })
+    // Request D-v2：用代码自建带 6 面分组的 BoxGeometry 房间作环境（原
+    // background.gltf 是普通 BufferGeometry，无材质分组，无法把照片单独贴到
+    // 地面/墙面）。房间尺寸与位姿沿用原立方体（80×40×30，z 偏移 16），
+    // 台球桌置于房间中央，得到「台球桌放在真实场景里的 3D 效果」。
+    const room = new Mesh(
+      new BoxGeometry(1, 1, 1),
+      new MeshBasicMaterial({
+        color: 0x808080,
+        side: BackSide,
+        toneMapped: false,
+        fog: false,
+      })
+    )
+    room.scale.set(80, 40, 30)
+    room.position.set(0, 0, 16)
+    this.background = room
+    this.applySceneToBackground(this.pendingScene ?? Settings.get().scene)
+    this.pendingScene = null
+    this.done()
     importGltf(this.rules.asset, (m) => {
       this.rules.scaleTableModel?.(m.scene)
       // 皮肤着色必须对所有台尺寸生效。
@@ -64,6 +122,13 @@ export class Assets {
       // 从未被应用——这正是「首页换了皮肤，进游戏台布没变」的根因。
       this.customizeTableScene(m.scene)
       this.table = m.scene
+      // Req 3：让台呢/库边等网格可接收户外太阳光阴影（雪景中台呢上自然出现阴影）。
+      // 同时整桌可投影到雪原，形成自然的接地阴影。非雪景无 castShadow 灯光，零额外开销。
+      m.scene.traverse((child: any) => {
+        if (!child.isMesh) return
+        child.receiveShadow = true
+        child.castShadow = true
+      })
       TableMesh.mesh = m.scene.children[0]
       this.done()
     })
@@ -136,11 +201,80 @@ export class Assets {
   }
 
   /**
-   * 应用环境场景（item 4）：把程序化墙面贴图套到背景盒子房间的内壁上。
+   * 取场景实景照片贴图（Request D-v2）：命中 photo 的场景加载真实照片并缓存，
+   * 用于 3D 房间地面的贴图；无照片则返回 null（改用程序化地面贴图）。
+   */
+  static getPhotoTexture(sceneId: string): Texture | null {
+    const def = getEnvScene(sceneId)
+    if (!def.photo) return null
+    const cached = Assets.photoCache.get(sceneId)
+    if (cached) return cached
+    const tex = new TextureLoader().load(
+      def.photo,
+      (t) => {
+        t.colorSpace = SRGBColorSpace
+        t.needsUpdate = true
+      },
+      undefined,
+      () => {
+        /* 照片缺失则回退到程序化贴图，不影响游戏 */
+        Assets.photoCache.delete(sceneId)
+      }
+    )
+    tex.colorSpace = SRGBColorSpace
+    Assets.photoCache.set(sceneId, tex)
+    return tex
+  }
+
+  /**
+   * 应用环境场景（item 4 / Request D-v2）：把 3D 房间（天空盒）内部按 6 面
+   * 分别贴图——地面放实景照片（或程序化贴图），四周墙面用场景色渐变，顶面更暗，
+   * 台球桌置于房间中央，从而得到「台球桌放在真实场景里的 3D 效果」。
    * 背景为异步加载，未就绪时暂存，待加载完成回调里补应用。
    */
   recolorScene(sceneId: string): void {
     this.applySceneToBackground(sceneId)
+  }
+
+  /**
+   * 取场景 3D 环境（Request D-v3）：足球场/篮球场/雪山返回**真正搭建的几何
+   * 环境**（草地+白线+球门 / 木地板+球场线+篮筐 / 雪地+山体），其他场景返回
+   * null（继续走立方体房间路径）。
+   */
+  getSceneEnvironment(sceneId: string): Group | null {
+    // 释放旧环境：仅 dispose 单次引用的材质，跳过被多 mesh 引用的「共享材质」，
+    // 防止误销毁模块级单例（足球/篮球场景里有此情况，会导致场景切换后渲染断裂）。
+    if (this.sceneEnv) {
+      const refCount = new Map<unknown, number>()
+      this.sceneEnv.traverse((o) => {
+        const m = o as Mesh
+        if (m.isMesh && m.material) {
+          const mats = Array.isArray(m.material) ? m.material : [m.material]
+          for (const mm of mats) {
+            refCount.set(mm, (refCount.get(mm) || 0) + 1)
+          }
+        }
+      })
+      this.sceneEnv.traverse((o) => {
+        const m = o as Mesh
+        if (m.isMesh && m.material) {
+          const mats = Array.isArray(m.material) ? m.material : [m.material]
+          for (const mm of mats) {
+            if (
+              refCount.get(mm) === 1 &&
+              mm &&
+              typeof mm.dispose === "function"
+            ) {
+              mm.dispose()
+            }
+          }
+        }
+      })
+      this.sceneEnv = null
+    }
+    const env = buildSceneEnvironment(sceneId)
+    this.sceneEnv = env
+    return env
   }
 
   private applySceneToBackground(sceneId: string): void {
@@ -148,16 +282,47 @@ export class Assets {
       this.pendingScene = sceneId
       return
     }
-    const tex = getSceneTexture(sceneId)
+    const def = getEnvScene(sceneId)
+    const photo = Assets.getPhotoTexture(sceneId)
+
+    // 地面：实景照片（或程序化贴图，其足球/篮球等已带场地线，质感更真）
+    const floorMat = new MeshBasicMaterial({
+      map: photo ?? getSceneTexture(sceneId),
+      side: BackSide,
+      toneMapped: false,
+      fog: false,
+    })
+    // 四周墙面：场景色竖直渐变（不抢戏，让地面照片更突出）
+    const wallMat = new MeshBasicMaterial({
+      map: makeWallTexture(def),
+      side: BackSide,
+      toneMapped: false,
+      fog: false,
+    })
+    // 顶面：更暗的场景色
+    const ceilMat = new MeshBasicMaterial({
+      color: def.wallB,
+      side: BackSide,
+      toneMapped: false,
+      fog: false,
+    })
+
+    // BoxGeometry 的 6 个面材质槽：0:+x 1:-x 2:+y(顶) 3:-y(地) 4:+z 5:-z
+    // 地面(3)与前后墙(4,5)用实景照片（桌面在场景里、身后即真实场景），
+    // 两侧墙(0,1)用场景色渐变，顶面(2)更暗。floorMat 在多个面共享实例。
+    const mats = [wallMat, wallMat, ceilMat, floorMat, floorMat, floorMat]
+
     this.background.traverse((child) => {
       if (!child.isMesh) return
-      const mats = Array.isArray(child.material)
+      // 背景是「盒子房间」，玩家从内部往外看。把每个 mesh 的材质替换为
+      // 一个不受光照、雾效与色调映射影响的 MeshBasicMaterial 数组（6 面），
+      // 保证贴图原色显示，从根本上杜绝「贴图存在但渲染全黑」。
+      const oldMats = Array.isArray(child.material)
         ? child.material
         : [child.material]
-      for (const mat of mats) {
-        mat.map = tex
-        mat.color.setHex(0xffffff)
-        mat.needsUpdate = true
+      child.material = mats
+      for (const om of oldMats) {
+        if (om && typeof om.dispose === "function") om.dispose()
       }
     })
   }

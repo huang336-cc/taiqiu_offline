@@ -25,6 +25,11 @@
   <body>
     <h1 hidden>台球大师 单机离线版</h1>
     <div id="viewP1" class="view3d">
+      <!-- v1.1.10：资源异步加载期间的 Loading 覆盖层，避免几百毫秒黑屏 -->
+      <div class="view3d-loading" id="view3dLoading">
+        <div class="view3d-loading-spinner"></div>
+        <div class="view3d-loading-text">加载中…</div>
+      </div>
       <div id="snookerScoreOverlay">
         <div id="snookerScore" aria-live="polite">
           <div id="breakScore" class="breakScore"></div>
@@ -96,33 +101,53 @@
           </div>
         </div>
       </div>
-      <div id="powerSliderContainer" class="powerSliderContainer">
-        <div class="power-track"></div>
-        <input
-          class="powerSlider"
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          value="0.65"
-          id="cuePower"
-          aria-label="击球力度"
-        />
-        <span id="powerPercent" class="powerPercent">65%</span>
-      </div>
-      <div id="fineTuneContainer" class="fineTuneContainer">
-        <div class="fine-tune-track"></div>
-        <input
-          class="fineTuneSlider"
-          type="range"
-          min="-1"
-          max="1"
-          step="0.01"
-          value="0"
-          id="fineTune"
-          aria-label="微调方向"
-        />
-        <span class="fineTuneLabel">微调</span>
+      <div class="powerAimRow">
+        <div id="powerSliderContainer" class="powerSliderContainer">
+          <div class="power-track"></div>
+          <input
+            class="powerSlider"
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value="0.65"
+            id="cuePower"
+            aria-label="击球力度"
+          />
+          <span id="powerPercent" class="powerPercent">65%</span>
+        </div>
+        <!-- 横向瞄准角度滑动条：贴在力度框旁边，与瞄准方向同步 -->
+        <div id="aimAngleBar" class="aim-angle-bar" hidden>
+          <button
+            type="button"
+            class="aim-nudge"
+            id="aimNudgeL"
+            aria-label="瞄准左微调"
+          >
+            ‹
+          </button>
+          <div class="aim-angle-track">
+            <span class="aim-angle-center"></span>
+            <input
+              type="range"
+              id="aimAngle"
+              class="aim-angle-slider"
+              min="-1"
+              max="1"
+              step="0.0005"
+              value="0"
+              aria-label="横向瞄准角度"
+            />
+          </div>
+          <button
+            type="button"
+            class="aim-nudge"
+            id="aimNudgeR"
+            aria-label="瞄准右微调"
+          >
+            ›
+          </button>
+        </div>
       </div>
       <div class="outerMenu">
         <button

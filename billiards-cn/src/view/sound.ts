@@ -250,10 +250,12 @@ export class Sound {
 
   outcomeToSound(outcome) {
     if (outcome.type === "Pot") {
-      this.vibrate(30)
+      // v1.1.8：进袋震动时长上调，避免部分机型因时长过短而忽略
+      this.vibrate(35)
     }
     if (outcome.type === "Hit") {
-      this.vibrate(12)
+      // v1.1.8：击球撞击震动时长上调，确保可感知
+      this.vibrate(20)
     }
     if (outcome.type === "Collision") {
       this.play(
@@ -302,7 +304,12 @@ export class Sound {
   }
 
   playNotify() {
-    this.play(this.pot, 1)
+    // item 5：单机离线版没有「轮到你出杆」的对局提醒需求。
+    // 原实现在开局摆球完成时以满音量播放 pot.ogg，玩家刚进入游戏、
+    // 一杆未击就会听到一声清脆的撞击声，被误认为击球音效。
+    // 这里改为只给一次极轻的震动反馈，不再发声。
+    // v1.1.8：时长上调到 25ms，避免部分机型忽略。
+    this.vibrate(25)
   }
 
   playSuccess(pitch) {

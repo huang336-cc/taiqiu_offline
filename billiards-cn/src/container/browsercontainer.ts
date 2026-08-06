@@ -219,6 +219,14 @@ export class BrowserContainer {
   }
 
   onAssetsReady() {
+    // v1.1.10：资源就绪，淡出 Loading 覆盖层（消除 GLTF 异步加载期间的黑屏窗口）
+    const loading = document.getElementById("view3dLoading")
+    if (loading) {
+      loading.classList.add("is-hidden")
+      // 淡出动画结束后彻底移除，避免遮挡 pointer events
+      setTimeout(() => loading.remove(), 500)
+    }
+
     const scoreReporter = new ScoreReporter()
 
     if (this.botMode) {

@@ -50,7 +50,8 @@ export class BallMaterialFactory {
       `.replace(
         "#include <color_fragment>",
         `#include <color_fragment>
-        diffuseColor.rgb = textureCube(uCubeMap, normalize(vLocalPos)).rgb;`
+        // GLSL ES 3.00（WebGL2）中 textureCube 已废弃，使用 texture(samplerCube, vec3)
+        diffuseColor.rgb = texture(uCubeMap, normalize(vLocalPos)).rgb;`
       )
     }
 
@@ -141,25 +142,17 @@ export class BallMaterialFactory {
         // Calculate the base UV mapping
         vec2 projUv = vLocalPosition.xz * invScale + 0.5;
 
-        // Capture derivatives BEFORE the flip. 
-        // This prevents the GPU from seeing the 'teleport' at the equator.
-        vec2 dx = dFdx(projUv);
-        vec2 dy = dFdy(projUv);
-
-        // Flip logic for the bottom hemisphere
+        // Flip logic for the bottom hemisphere (避免赤道处的纹理跳变)
         if (vLocalPosition.y < 0.0) {
           projUv.x = 1.0 - projUv.x;
-          // Mirror the derivatives so mipmapping stays consistent
-          dx.x = -dx.x;
-          dy.x = -dy.x;
         }
 
         projUv = clamp(projUv, 0.0, 1.0);
 
-        // Add a negative bias to force a higher-resolution mipmap level
-        // -0.5 to -1.0 usually restores the "crisp" look.
-        vec4 texColor = textureGrad(numberTex, projUv, dx * 0.5, dy * 0.5);
-     
+        // 使用标准 texture() 自动 LOD 采样：避免 textureGrad + 显式导数
+        // 在部分移动 GPU 驱动上行为不稳导致着色器编译/采样异常。
+        vec4 texColor = texture(numberTex, projUv);
+
         diffuseColor.rgb = texColor.rgb;`
       )
     }

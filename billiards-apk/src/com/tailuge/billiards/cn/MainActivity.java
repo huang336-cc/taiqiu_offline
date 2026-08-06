@@ -2,6 +2,7 @@ package com.tailuge.billiards.cn;
 
 import android.app.Activity;
 import android.content.res.AssetManager;
+import android.content.res.Configuration;
 import android.os.Bundle;
 import android.view.View;
 import android.view.Window;
@@ -93,8 +94,20 @@ public class MainActivity extends Activity {
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                // 站内跳转（menu.html -> index.html）放行，站外一律不跳
-                return url != null && !url.startsWith(VHOST);
+                if (url == null) {
+                    return false;
+                }
+                // 站内跳转（menu.html -> index.html）放行
+                if (url.startsWith(VHOST)) {
+                    return false;
+                }
+                // 外链（如"关于"页的 GitHub 项目地址）交给系统浏览器打开。
+                // 应用自身仍然不发起任何网络请求，也不申请 INTERNET 权限，
+                // 离线属性保持不变。
+                if (url.startsWith("http://") || url.startsWith("https://")) {
+                    openExternally(url);
+                }
+                return true;
             }
         });
 
@@ -110,6 +123,20 @@ public class MainActivity extends Activity {
         });
 
         webView.loadUrl(VHOST + "menu.html");
+    }
+
+    /** 用系统默认浏览器打开外部链接；没有可用浏览器时静默忽略 */
+    private void openExternally(String url) {
+        try {
+            android.content.Intent i = new android.content.Intent(
+                android.content.Intent.ACTION_VIEW,
+                android.net.Uri.parse(url)
+            );
+            i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(i);
+        } catch (Throwable t) {
+            android.util.Log.w("BilliardsLink", "无法打开外链: " + url);
+        }
     }
 
     /** 把虚拟域名下的路径映射到 APK 内 assets/dist 下的文件 */
@@ -234,5 +261,25 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         applyImmersive();
+    }
+
+    /**
+     * v1.1.10：折叠屏折叠/展开时系统触发 Configuration 变化。
+     * AndroidManifest 已声明 configChanges，Activity 不重建，WebView 状态保留。
+     * 这里在配置变化时向 WebView 注入一次 resize 事件，让 JS 层主动重建渲染器
+     * 并重新渲染一帧，避免折叠后黑屏。
+     */
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        // 延迟 100ms 注入，等 WebView 完成自身布局尺寸更新
+        webView.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                softEvaluate(
+                    "(function(){try{window.dispatchEvent(new Event('resize'))}catch(e){}})()"
+                );
+            }
+        }, 100);
     }
 }

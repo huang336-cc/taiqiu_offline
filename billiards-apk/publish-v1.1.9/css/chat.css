@@ -1,0 +1,85 @@
+/* Chat Overlay */
+.chatarea {
+  position: absolute;
+  top: 44px;
+  right: 10px;
+  max-width: 280px;
+  max-height: 400px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  padding: 0;
+  z-index: 900;
+  overflow: hidden;
+}
+
+.chatoutput {
+  max-height: 360px;
+  overflow: hidden auto;
+  padding: 2px;
+  font-size: 16px;
+  color: #ccc;
+  text-shadow: 1px 1px 0 black;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.chatoutput a {
+  overflow-wrap: anywhere;
+}
+
+.chatoutput::-webkit-scrollbar {
+  width: 8px;
+}
+
+.chatoutput::-webkit-scrollbar-track {
+  background: #222;
+}
+
+.chatoutput::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 4px;
+}
+
+.chatoutput::-webkit-scrollbar-thumb:hover {
+  background: #777;
+}
+
+#inputTextDiv {
+  position: absolute;
+  top: 76%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  pointer-events: auto;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+}
+
+#inputTextDiv[open] {
+  display: flex;
+}
+
+#inputTextDiv::backdrop {
+  background-color: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(1px);
+}
+
+#inputText {
+  width: 24ch;
+  font-size: 15px;
+  padding: 1px;
+  caret-color: black;
+  color: black;
+  background: white;
+}
+
+#inputTextDiv button {
+  font-size: 15px;
+  padding: 1px;
+  margin-left: 2px;
+}

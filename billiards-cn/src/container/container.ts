@@ -362,37 +362,52 @@ export class Container {
   lastEventTime = performance.now()
 
   animate(timestamp): void {
-    const dt = (timestamp - this.last) / 1000
-    this.advance(dt)
-    this.last = timestamp
-    this.processEvents()
-    const needsRender =
-      timestamp < this.lastEventTime + 60000 ||
-      !this.table.allStationary() ||
-      this.view.sizeChanged()
-    if (needsRender) {
-      this.view.render()
-    }
-    // 电脑对战每回合倒计时（仅 vs 电脑 + 配置了 timer 时生效）
-    if (this.turnTimer.enabled()) {
-      const r = this.turnTimer.tick(dt)
-      if (r.justExpired) {
-        this.notification.show(
-          {
-            type: "Info",
-            title: "本回合超时",
-            subtext: "系统判本局负",
-            duration: 2200,
-          },
-          0,
-          {}
-        )
-        this.eventQueue.push(new ConcedeEvent())
-      }
-    }
+    // 关键：先调度下一帧，再执行业务。否则一旦本帧 render()/物理/相机更新
+    // 抛出未捕获异常，requestAnimationFrame 就不会再被调用，动画循环永久死亡，
+    // 画面冻结为黑屏。先调度可保证任何单帧异常都不会中断渲染循环。
     requestAnimationFrame((t) => {
       this.animate(t)
     })
+
+    try {
+      const dt = (timestamp - this.last) / 1000
+      this.advance(dt)
+      this.last = timestamp
+      this.processEvents()
+      const needsRender =
+        timestamp < this.lastEventTime + 60000 ||
+        !this.table.allStationary() ||
+        this.view.sizeChanged()
+      if (needsRender) {
+        this.view.render()
+      }
+      // 电脑对战每回合倒计时（仅 vs 电脑 + 配置了 timer 时生效）
+      if (this.turnTimer.enabled()) {
+        const r = this.turnTimer.tick(dt)
+        if (r.justExpired) {
+          this.notification.show(
+            {
+              type: "Info",
+              title: "本回合超时",
+              subtext: "系统判本局负",
+              duration: 2200,
+            },
+            0,
+            {}
+          )
+          this.eventQueue.push(new ConcedeEvent())
+        }
+      }
+    } catch (e) {
+      // 单帧异常不应中断循环（否则会表现为「永久黑屏」）。
+      // 把错误信息显示到诊断浮层，便于在真机上定位根因。
+      const msg = e instanceof Error ? e.message : String(e)
+      if (typeof (globalThis as any).reportWebGLError === "function") {
+        ;(globalThis as any).reportWebGLError("帧循环异常: " + msg)
+      } else {
+        console.error("animate loop error:", e)
+      }
+    }
   }
 
   updateLastShot() {

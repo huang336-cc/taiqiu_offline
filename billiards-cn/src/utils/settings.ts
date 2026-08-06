@@ -28,15 +28,23 @@ export interface GameSettings {
   fpsCap: number
   /** 被击打球瞄准线长度（0=关闭，1~5=短到长） */
   targetLineLength: number
+  /** 进球辅助线总开关：实线（母球→碰撞点）+ 虚线（碰撞点→袋口） */
+  aimLine: boolean
+  /** 横向瞄准角度滑动条开关（悬浮 2D UI） */
+  aimSlider: boolean
   /** 皮肤选择 */
   skin: string
   /** 球杆主题（item 2）：auto=随台面，其余为独立主题贴图 */
   cueTheme: string
   /** 环境场景（item 4）：room=室内，其余为新增主题 */
   scene: string
+  /** 是否保留三个视角（跟随 / 俯视 / 母球视角），关闭则仅保留前两个 */
+  keepAllViews: boolean
 }
 
 const STORAGE_KEY = "billiards_cn_settings_v1"
+/** v1.1.10：seenGuide 独立轻量 key，主 key 写入失败时兜底 */
+const SEEN_GUIDE_KEY = "billiards_cn_seenGuide_v1"
 
 const DEFAULTS: GameSettings = {
   lod: 3,
@@ -49,9 +57,14 @@ const DEFAULTS: GameSettings = {
   vsBot: false,
   fpsCap: 0,
   targetLineLength: 3,
+  aimLine: true,
+  aimSlider: true,
   skin: "classic",
   cueTheme: "auto",
-  scene: "room",
+  // v1.1.6：默认且仅启用「雪山」场景（其余场景 UI 禁用，避免黑屏）
+  scene: "snow",
+  // v1.1.8：默认保留三个视角（跟随 / 俯视 / 母球视角）
+  keepAllViews: true,
 }
 
 /** 皮肤列表 */
@@ -207,16 +220,30 @@ export interface EnvSceneDef {
   wallB: number
   amb: number
   ambI: number
-  kind: "room" | "beach" | "forest" | "snow" | "desert" | "office" | "cybercafe"
+  kind:
+    | "room"
+    | "beach"
+    | "forest"
+    | "snow"
+    | "office"
+    | "cybercafe"
+    | "football"
+    | "basketball"
   swatch: string
+  /**
+   * 实景照片背景（Request D）：命中该项时，游戏背景直接用该照片做全屏
+   * 实景，而非程序化纯色贴图。其余场景留空，仍用程序化贴图。
+   */
+  photo?: string
 }
 
 export const ENV_SCENES: EnvSceneDef[] = [
   { id: "room", name: "室内", wallA: 0x3a3f4b, wallB: 0x2a2e38, amb: 0xbfcad6, ambI: 0.55, kind: "room", swatch: "linear-gradient(135deg,#3a3f4b,#2a2e38)" },
   { id: "beach", name: "沙滩", wallA: 0xf4d9a0, wallB: 0xe0a85e, amb: 0xfff0d0, ambI: 0.72, kind: "beach", swatch: "linear-gradient(135deg,#f4d9a0,#e0a85e)" },
   { id: "forest", name: "原始森林", wallA: 0x2f5d34, wallB: 0x183218, amb: 0xcfeccf, ambI: 0.55, kind: "forest", swatch: "linear-gradient(135deg,#2f5d34,#183218)" },
-  { id: "snow", name: "雪山", wallA: 0xdbe7f0, wallB: 0xa6bace, amb: 0xeaf2ff, ambI: 0.82, kind: "snow", swatch: "linear-gradient(135deg,#dbe7f0,#a6bace)" },
-  { id: "desert", name: "沙漠", wallA: 0xe8c98a, wallB: 0xc2934f, amb: 0xffe9c0, ambI: 0.72, kind: "desert", swatch: "linear-gradient(135deg,#e8c98a,#c2934f)" },
+  { id: "snow", name: "雪山", wallA: 0xdbe7f0, wallB: 0xa6bace, amb: 0xeaf2ff, ambI: 0.82, kind: "snow", swatch: "linear-gradient(135deg,#dbe7f0,#a6bace)", photo: "assets/scenes/snow.jpg" },
+  { id: "football", name: "足球场", wallA: 0x2f7d32, wallB: 0x183d1a, amb: 0xdff5e0, ambI: 0.7, kind: "football", swatch: "linear-gradient(135deg,#2f7d32,#183d1a)", photo: "assets/scenes/football.jpg" },
+  { id: "basketball", name: "篮球场", wallA: 0xcaa05a, wallB: 0x9a6a2a, amb: 0xfff0d8, ambI: 0.72, kind: "basketball", swatch: "linear-gradient(135deg,#caa05a,#9a6a2a)", photo: "assets/scenes/basketball.jpg" },
   { id: "office", name: "办公室", wallA: 0xc9d2dc, wallB: 0x92a0b0, amb: 0xeef2f7, ambI: 0.62, kind: "office", swatch: "linear-gradient(135deg,#c9d2dc,#92a0b0)" },
   { id: "cybercafe", name: "网吧", wallA: 0x281a4a, wallB: 0x0a0618, amb: 0x6a3cff, ambI: 0.52, kind: "cybercafe", swatch: "linear-gradient(135deg,#281a4a,#0a0618)" },
 ]
@@ -322,8 +349,74 @@ export class Settings {
         STORAGE_KEY,
         JSON.stringify(Settings.get())
       )
+    } catch (e) {
+      // v1.1.10：不再静默吞错。鸿蒙 WebView 在低内存/折叠恢复时可能抛
+      // QuotaExceededError，静默会导致 seenGuide 等状态只活在内存 cache，
+      // 冷启动后丢失。这里打印警告 + 尝试写独立轻量 key 兜底。
+      console.warn("[Settings] localStorage 写入失败，尝试兜底", e)
+      Settings.fallbackWriteSeenGuide()
+    }
+  }
+
+  /**
+   * v1.1.10：标记新手引导已完成，三通道写入。
+   *
+   * 1. 内存 cache（Settings.cache.seenGuide = true）
+   * 2. 主 localStorage key（billiards_cn_settings_v1）
+   * 3. 独立轻量 key（billiards_cn_seenGuide_v1）—— 主 key 因配额/序列化失败时兜底
+   * 4. globalThis.__billiardsSeenGuide —— 进程内兜底（折叠恢复不重启进程时有效）
+   *
+   * 任意一个通道成功即可，finish() 调用此方法。
+   */
+  static markSeenGuide() {
+    const s = Settings.get()
+    s.seenGuide = true
+    ;(globalThis as any).__billiardsSeenGuide = true
+    // 尝试主 key
+    try {
+      globalThis.localStorage?.setItem(
+        STORAGE_KEY,
+        JSON.stringify(Settings.get())
+      )
+    } catch (e) {
+      console.warn("[Settings] markSeenGuide 主 key 写入失败", e)
+    }
+    // 独立轻量 key（写入失败概率远低于主 key）
+    try {
+      globalThis.localStorage?.setItem(SEEN_GUIDE_KEY, "1")
+    } catch (e) {
+      console.warn("[Settings] markSeenGuide 兜底 key 写入失败", e)
+    }
+  }
+
+  /**
+   * v1.1.10：读取 seenGuide，多通道兜底。
+   * 主 key 的 seenGuide || 独立 key || globalThis 内存标记
+   */
+  static hasSeenGuide(): boolean {
+    if ((globalThis as any).__billiardsSeenGuide === true) return true
+    const s = Settings.get()
+    if (s.seenGuide) return true
+    try {
+      if (globalThis.localStorage?.getItem(SEEN_GUIDE_KEY) === "1") {
+        // 回填 cache，后续读取一致
+        s.seenGuide = true
+        return true
+      }
     } catch {
-      /* 存储不可用时静默忽略 */
+      /* localStorage 不可用时忽略 */
+    }
+    return false
+  }
+
+  /** save() 失败时的兜底：至少把 seenGuide 写到独立 key */
+  private static fallbackWriteSeenGuide() {
+    try {
+      if (Settings.get().seenGuide) {
+        globalThis.localStorage?.setItem(SEEN_GUIDE_KEY, "1")
+      }
+    } catch {
+      /* 彻底不可用时无能为力 */
     }
   }
 
