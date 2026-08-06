@@ -89,9 +89,9 @@ p {
   -webkit-user-drag: none;
   user-select: none;
   position: relative;
-  /* v1.1.10：折叠屏内屏展开（超宽）时居中限制最大宽度，避免 3D 画布拉伸过宽 */
-  max-width: 720px;
-  margin: 0 auto;
+  /* v1.1.14：移除「折叠屏内屏展开 720px 居中限宽」，让 3D 画布铺满全屏
+     （折叠屏展开、宽屏、常规手机都铺满；canvas 尺寸由 view.ts 根据
+     element.offsetWidth/Height 计算并 setSize）。 */
 }
 
 .view3d:focus {
@@ -108,8 +108,6 @@ canvas {
 
 .panel {
   width: 100%;
-  max-width: 720px;
-  margin: 0 auto;
   height: 70px;
   display: flex;
   flex-direction: row;
@@ -121,6 +119,10 @@ canvas {
   border-top: 1px solid #2d1e16;
   box-sizing: border-box;
   position: relative;
+  /* v1.1.14：移除「折叠屏内屏 720px 居中限宽」，让底部面板铺满全宽。
+     控件本身（击球按钮/力度条/瞄准条）仍由 ingame-cn.css 的
+     @media (min-aspect-ratio: 1.1) 限宽 max-width:min(Nvw, NNNpx)，
+     防止超宽屏下控件被拉得过大。 */
 }
 
 .aimControlColumn {

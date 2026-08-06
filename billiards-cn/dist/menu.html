@@ -592,6 +592,18 @@
           </p>
 
           <div class="setting-group">
+            <h3>v1.1.14 · 2026-08-06</h3>
+            <p class="about-text dim"><b>折叠屏 / 宽屏铺满屏幕：移除 v1.1.10 引入的 720px 居中限宽。</b></p>
+            <ul class="changelog-list">
+              <li>3D 视图：<code>.view3d</code> 移除 <code>max-width: 720px; margin: 0 auto;</code>，3D 画布铺满全屏（折叠屏内屏展开、超宽屏、常规手机都铺满，不再出现左右黑边）。</li>
+              <li>底部面板：<code>.panel</code> 同样移除 720px 居中限宽，击球按钮 / 白球控件 / 力度条 / 横向瞄准条 / 菜单按钮铺满全宽。</li>
+              <li>菜单页：<code>.app</code> 容器移除 720px 居中限宽，菜单 / 设置 / 模式选择 / 外观定制屏都铺满全屏。</li>
+              <li>控件保护：<code>ingame-cn.css</code> 中 <code>@media (min-aspect-ratio: 1.1)</code> 下的击球按钮 / 力度条 / 瞄准条 <code>max-width: min(Nvw, NNNpx)</code> 保留，超宽屏下控件仍不会被拉得过大。</li>
+              <li>渲染：<code>view.ts</code> 不变 —— canvas 尺寸仍由 <code>element.offsetWidth/Height</code> 计算并 <code>setSize</code>，<code>ResizeObserver</code> + 折叠/旋转监听器继续驱动尺寸更新与渲染器惰性重建。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
             <h3>v1.1.13 · 2026-08-06</h3>
             <p class="about-text dim"><b>删除「震动反馈」开关设置，恢复零权限。</b></p>
             <ul class="changelog-list">
@@ -783,7 +795,7 @@
     </div>
 
     <script>
-      window.__BILLIARDS_VERSION__ = "1.1.13-26080604";
+      window.__BILLIARDS_VERSION__ = "1.1.14-26080605";
     </script>
     <script src="menu-cn.js"></script>
   </body>

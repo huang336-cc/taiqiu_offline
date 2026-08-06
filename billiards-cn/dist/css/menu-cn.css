@@ -50,13 +50,13 @@ body {
   position: relative;
   height: 100%;
   width: 100%;
-  max-width: 720px;
-  margin: 0 auto;
   display: flex;
   overflow-x: hidden;
   flex-direction: column;
   padding: calc(var(--safe-top) + 8px) calc(var(--safe-right) + 14px)
     calc(var(--safe-bottom) + 8px) calc(var(--safe-left) + 14px);
+  /* v1.1.14：移除「720px 居中限宽」，让菜单页铺满全屏
+     （折叠屏展开、宽屏、常规手机都铺满）。 */
 }
 
 /* ---------- 顶部标题 ---------- */
