@@ -10,6 +10,11 @@ export class Camera {
   static defaultDistance = R * 18
   static defaultFovOffset = 0
 
+  // 横屏横向 FOV 上限（度）。超过该宽高比时收窄纵向 FOV，使横向 FOV 回到此值，
+  // 球台在超宽屏（如 20:9 手机 2400×1080）上铺满宽度，避免两侧深色留白（黑边）。
+  // 约对应 16:9 屏幕在纵向 40° 时的横向 FOV，更宽屏幕的取景与 16:9 一致。
+  static readonly maxHorizontalFovDeg = 60
+
   static configureForRule(ruleType: string) {
     if (ruleType === "threecushion" || ruleType === "sagu") {
       Camera.defaultHeight = R * 23
@@ -48,7 +53,7 @@ export class Camera {
   }
 
   orbitView(_: AimEvent) {
-    this.camera.fov = 45 + this.fovOffset
+    this.camera.fov = this.adaptiveFov(45)
     const orbitR = R * 70
     const orbitH = R * 33
     this.target.set(
@@ -63,11 +68,11 @@ export class Camera {
 
   spectatorView(aim: AimEvent) {
     const h = 25 * R
-    const portrait = this.camera.aspect < 0.8
-    this.camera.fov = (portrait ? 60 : 40) + this.fovOffset
+    const pf = this.camera.aspect < 0.8 ? 3 : 1
+    this.camera.fov = this.adaptiveFov(40)
     if (h < 10 * R) {
       const factor = 100 * (10 * R - h)
-      this.camera.fov -= factor * (portrait ? 3 : 1)
+      this.camera.fov -= factor * pf
     }
     this.target
       .copy(aim.pos)
@@ -99,11 +104,11 @@ export class Camera {
 
   aimView(aim: AimEvent, fraction = 0.08) {
     const h = this.height
-    const portrait = this.camera.aspect < 0.8
-    this.camera.fov = (portrait ? 60 : 40) + this.fovOffset
+    const pf = this.camera.aspect < 0.8 ? 3 : 1
+    this.camera.fov = this.adaptiveFov(40)
     if (h < 10 * R) {
       const factor = 100 * (10 * R - h)
-      this.camera.fov -= factor * (portrait ? 3 : 1)
+      this.camera.fov -= factor * pf
     }
     this.target
       .copy(aim.pos)
@@ -130,6 +135,25 @@ export class Camera {
     this.fovOffset = MathUtils.clamp(this.fovOffset + delta, -30, 60)
   }
 
+  // 依据宽高比自适应纵向 FOV：竖屏（aspect<0.8）保持 60°；横屏在横向 FOV 超过
+  // maxHorizontalFovDeg 时收窄纵向 FOV，使横向 FOV 回到上限，球台在超宽屏铺满宽度。
+  private adaptiveFov(baseLandscapeFov: number): number {
+    const aspect = this.camera.aspect
+    if (aspect < 0.8) {
+      // 竖屏：纵向取较宽值，保持原行为
+      return 60 + this.fovOffset
+    }
+    const baseFov = baseLandscapeFov + this.fovOffset
+    const hRad = 2 * Math.atan(Math.tan((baseFov * Math.PI) / 180 / 2) * aspect)
+    const hDeg = (hRad * 180) / Math.PI
+    if (hDeg <= Camera.maxHorizontalFovDeg) {
+      return baseFov
+    }
+    const targetHRad = (Camera.maxHorizontalFovDeg * Math.PI) / 180
+    const vRad = 2 * Math.atan(Math.tan(targetHRad / 2) / aspect)
+    return (vRad * 180) / Math.PI
+  }
+
   adjustDistance(delta: number) {
     delta = this.distance < 10 * R ? delta / 8 : delta
     this.distance = MathUtils.clamp(this.distance + delta, R * 2, R * 100)
@@ -143,10 +167,9 @@ export class Camera {
   }
 
   private computeStepBackFov(h: number): number {
-    const portrait = this.camera.aspect < 0.8
-    const tempFov = (portrait ? 60 : 40) + this.fovOffset
-    const fov =
-      h < 10 * R ? tempFov - 100 * (10 * R - h) * (portrait ? 3 : 1) : tempFov
+    const pf = this.camera.aspect < 0.8 ? 3 : 1
+    const tempFov = this.adaptiveFov(40)
+    const fov = h < 10 * R ? tempFov - 100 * (10 * R - h) * pf : tempFov
     return fov - 3
   }
 

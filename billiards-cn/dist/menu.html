@@ -592,6 +592,18 @@
           </p>
 
           <div class="setting-group">
+            <h3>v1.1.15 · 2026-08-06</h3>
+            <p class="about-text dim"><b>3D 相机 FOV 随屏幕宽高比自适应，超宽屏（如 20:9 / 2400×1080）球台铺满宽度。</b></p>
+            <ul class="changelog-list">
+              <li>根因：游戏内 3D 场景在横屏时纵向 FOV 固定为 40°，屏幕越宽横向 FOV 越大，球台只占画面中部，两侧露出深绿底（被误认为黑边）。这与 v1.1.14 修复的 CSS 限宽无关。</li>
+              <li><code>src/view/camera.ts</code>：新增 <code>adaptiveFov(base)</code> 方法，按 <code>aspect = width/height</code> 计算纵向 FOV——竖屏（aspect&lt;0.8）保持 60°，横屏在横向 FOV 超过 <code>maxHorizontalFovDeg = 60°</code> 时收窄纵向 FOV 使横向回到该上限。</li>
+              <li>效果：16:9 及更窄屏幕取景基本不变；更宽屏幕（约 18:9 以上）随宽高比增大自动放大球台，直到铺满宽度，消除两侧深色留白。</li>
+              <li>覆盖视角：<code>orbitView / spectatorView / aimView / computeStepBackFov</code> 四处硬编码的 <code>(portrait ? 60 : 40)</code> FOV 全部改为走 <code>adaptiveFov</code>；<code>topView</code> 已由 <code>cameratop.ts</code> 按 aspect 调整机位，本版未改动。</li>
+              <li>可调：若某机型仍偏窄或偏宽，只需改 <code>Camera.maxHorizontalFovDeg</code> 一个常量（值越小越放大、越大越缩小）。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
             <h3>v1.1.14 · 2026-08-06</h3>
             <p class="about-text dim"><b>折叠屏 / 宽屏铺满屏幕：移除 v1.1.10 引入的 720px 居中限宽。</b></p>
             <ul class="changelog-list">
@@ -795,7 +807,7 @@
     </div>
 
     <script>
-      window.__BILLIARDS_VERSION__ = "1.1.14-26080605";
+      window.__BILLIARDS_VERSION__ = "1.1.15-26080606";
     </script>
     <script src="menu-cn.js"></script>
   </body>
