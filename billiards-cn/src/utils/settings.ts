@@ -16,8 +16,6 @@ export interface GameSettings {
   volume: number
   /** 是否显示瞄准辅助线 */
   aimAssist: boolean
-  /** 是否震动反馈 */
-  vibrate: boolean
   /** 是否已看过新手引导 */
   seenGuide: boolean
   /** 上次选择的玩法 */
@@ -51,7 +49,6 @@ const DEFAULTS: GameSettings = {
   sound: true,
   volume: 0.8,
   aimAssist: true,
-  vibrate: true,
   seenGuide: false,
   lastRule: "nineball",
   vsBot: false,

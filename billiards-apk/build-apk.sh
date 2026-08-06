@@ -123,8 +123,13 @@ echo "=== 签名校验 ==="
 apksigner verify --print-certs "$OUT_APK" | head -5
 
 echo
-echo "=== 权限检查（应为空，本应用零权限）==="
-aapt2 dump badging "$OUT_APK" | grep -E "^uses-permission" || echo "  无任何权限声明 ✓"
+echo "=== 权限检查（应为零权限，不声明任何敏感权限）==="
+if aapt2 dump badging "$OUT_APK" | grep -qE "^uses-permission"; then
+  echo "  错误：存在非预期权限声明 ✗"
+  fail=1
+else
+  echo "  零权限 ✓"
+fi
 
 echo
 if [ "$fail" = "0" ]; then

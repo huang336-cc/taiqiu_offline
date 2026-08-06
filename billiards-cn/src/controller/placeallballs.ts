@@ -180,7 +180,6 @@ export class PlaceAllBalls extends ControllerBase {
     this.removeListeners = null
     this.isDragging = false
     this.container.table.cue.aimInputs.setButtonText(T.hitButton)
-    this.container.sound.playNotify()
     this.container.sendEvent(
       new BreakEvent(this.container.table.shortSerialise())
     )

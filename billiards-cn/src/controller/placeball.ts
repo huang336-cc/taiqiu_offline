@@ -100,7 +100,6 @@ export class PlaceBall extends ControllerBase {
     }
     this.container.table.cueball.fround()
     this.container.table.cue.aimInputs.setButtonText(T.hitButton)
-    this.container.sound.playNotify()
     this.container.sendEvent(
       new BreakEvent(this.container.table.shortSerialise())
     )

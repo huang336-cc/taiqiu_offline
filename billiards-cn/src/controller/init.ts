@@ -50,7 +50,6 @@ export class Init extends ControllerBase {
     this.container.sendEvent(new WatchEvent(this.container.table.serialise()))
     if (Session.isPracticeMode() && Session.hasInitParam()) {
       this.container.table.cueball.fround()
-      this.container.sound.playNotify()
       this.container.sendEvent(
         new BreakEvent(this.container.table.shortSerialise())
       )
@@ -90,7 +89,6 @@ export class Init extends ControllerBase {
     }
     if (Session.isPracticeMode() && Session.hasInitParam()) {
       this.container.table.cueball.fround()
-      this.container.sound.playNotify()
       this.container.sendEvent(
         new BreakEvent(this.container.table.shortSerialise())
       )

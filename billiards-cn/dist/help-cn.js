@@ -33,7 +33,6 @@
     sound: true,
     volume: 0.8,
     aimAssist: true,
-    vibrate: true,
     seenGuide: false,
     lastRule: "nineball",
     vsBot: false,
@@ -118,7 +117,6 @@
     $("tline").value = String(st.targetLineLength || 3)
     $("tlinev").textContent = TLINE_LABELS[st.targetLineLength || 3]
     $("keepviews").checked = st.keepAllViews !== false
-    $("vib").checked = !!st.vibrate
   }
   sync()
 
@@ -156,17 +154,5 @@
   $("keepviews").addEventListener("change", function (e) {
     st.keepAllViews = e.target.checked
     save(st)
-  })
-  $("vib").addEventListener("change", function (e) {
-    st.vibrate = e.target.checked
-    save(st)
-    // v1.1.8：开启震动时立即给一次即时反馈，方便确认开关是否生效
-    if (e.target.checked) {
-      try {
-        if (navigator.vibrate) navigator.vibrate(30)
-      } catch (err) {
-        /* 不支持震动的设备忽略 */
-      }
-    }
   })
 })()

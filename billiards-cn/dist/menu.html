@@ -290,13 +290,6 @@
               </label>
             </div>
             <div class="setting-row">
-              <label for="setVibrate">震动反馈</label>
-              <label class="switch">
-                <input type="checkbox" id="setVibrate" />
-                <span class="slider-ui"></span>
-              </label>
-            </div>
-            <div class="setting-row">
               <label for="setAimLine">进球辅助线</label>
               <label class="switch">
                 <input type="checkbox" id="setAimLine" />
@@ -451,7 +444,7 @@
             </table>
             <p class="about-text dim" id="versionText"></p>
             <p class="about-text dim">
-              本游戏<b>不申请任何权限</b>（包括联网权限），因此无法自动检查更新。
+              本游戏<b>不申请任何权限</b>，不申请联网、存储、定位等任何敏感权限，因此无法自动检查更新。
               如需获取最新版本，请自行前往 GitHub 的 Release 页面下载：
             </p>
             <div class="link-actions">
@@ -599,6 +592,17 @@
           </p>
 
           <div class="setting-group">
+            <h3>v1.1.13 · 2026-08-06</h3>
+            <p class="about-text dim"><b>删除「震动反馈」开关设置，恢复零权限。</b></p>
+            <ul class="changelog-list">
+              <li>设置：移除游戏设置页与帮助浮层里的「震动反馈」开关，及其在 localStorage 中的存储项。</li>
+              <li>逻辑：游戏内击球 / 进袋 / 摆球完成的震动反馈一并取消；主菜单按钮的触觉反馈也随开关删除而停用。</li>
+              <li>权限：撤回此前准备新增的 <code>android.permission.VIBRATE</code>，<code>AndroidManifest.xml</code> 恢复到「零权限」状态，不申请联网 / 存储 / 定位 / 震动等任何权限。</li>
+              <li>说明：此前「打开震动后无震动效果」的根因是 WebView 必须在 Manifest 声明 <code>VIBRATE</code> 权限才会驱动马达，而本应用刻意保持零权限；经权衡，选择移除该设置而非新增权限。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
             <h3>v1.1.12 · 2026-08-06</h3>
             <p class="about-text dim"><b>画质锯齿修复 + 关于页增加变更履历按钮。</b></p>
             <ul class="changelog-list">
@@ -712,7 +716,7 @@
             <p class="about-text dim"><b>Web 打包 + APK 离线封装。</b></p>
             <ul class="changelog-list">
               <li>构建：webpack 5 + TypeScript 编译，<code>dist/</code> 由 APK 打包。</li>
-              <li>APK：aapt2 / d8 / zipalign / apksigner 离线构建，零权限声明。</li>
+              <li>APK：aapt2 / d8 / zipalign / apksigner 离线构建，刻意不申请任何权限，保持纯离线单机。</li>
             </ul>
           </div>
 
@@ -779,7 +783,7 @@
     </div>
 
     <script>
-      window.__BILLIARDS_VERSION__ = "1.1.12-26080603";
+      window.__BILLIARDS_VERSION__ = "1.1.13-26080604";
     </script>
     <script src="menu-cn.js"></script>
   </body>

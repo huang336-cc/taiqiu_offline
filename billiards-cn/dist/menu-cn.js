@@ -34,7 +34,6 @@
     sound: true,
     volume: 0.8,
     aimAssist: true,
-    vibrate: true,
     seenGuide: false,
     practiceGuide: false,
     turnTimer: 0,
@@ -287,12 +286,6 @@
       saveSettings(settings)
     })
 
-    $("setVibrate").addEventListener("change", function (e) {
-      settings.vibrate = e.target.checked
-      saveSettings(settings)
-      if (e.target.checked) buzz(20)
-    })
-
     $("setAimLine").addEventListener("change", function (e) {
       settings.aimLine = e.target.checked
       saveSettings(settings)
@@ -357,7 +350,6 @@
     $("setVolume").value = String(Math.round(settings.volume * 100))
     $("volumeVal").textContent = Math.round(settings.volume * 100) + "%"
     $("setAim").checked = !!settings.aimAssist
-    $("setVibrate").checked = !!settings.vibrate
     $("setAimLine").checked = settings.aimLine !== false
     $("setTLine").value = String(settings.targetLineLength || 3)
     $("setTLineVal").textContent = TLINE_LABELS[settings.targetLineLength || 3] || "中"
@@ -372,7 +364,7 @@
 
   function buzz(ms) {
     try {
-      if (settings.vibrate && navigator.vibrate) navigator.vibrate(ms)
+      if (navigator.vibrate) navigator.vibrate(ms)
     } catch (e) {
       /* 部分设备不支持震动 */
     }
