@@ -1,4 +1,4 @@
-# 台球大师 · 离线版 v1.0.0
+# 奥特曼的台球 · 离线版 v1.0.0
 
 基于开源项目 [tailuge/billiards](https://github.com/tailuge/billiards) 改造的中文离线安卓版本。
 
