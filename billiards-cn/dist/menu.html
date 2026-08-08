@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover"
     />
-    <title>中式台球 · 离线版</title>
+    <title>奥特曼的台球 · 离线版</title>
     <link rel="icon" type="image/png" href="favicon.png" />
     <link rel="stylesheet" href="css/menu-cn.css" />
   </head>
@@ -311,13 +311,6 @@
             </div>
             <p class="setting-hint">没有正对袋口时辅助线的延伸长度，拖到最左可关闭。</p>
             <div class="setting-row">
-              <label for="setAimSlider">横向瞄准滑动条</label>
-              <label class="switch">
-                <input type="checkbox" id="setAimSlider" />
-                <span class="slider-ui"></span>
-              </label>
-            </div>
-            <div class="setting-row">
               <label for="setKeepViews">保留三个视角</label>
               <label class="switch">
                 <input type="checkbox" id="setKeepViews" />
@@ -399,7 +392,7 @@
               </select>
             </div>
             <p class="about-text dim" style="margin-top:6px">
-              仅在「电脑·稳健 / 电脑·激进」模式下生效。超时未击球则本回合判负。
+              仅在「电脑 / 电脑·激进」模式下生效。超时未击球则本回合判负。
             </p>
           </div>
 
@@ -592,7 +585,501 @@
           </p>
 
           <div class="setting-group">
-            <h3>v1.1.15 · 2026-08-06</h3>
+            <h3>v1.2.1 · 2026-08-09 05:10:00</h3>
+            <p class="about-text dim"><b>品牌全面改名「奥特曼的台球」+ 变更履历日期补齐时分秒。</b></p>
+            <ul class="changelog-list">
+              <li><b>品牌改名</b>：应用页标题、隐藏 H1、系统分享标题、README 与 GitHub 项目介绍，全部由「台球大师 / 中式台球」统一改为「奥特曼的台球 · 离线版」。安卓启动器显示名此前已是「奥特曼的台球」，本次补齐网页端与文档侧品牌，三端一致。</li>
+              <li><b>变更履历补时分秒</b>：自 v1.0.4 起全部 81 条版本记录的日期由「年-月-日」补充为「年-月-日 时:分:秒」，同日内版本越新时间越晚，履历时间线更精确。</li>
+              <li>版本号由 1.2.0 升到 1.2.1；底部栏木纹金边背景、边框、整体色调、各按钮位置不变。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.0 · 2026-08-09 04:45:45</h3>
+            <p class="about-text dim"><b>底部栏视觉统一里程碑 —— 力度条改为与按钮一致的「木纹金边」风格，并让金色边框上下与按钮对齐。</b></p>
+            <ul class="changelog-list">
+              <li><b>力度条木纹金边（v1.1.60）</b>：④ 力度条外壳由原先的白胶囊改为与 ①②③⑤ 按钮一致的木纹棕渐变（#6b4a22→#4a3014）+ 金边 #c89534 + 圆角 12px + 暖色投影；百分比数字改为奶白 #fff5d8（棕底高对比，与图标同色）。橙红填充 / 浅黄凹陷轨道 / 黑色 8 球滑块等功能性元素全部保留。整条底部栏视觉统一。</li>
+              <li><b>金边上下对齐（v1.1.61）</b>：木纹金边化后力度条仍是 56px 高、在 70px 段内居中，致金边比按钮（填满整段）上下各内缩 ~7px。将力度条高度改为与段高一致（默认段 70px、横屏矮屏段 58px），其 2px 金边与按钮同为 content-box + 居中溢出 2px，金色边框上下边精确重合（PIL 量化两种模式上下边界差均为 0px）。</li>
+              <li><b>相机图标金色根因修复（v1.1.59）</b>：切视角模式时原代码用 emoji 整体覆盖按钮、把奶白 SVG 抹掉，Android WebView 把 emoji 渲染成黄色 → 前几版 CSS 修复全部失效。改为只切 class + 更新 .cam-mode 子元素（ᶻ/ᵀ/""），SVG 始终保留、颜色完全交给 CSS，彻底恢复奶白图标。</li>
+              <li><b>底部栏加载过渡（v1.1.58）</b>：加载阶段隐藏底部栏，3D 资源就绪后与场景一起淡入，消除「带底部栏的中间页 → 跳转游戏界面」的割裂感。</li>
+              <li>版本号由 1.1.x 升到 1.2.0，标记底部栏视觉统一这一阶段性成果。底部栏木纹金边背景、边框、整体色调、各按钮位置不变。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.61 · 2026-08-09 04:33:00</h3>
+            <p class="about-text dim"><b>力度条金色边框的上下边框与其他底部栏按钮对齐 —— v1.1.60 把外壳改成木纹金边后，力度条仍是 56px 高、在 70px 段内上下居中，致金边比按钮（填满 70px 段）的上下金边各内缩 ~7px。</b></p>
+            <ul class="changelog-list">
+              <li><b>问题</b>：<code>.bb-seg-power .powerSliderContainer</code> 高度 56px + <code>align-self:center</code>，在 70px 高的底部栏段内上下各留 ~7px 缝隙；而 ①②③⑤ 按钮用 <code>height:100%</code> 填满整段（content-box + 2px 金边使 border-box=74px，居中后上下各溢出 2px）。二者金色边框的上下边不在同一水平线。</li>
+              <li><b>修复① 默认段</b>：<code>dist/css/bottombar-v2.css</code> 的 <code>.bb-seg-power .powerSliderContainer</code> 高度 56px → <b>70px</b>。content-box + 2px 金边 → border-box=74px，在 70px 段内居中溢出 2px，与按钮（同为 content-box + 2px 边、居中溢出 2px）的金色边框范围完全一致。</li>
+              <li><b>修复② 横屏矮屏段</b>：<code>@media (orientation:landscape) and (max-height:500px)</code> 下 <code>.bb-seg</code> 高为 58px（按钮同步变矮），对应把 <code>.bb-seg-power .powerSliderContainer</code> 高度 48px → <b>58px</b>，保证金色边框在该模式同样上下对齐。</li>
+              <li><b>验证</b>：隔离渲染相机按钮 + 力度条，PIL 量化二者金边像素的 y 范围 —— 默认 70px 段下均为 (20,89)、横屏 58px 段下均为 (20,77)，上下边界差均为 0px，确认完全对齐。</li>
+              <li>外壳木纹棕、金边色 #c89534、百分比奶白、橙红填充/8 球等功能与视觉元素不变。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.60 · 2026-08-09 04:20:15</h3>
+            <p class="about-text dim"><b>力度条外壳改为与底部栏按钮一致的「木纹金边」风格 —— 原先是白胶囊，与底部栏 ①②③⑤ 的木纹金边按钮视觉脱节。</b></p>
+            <ul class="changelog-list">
+              <li><b>问题</b>：v1.1.35 起力度条（④ 段）改为白色胶囊外壳（白→极淡冷灰渐变 + 冷调细边 + 冷蓝投影），而底部栏的 ① 摆球/击球、② 白球击球点、③ 视角、⑤ 细微瞄准 都是木纹棕渐变 + 金边 #c89534 + 圆角 12px 的「木纹金边」按钮。两者风格不一致，整条底部栏观感割裂。</li>
+              <li><b>修复</b>：<code>dist/css/bottombar-v2.css</code> 的 <code>.bb-seg-power .powerSliderContainer</code> 外壳由白胶囊改为木纹金边 —— 背景 <code>linear-gradient(180deg,#6b4a22,#4a3014)</code>、金边 <code>2px solid #c89534</code>、圆角 <code>12px</code>、暖色内高光 + 投影，与 <code>.seg-trigger / #camera</code> 完全相同，整条底部栏视觉统一。</li>
+              <li><b>可读性</b>：外壳变木纹棕后，原深蓝 <code>#1a2547</code> 百分比文字在棕底上对比度过低 → 改用奶白 <code>#fff5d8</code>（与底部栏图标同色），并加 1px 深色文字阴影提升立体感，棕底上高对比清晰可读。</li>
+              <li><b>保留</b>：功能性元素（左侧百分比数值、浅黄凹陷药丸轨道、橙→红渐变填充、黑色 8 球滑块、透明 range 手势接管）全部不变，仅改外壳与文字配色。</li>
+              <li><b>验证</b>：隔离渲染力度条，像素统计确认木纹棕背景（#6b4a22）3071px、金边（#c89534）1118px、奶白百分比（#fff5d8）398px，且橙红填充/浅黄轨道/黑 8 球均正常保留，与相机按钮木纹金边风格一致。</li>
+              <li>底部栏木纹金边背景、边框、整体色调、各按钮位置不变。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.59 · 2026-08-09 04:07:30</h3>
+            <p class="about-text dim"><b>彻底修复「进游戏后视角（相机）图标仍是金色」问题 —— 真根因是切换视角模式时用 emoji 整体覆盖了按钮，把奶白 SVG 抹掉，Android WebView 把 emoji 渲染成黄色。</b></p>
+            <ul class="changelog-list">
+              <li><b>真根因（v1.1.56 / 1.1.57 / 1.1.58 全部失效的原因）</b>：<code>src/view/camera.ts</code> 的 <code>updateCameraButtonClass()</code> 每次切到 aimz / topview 模式会执行 <code>btn.textContent = "🎥ᵀ"</code> 之类，<b>整体替换按钮 innerHTML</b>。这会把精心做好的奶白 SVG 图标整个抹掉，Android WebView 再把 emoji 渲染成系统默认黄/金色，于是用户看到的是金色相机图标 + 上标字母「ᵀ / ᶻ」。前几版的 CSS 修复（写死 #fff5d8、加 !important）全都打在这个「已被 emoji 替换掉、根本不存在」的 SVG 上，自然全部失效。</li>
+              <li><b>v1.1.58 误判纠正</b>：当时用 PIL 采样用户截图相机按钮区得到 (250,241,210)/(253,247,217) 判为奶白，其实 x 坐标算偏，采到的是旁边奶白的「白球按钮」，不是相机按钮。用户视频反馈 + 重新提帧（游戏态出现金色像素均值 ≈ 164,138,77）才暴露真相：相机图标在游戏态确实是金色。</li>
+              <li><b>修复① JS 保留 SVG</b>：<code>src/view/camera.ts</code> 的 <code>updateCameraButtonClass()</code> 不再整体替换 <code>btn.textContent</code>，改为只切 class（aim / aimz / topview）+ 更新子元素 <code>.cam-mode</code> 的 textContent（<code>"ᶻ"</code> / <code>"ᵀ"</code> / <code>""</code>），SVG 图标始终保留，颜色完全交给 CSS。</li>
+              <li><b>修复② HTML 结构</b>：<code>dist/index.html</code> 相机按钮用 <code>.cam-row</code> 包裹 <code>.cam-icon</code> + 新增的 <code>.cam-mode</code> 子元素；原文字标签 <code>.seg-label</code> 加 <code>hidden</code>，让模式字母（ᶻ/ᵀ）紧贴相机图标显示。</li>
+              <li><b>修复③ CSS 强制奶白</b>：<code>dist/css/bottombar-v2.css</code> 新增 <code>#camera .cam-row { display:inline-flex }</code> 与 <code>#camera .cam-mode { color:#fff5d8 !important; ... }</code>，并加 <code>#camera:not(.topview):not(.aimz) .cam-mode { display:none }</code>（aim 默认模式不显示字母）。相机图标与模式字母均为亮奶白，与白球按钮图标色完全一致。</li>
+              <li><b>验证方法</b>：构建后用浏览器加载 <code>index.html</code>，点击相机按钮在三种模式下切换，确认图标始终为奶白 SVG、模式字母 ᶻ/ᵀ 在对应模式出现且同为奶白、aim 模式无多余字母。APK 安装后同样验证（建议先卸载旧版 v1.1.58，避免 WebView 资源缓存粘连导致旧 CSS/JS 残留）。</li>
+              <li>底部栏木纹金边背景、边框、整体色调、视角按钮位置不变。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.58 · 2026-08-09 03:54:45</h3>
+            <p class="about-text dim"><b>点击「开始游戏」后消除「带底部栏的中间页 → 跳转游戏界面」的两个页面错觉 —— 加载阶段隐藏底部栏，3D 场景就绪后底部栏与场景一起淡入。</b></p>
+            <ul class="changelog-list">
+              <li>用户反馈：「点击开始游戏后先是图2页面（带加载中…和底部栏），然后直接跳转到图1的游戏界面」。图2 其实是 <code>index.html</code> 的 <code>.view3d-loading</code> 加载覆盖层（v1.1.10 添加，仅盖 3D 区域、不盖底部栏），不是 bug 页；但底部栏同步渲染使其看起来像「独立的中间页」，观感割裂。</li>
+              <li><b>根因</b>：<code>#viewP1</code>（含 loading 覆盖层）和 <code>#panel</code>（底部栏）是 body 下的并列 DOM，loading 只盖 3D 区域，底部栏独立于 3D 场景同步渲染。点击「开始游戏」后用户先看到「loading 页 + 底部栏」，loading 淡出后才看到「3D 场景 + 底部栏」，两步体验像「两个页面」。</li>
+              <li><b>修复① CSS 隐藏</b>：<code>dist/css/bottombar-v2.css</code> 加 <code>html body:not(.game-ready) #panel { opacity:0; pointer-events:none }</code> + <code>html body.game-ready #panel { opacity:1; transition:opacity 0.4s ease }</code>。body 默认无 <code>.game-ready</code> → #panel 隐藏；3D 资源就绪后由 JS 加 <code>.game-ready</code> → #panel 淡入。</li>
+              <li><b>修复② JS 触发</b>：<code>src/container/browsercontainer.ts</code> 的 <code>onAssetsReady()</code> 开头加 <code>document.body.classList.add("game-ready")</code>，与 <code>.view3d-loading</code> 淡出同步：用户看到「加载中… → 3D 场景 + 底部栏」的一步过渡，不再有「中间页」。</li>
+              <li><b>修复③ 相机图标再加固</b>：虽然 v1.1.57 的修复在两张用户截图（loading 状态 250,241,210 / 游戏状态 253,247,217）的相机按钮采样中已验证为亮奶白（≈ #fff5d8，与白球按钮图标色完全一致），但用户在 v1.1.57 上反馈「视角按钮还是金色」可能是把整个金色木纹按钮背景误判为图标色。本版给 <code>#camera .cam-icon svg rect/circle/path</code> 的 <code>stroke/fill</code> 全部加 <code>!important</code> 作为双保险，确保任何 WebView 都看到 <code>#fff5d8</code> 而非金色。</li>
+              <li><b>验证</b>：用 PIL 像素采样用户实拍图 1（游戏状态）和图 2（加载状态）底部栏的相机按钮区域，结果均为亮奶白（RGB ≈ 250,241,210 与 253,247,217），与白球按钮图标色 #fff5d8 = (255,245,216) 一致（采样平均因含少量按钮木纹背景像素略偏暗）。v1.1.57 的修复实际已生效。</li>
+              <li>底部栏木纹金边背景、边框、整体色调、视角按钮位置不变。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.57 · 2026-08-09 03:42:00</h3>
+            <p class="about-text dim"><b>视角按钮图标颜色彻底根治 —— 显式写死 + cache busting，杜绝 WebView 缓存与 currentColor 继承导致「回到上一版」。</b></p>
+            <ul class="changelog-list">
+              <li>用户反馈：v1.1.56 安装后「点击开始游戏 → 闪烁画面 → 视角按钮又回到上一版的金色效果」。本版根除。</li>
+              <li><b>根因① WebView 缓存旧 CSS</b>：v1.1.56 虽然正确改了下 bottombar-v2.css，但 Android WebView 对本地 assets 资源有磁盘缓存，重装 APK 不一定触发重新下载，导致浏览器仍加载旧 CSS（上一版金色）。<b>本版修</b>：<code>index.html</code> 给 <code>css/bottombar-v2.css</code> 的 link 加 <code>?v=1.1.57</code> query string，强制 WebView 视为新资源重新下载，绕过缓存。</li>
+              <li><b>根因② currentColor 继承解析不稳定</b>：v1.1.56 仅在 <code>#camera .cam-icon</code> 上设 <code>color:#fff5d8</code>，依赖 SVG 的 <code>stroke/fill="currentColor"</code> 沿继承链解析。多个 WebView 下，<code>.menuButton { color: var(--cn-gold) }</code>（ingame-cn.css）仍可能通过某种继承路径影响 SVG 的 currentColor；同时 <code>.seg-icon svg { fill: none }</code> 这条 CSS 把 svg 的 fill 设为 none，因 fill 是继承属性，path 的 <code>fill="currentColor"</code> 被继承的 none 吃掉 → 顶部凸起不可见。<b>本版修</b>：直接给相机 SVG 的 <code>rect</code>/<code>circle</code>/<code>path</code> 写死 <code>stroke:#fff5d8 / fill:#fff5d8</code>（特异性 1,2,1），不再依赖 currentColor，顶部凸起也正常显示。</li>
+              <li>用 Chromium headless 截图实测验证：v1.1.57 的相机图标在标准浏览器下渲染为亮奶白 <code>#fff5d8</code>，与白球操作按钮图标色完全一致。</li>
+              <li>底部栏木纹金边背景、边框、整体色调保持不变。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.56 · 2026-08-09 03:29:15</h3>
+            <p class="about-text dim"><b>视角按钮图标颜色统一为白球按钮图标色（#fff5d8 亮奶白）—— 底部栏样式与色调不变。</b></p>
+            <ul class="changelog-list">
+              <li>用户反馈：底部栏「视角按钮」内部图标颜色与「白球操作按钮」图标颜色不一致（视角偏金）。要求：保持底部栏样式和色调，只把视角图标颜色改成与白球图标一样。</li>
+              <li><b>根因</b>：白球按钮 <code>#cueBallTrigger</code> 图标色来自 <code>.seg-icon { color:#fff5d8 }</code>（亮奶白）；视角按钮 <code>#camera</code> 额外带 <code>.menuButton</code> 类，<code>.menuButton { color: var(--cn-gold) }</code> = 金色 #e8c37a。相机 SVG 用 <code>currentColor</code> 着色，部分 Android WebView 会把 <code>currentColor</code> 解析成按钮金色而非图标色，导致视角图标偏金，与白球图标（#fff5d8）不一致。</li>
+              <li><b>修复</b>：给 <code>#camera .cam-icon</code> 显式加 <code>color: #fff5d8</code>，与白球按钮图标同一来源；相机 SVG 内 <code>stroke/fill=currentColor</code> 全部落到 #fff5d8，两图标颜色完全一致。按钮木纹金边背景、边框、整体色调均保持不变。</li>
+              <li>先在会话内生成并排图标预览（白球 + 视角，均 #fff5d8）供用户确认，确认后再实施本修改并发布。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.55 · 2026-08-09 03:16:30</h3>
+            <p class="about-text dim"><b>力度条「调节时抽动闪烁」根治 —— 固定百分比文字宽度 + 抑制 input focus 闪烁。</b></p>
+            <ul class="changelog-list">
+              <li>用户反馈：「力度条调节时会<b>抽动闪烁</b>」。视频复现：拖动时 fill（橙红渐变条）/ 8 球的像素位置反复横跳（抽动），同时力度条区域偶发亮度闪一下（闪烁）。本版根治两个根因：</li>
+              <li><b>根因① 抽动（layout thrashing）</b>：<code>.power-track</code> 是 <code>.powerPercent</code> 文字的 flex 兄弟，<code>.powerPercent</code> 之前 <code>flex: 0 0 auto</code> + 文字决定宽度 → 百分比从「<b>8%</b>」变「<b>12%</b>」变「<b>100%</b>」时，文字宽度在 ~36 / ~56 / ~78px 间跳变，flex 自动挤压/释放 track 宽度 → track 宽度反复变 → <code>fill width:var(--p)</code> 和 <code>ball left:var(--p)</code> 以 track 宽度为基准的像素位置反复横跳。<b>本版修</b>：<code>.powerPercent</code> 改为 <code>width: 78px / min-width: 78px / max-width: 78px / text-align: left</code>（横屏 64px），文字位数变化时占位恒定 → track 宽度恒定 → <code>var(--p)</code> 像素基准稳定 → <b>不再抽动</b>。</li>
+              <li><b>根因② 闪烁（focus/active 高亮闪现）</b>：透明 <code>.powerSlider</code> 虽然 <code>opacity:0 + pointer-events:none</code>，但拖动时被聚焦时某些 Android WebView 仍透出原生焦点环 / 文本选择框，造成「亮度闪一下」。<b>本版修</b>：给 <code>.powerSlider</code> 加 <code>:focus / :focus-visible / :focus-within / :active { outline:none !important; box-shadow:none !important; -webkit-tap-highlight-color:transparent; }</code> + <code>::-moz-focus-inner / ::-moz-focus-outer</code> 归零；给 <code>.powerSliderContainer</code> 加 <code>user-select:none / -webkit-user-select:none / -webkit-tap-highlight-color:transparent</code> → <b>闪烁消除</b>。</li>
+              <li>v1.1.54 的 track 终极回归（flex 布局 + 左端不超百分比数字 + 右端不超白胶囊 + 中间不留空白）全部保留，本版只追加抖动/闪烁修复，不改视觉布局。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.54 · 2026-08-09 03:03:45</h3>
+            <p class="about-text dim"><b>力度条 track 终极回归 flex 布局 —— 左端不超百分比数字、右端不超白胶囊。</b></p>
+            <ul class="changelog-list">
+              <li>用户反馈「图2的效果」：黄色 track 应该<b>从百分比数字右侧开始</b>（左端不超出百分比数字），<b>一直延伸到白胶囊最右缘</b>（右端不超出白色容器），<b>中间不留任何空白</b>。前面 v1.1.52（absolute + left:0）左端超出了百分比数字，v1.1.53（absolute + right:35%）右端又留了空白，都不对。本版修：</li>
+              <li><code>.power-track</code> 终极回归 <b>flex 布局</b>：<code>position: relative</code> + <code>flex: 1 1 0%</code> + <code>width: 100%</code>。track 是 percentage 文字之后的 flex 子项，<b>左端天然从百分比数字右侧开始</b>（不超出百分比数字），<code>flex: 1 1 0%</code> + <code>width: 100%</code> 让 track 撑满到容器最右缘（不超出白胶囊），<b>中间不留任何空白</b>。</li>
+              <li>fill / ball 仍在 track 内部，<code>var(--p)</code> 以 track 宽度为基准 → 100% 时橙条填到 track 的最右缘（即白胶囊右缘），不再越界也不再留白。</li>
+              <li>track 颜色维持 v1.1.52 的浅暖黄 <code>#ffe6c2 →#f3cb88</code>。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.53 · 2026-08-09 02:51:00</h3>
+            <p class="about-text dim"><b>力度条 track 精准停在「红色标记右缘」 —— absolute + right:35%，不改变图1期望的边缘位置。</b></p>
+            <ul class="changelog-list">
+              <li>v1.1.52 把 track 改成 <code>absolute + left:0 + right:0</code> 撑满整个白胶囊容器，但用户反馈<b>超出了图1期望的右缘位置</b>（图2）—— 图1里 track 的右缘距离白胶囊右缘还有一段白色空白（红色标记的区域），那是用户希望保留的边缘位置。本版修：</li>
+              <li><code>.power-track</code> 改为 <code>absolute + left:0 + right:35%</code>—— track 右缘精准停在<b>容器右缘左侧 35% 处</b>（即图1的红色标记位置），右侧保留 35% 容器宽度的白色空白区，<b>完全对齐图1期望的边缘</b>。</li>
+              <li>fill / ball 仍在 track 内部，<code>var(--p)</code> 以 track 宽度为基准 → 100% 时橙条填到 track 的右缘（即图1的红色标记右缘位置），<b>橙条不再越界</b>，也<b>不再超出图1的期望</b>。</li>
+              <li>track 颜色维持 v1.1.52 的浅暖黄 <code>#ffe6c2 →#f3cb88</code>，与图1的黄色轨道完全一致。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.52 · 2026-08-09 02:38:15</h3>
+            <p class="about-text dim"><b>力度条黄色轨道终极修复 —— track 改用 absolute 定位，彻底撑满容器右缘。</b></p>
+            <ul class="changelog-list">
+              <li>v1.1.49（<code>flex:1 1 0%</code> + <code>width:100%</code>）、v1.1.50（去右内边距）、v1.1.51（颜色升级）都没能真正解决<b>「track 右侧留一大段白色空白」</b>的问题——用户反馈截图里 track 仍然比白色容器短一截，红圈标出的空白区依旧醒目。本版终极修：</li>
+              <li><code>.power-track</code> 彻底脱离 flex 链，改用 <code>position: absolute</code> + <code>left: 0</code> + <code>right: 0</code> + <code>top: 50%</code> + <code>translateY(-50%)</code>。<b>CSS 层面最稳的「撑满父容器」写法</b>——无论外层 flex 怎么算、无论 Android WebView 有多奇葩，track 都精准撑满 <code>.powerSliderContainer</code> 的整个内容区，<b>右缘与容器右缘对齐</b>。</li>
+              <li>track 底色从 v1.1.51 的饱和橙改回 v1.1.42 的浅暖黄 <code>#ffe6c2 →#f3cb88</code>，与用户期望图里的<b>黄色轨道</b>完全一致。</li>
+              <li>fill / ball 仍然挂在 track 内部，<code>var(--p)</code> 以 track 宽度为基准 → 橙条天然不超出黄色 track、球精准卡在 track 内的对应位置、<b>黄色轨道右侧不再有空白</b>。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.51 · 2026-08-09 02:25:30</h3>
+            <p class="about-text dim"><b>力度条黄色轨道升级饱和橙 —— 与 fill 同色系，根治 8 球右侧「红色标记的空白区域」观感。</b></p>
+            <ul class="changelog-list">
+              <li>v1.1.50 解决了 track 右缘的细白边，但 track 底色还是浅暖黄 <code>#ffe6c2 →#f3cb88</code>（v1.1.42 的方案），跟左侧 fill 的橙红横渐变对比强烈、且<b>右侧 8 球之后那一段在视觉上仍然发淡</b>，用户反馈「红色标记的空白区域」（指向 track 在 8 球右边的部分）需要修改成跟参考图（图1：右侧那条饱和橙竖向胶囊）一致的效果。本版修。</li>
+              <li><code>.power-track</code> 底色从 <code>#ffe6c2 →#f3cb88</code>（浅暖黄）升级为 <code>#ffb84a →#ff8a3a →#ff5a3a</code>（饱和橙 → 暗橙），跟 <code>.power-fill</code> 的橙红横渐变<b>同一色系</b>，整条胶囊从左到右都是饱满的橙色调，<b>8 球右侧不再发淡、看起来「空白」</b>。</li>
+              <li>力度等级语义保留：fill 仍覆盖 <code>0..--p</code>，叠在 track 之上，<b>亮度 + 渐变方向</b>仍能区分「已填充」与「未填充」，但二者的色差从「浅黄 vs 橙红」收敛到「同色系明度差」，<b>整体胶囊观感与参考图（图1）一致</b>。</li>
+              <li>黑 8 球保留 v1.1.48 的 2px 白色外环 + 加强阴影，在更暖的 track 底色上依然清晰可辨。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.50 · 2026-08-09 02:12:45</h3>
+            <p class="about-text dim"><b>力度条黄色轨道再延伸 —— 去掉容器右内边距，track 撑到容器最右缘。</b></p>
+            <ul class="changelog-list">
+              <li>v1.1.49 给 <code>.power-track</code> 加了 <code>flex:1 1 0%</code> + <code>width:100%</code> 之后，track 已经能填满 <code>.powerSliderContainer</code> 的<b>内容区</b>，但容器自身的右内边距 <code>padding-right: 2px</code>（横屏 4px）依然把 track 往左挤了 2~4px，<b>右侧还能看到一条极细的白色空白带</b>。本版修：</li>
+              <li><code>.powerSliderContainer</code> 的右内边距从 <code>2px</code>（横屏 <code>4px</code>）改为 <code>0</code>，左内边距保留 <code>14px</code>（百分比文字的呼吸空间）→ 黄色 track 的右边缘现在<b>精确对齐容器右缘</b>，右侧白色空白带彻底消失。</li>
+              <li>因为 fill / ball 都已挂在 track 内（v1.1.49），橙条和黑 8 球的右边界也同步右移，<b>橙条不再越界、球在 100% 时精准卡在最右端</b>。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.49 · 2026-08-09 02:00:00</h3>
+            <p class="about-text dim"><b>力度条轨道撑满 + 橙条不越界 —— track 强制 width:100%，fill / ball 重新挂回 track 内。</b></p>
+            <ul class="changelog-list">
+              <li>v1.1.48 把 fill / ball 挂到容器级后，橙色 fill 的 <code>width: var(--p)</code> 和球的 <code>left: var(--p)</code> 都以<b>容器宽度</b>为基准；可容器内的黄色 <code>.power-track</code> 是个 flex 子项，没有真正撑到容器右缘，于是<b>track 右侧露出一条白色空白带</b>，且橙条 / 球在某些渲染下会越过 track 的右边缘。本版修。</li>
+              <li><code>.power-track</code> 改为 <code>flex: 1 1 0%</code> + 显式 <code>width: 100%</code> → track 真正撑满 <code>.powerSliderContainer</code> 的内容区右缘，<b>右侧白色空白带彻底消失</b>。</li>
+              <li><code>.power-fill</code> 和 <code>.power-ball</code> 重新挂回 <code>.power-track</code> 内部，<code>var(--p)</code> 改以<b>轨道宽度</b>为基准 → 橙条天然不超出黄色 track、球精准卡在 track 内的对应位置。<b>既填满红圈区域、又绝不越界</b>。</li>
+              <li>黑 8 球保留 v1.1.48 的 2px 白色外环 + 加强阴影，在橙红 fill 之上依然清晰可辨，力度进展一眼可读。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.48 · 2026-08-08 23:50:00</h3>
+            <p class="about-text dim"><b>力度条根治「填满 vs 看不见进展」—— fill 跟球走，球加白环，力度一眼可读。</b></p>
+            <ul class="changelog-list">
+              <li>v1.1.47 把 fill 满铺后，黑 8 球虽然 z-index:2 但视觉上被橙红渐变埋没，<b>用户看不见力度进展</b>。同时球还留在 track 内、被 track 的 flex 挤住位置错乱。本版修：把 <b>黑 8 球也彻底拿到容器级</b>，跟 fill 共用同一坐标系（都把 <code>var(--p)</code> 视作容器宽度的百分比）。</li>
+              <li>fill <code>width: var(--p)</code> + ball <code>left: var(--p)</code> → 100% 时 fill 铺到容器右缘（红圈段填满）、球精准卡在右端；65% 时 fill 停在 65%、球在 65%，二者始终对齐、随拖动同步移动。<b>力度进展一眼可读</b>。</li>
+              <li>球新增 <b>2px 白色外环</b>（<code>box-shadow: 0 0 0 2px #ffffff</code>）+ 加强外阴影，确保在橙红 fill 之上<b>清晰可辨</b>，不会再被渐变"吃掉"。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.47 · 2026-08-08 22:06:40</h3>
+            <p class="about-text dim"><b>力度条终极修复 —— fill 彻底脱离 track，挂到容器级，红圈段不再到不了。</b></p>
+            <ul class="changelog-list">
+              <li>找了十几版的根因终于摸到了：<b>.power-track 是 flex 子项，被左边"65%"文字 + 14px 左内边距挤住</b>，flex:1 1 auto 在某些 WebView 下没把它真正撑到容器右缘，导致无论 fill 是 <code>var(--p)</code> 还是 <code>width:100%</code>，红圈段永远到不了。本版修：把 <code>.power-fill</code> 从 <code>.power-track</code> 里彻底拿出来，<b>直接挂在 <code>.powerSliderContainer</code> 下</b>。</li>
+              <li><code>width:100%</code> 现在等于<b>容器宽度</b>（由外层 <code>.bb-seg-power</code> 的 flex 决定，是稳定的）→ 橙红渐变必定铺到红圈右缘，<b>一像素白边都不留</b>。黑 8 球仍在 <code>.power-track</code> 内，<code>left: var(--p)</code> 作为位置指示器在橙红条上滑动。</li>
+              <li>fill 宽度彻底脱离 <code>--p</code>，拖动时静态不重算 → <b>不闪不跳</b>。fill 是导轨，球是手柄，根治红圈段 + 闪烁两个问题。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.46 · 2026-08-08 20:23:20</h3>
+            <p class="about-text dim"><b>力度条回归「满轨 + 球滑」模型 —— 根治 v1.1.45 的闪烁和红圈段到不了。</b></p>
+            <ul class="changelog-list">
+              <li>v1.1.45 把 <code>power-fill</code> 绑到 <code>var(--p)</code>（fill 跟着球走）后出现两个问题：① 满力时球只到 65% 就到底，红圈标记段永远到不了；② 拖动时 fill 反复重算宽度导致闪烁。本版改回 <code>width: 100%</code>：<b>橙红渐变永远满轨铺到红圈右缘，黑 8 球只是位置指示器在轨道上滑动</b>。</li>
+              <li>fill 嵌回 <code>.power-track</code> 内，与黑 8 球（<code>left: var(--p)</code>）<b>共用同一轨道坐标系</b>，缩放/对齐天然一致。fill 宽度彻底脱离 <code>--p</code>，拖动时静态不重算 → <b>不闪不跳</b>。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.45 · 2026-08-08 18:40:00</h3>
+            <p class="about-text dim"><b>力度条还原经典滑块 —— 保留黑 8 按钮，橙红填充跟随 8 球移动。</b></p>
+            <ul class="changelog-list">
+              <li>v1.1.44 把 <code>.power-fill</code> 改成 <code>width:100%</code> 且移出轨道后，<b>橙色始终填满整条、不再跟随黑 8 球</b>，视觉上像「黑 8 按钮失效/被误删」。本版把 <code>.power-fill</code> 重新嵌回 <code>.power-track</code>，宽度改回 <code>var(--p)</code>。</li>
+              <li><code>.power-fill</code>（<code>width:var(--p)</code>）与黑 8 球（<code>left:var(--p)</code>）<b>共用同一轨道坐标系</b>（均为轨道宽度的百分比），二者始终对齐、随拖动同步移动——「黑 8 球挪到哪，橙红填充就填到哪」。</li>
+              <li>此嵌套用法与 v1.1.42 一致，<b>实测不闪不跳</b>；之前的闪动仅见于 v1.1.43 的 <code>width:100%</code> 嵌套版（凹轨 flex 百分比不稳），本版已规避。同时把 <code>.bb-seg-power</code> 右内边距 <code>6px → 2px</code>，轨道撑到胶囊右缘，消除右侧死白区。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.44 · 2026-08-08 16:56:40</h3>
+            <p class="about-text dim"><b>力度条 DOM 重构 —— 红圈白区彻底消失；调节时橙色条不再闪烁/大小跳动。</b></p>
+            <ul class="changelog-list">
+              <li>v1.1.43 的 <code>width:100%</code> 在某些 WebView 渲染下未生效，原因是 <code>.power-fill</code> 嵌在 <code>.power-track</code> 里，<code>100%</code> 的实际宽度取决于凹轨的 flex 展开行为，碰上凹轨没完全撑满容器时就会出现「橙色在 8 球处停了、右边露出白底」。v1.1.44 把 <code>.power-fill</code> 从 <code>.power-track</code> 里挪出来，直接挂在 <code>.powerSliderContainer</code> 下，<code>width:100%</code> = 容器宽度，<b>橙色力度调节范围 100% 覆盖到右边缘，红圈区域不再有空白</b>。</li>
+              <li>因为 fill 现在彻底脱离 <code>--p</code> 与凹轨的尺寸变量，<b>调节过程中橙色条不再跟随 <code>--p</code> 变化大小</b>，也就彻底解决了「橙色条会闪烁并大小跳动」。8 球位置（<code>--p</code>）和百分比文字继续表达力度等级。</li>
+              <li><code>.power-fill</code> 显式加 <code>z-index:1</code>，确保在 <code>.power-ball</code>（z-index:2）和 <code>.powerPercent</code>（z-index:4）之下，层级正确。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.43 · 2026-08-08 15:13:20</h3>
+            <p class="about-text dim"><b>橙色力度条的可调节范围真正拉满 —— 亮橙→红渐变直接填到右边缘，红圈内不再有空白。</b></p>
+            <ul class="changelog-list">
+              <li>力度条 <code>.power-fill</code> 宽度从 <code>var(--p)</code> 改为 <code>100%</code>。v1.1.42 改的是凹轨底色（暖橙），但 fill 之外的右半段亮度仍偏低、视觉上读作「发灰」。v1.1.43 把亮饱和的橙→红渐变直接铺满整条凹轨，「橙色可调节范围」延伸到右端无空白。力度等级由 8 球滑块位置（<code>--p</code>）和百分比文字（<code>powerPercent</code>）共同表达。</li>
+              <li>力度胶囊右内边距收紧：竖屏 <code>padding 0 4px → 0 2px</code>、横屏 <code>0 8px → 0 4px</code>，让橙红渐变再往右延伸 2–4px，离右边缘几乎只剩细边框。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.42 · 2026-08-08 13:30:00</h3>
+            <p class="about-text dim"><b>力度条整条轨道改为暖橙，右侧「空白区」不再发灰；第一人称视野再回调，FOV 内能稳定框到袋口、被击球、白球、球杆前段四件套。</b></p>
+            <ul class="changelog-list">
+              <li>力度条 <code>.power-track</code> 背景由冷灰竖向渐变改为暖橙竖向渐变（<code>#ffe6c2 → #f3cb88</code>），边框/内阴影同步暖化。配合 <code>power-fill</code> 的橙红横渐变，整条胶囊视觉上都是橙色调，右侧未填充区与已填充区同色系。力度等级语义保留：更亮饱和的 <code>power-fill</code> 仍覆盖 <code>0..--p</code>。</li>
+              <li>第一人称视野：v1.1.41 的 R*20/R*8 仍看不到前方袋口/被击球。回调到 <b>R*24/R*9</b>，注视点从 <code>+1.5R</code> 抬到 <code>+2R</code>——相机略抬头，FOV 锥在白球前方 5–20R 高度稳定包住桌面，「球杆前段 + 完整白球 + 被击球 + 前方袋口」四件套同框。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.41 · 2026-08-08 11:46:40</h3>
+            <p class="about-text dim"><b>力度条整条胶囊真正可触摸设力；第一人称视野再回调，沿瞄准方向能稳定看到袋口。</b></p>
+            <ul class="changelog-list">
+              <li>力度条：绕过 WebKit 原生 <code>input[type=range]</code> 的窄 hit-region（Android WebView 只在 thumb 附近 ±22px 响应触摸，触摸橙色填充区无响应）。改为 <code>.powerSliderContainer</code> 直接捕获 <code>pointerdown/move/up</code>，JS 按 <code>x / rect.width</code> 映射到 [0,1] 写回 <code>input.value</code>，再走原 <code>powerChanged</code> 链路。容器补 <code>touch-action:none</code>，浏览器不再吃掉触摸手势。</li>
+              <li>第一人称视野：v1.1.40 的 R*16/R*7 仍偏紧、看不到前方袋口。回调到 <b>R*20/R*8</b>——FOV 内能稳定框到「球杆前段 + 完整白球 + 前方袋口」，第一人身位感保留。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.40 · 2026-08-08 10:03:20</h3>
+            <p class="about-text dim"><b>力度条整条可触摸设力；删除顶部居中比分栏（球列 Tray）；第一人称视野回调，能同时看到球杆前段、完整白球与被击球。</b></p>
+            <ul class="changelog-list">
+              <li>力度条：透明 range 覆盖层补上 <code>pointer-events:auto</code> 与 <code>touch-action:none</code>，整条胶囊（含左右留白）任意点触摸/拖动都能设力，浏览器不再把触摸当作滚动/缩放手势。</li>
+              <li>删除顶部居中比分栏：彻底移除 <code>#ballTray</code> 与其 <code>tray.css</code> 引用（数据层 ball-tray.ts 全程 null 守卫，删除后录像/计分逻辑不受影响，仅去掉顶部居中那条球列浮层）。底部计分板 scoreboard-v2.css 保留不动。</li>
+              <li>第一人称（aimView）视野：v1.1.39 的 R*12/R*5 过近、看不到被击球；回调到 R*16/R*7——既保留「杆头贴白球 + 完整白球」的贴身感，又能沿瞄准方向在正前方看到目标球。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.39 · 2026-08-08 08:20:00</h3>
+            <p class="about-text dim"><b>力度条滑动区域填满右侧空白，时间/白球按钮图形增大并保持同色同大，第一人称视角改为贴近白球后方、能看到球杆前段与完整白球。</b></p>
+            <ul class="changelog-list">
+              <li>力度条：胶囊右边距 10→4px，凹陷药丸轨道（滑动区域）向右铺满，去掉右侧空白带，整体更一体。</li>
+              <li>时间按钮（时钟）与白球操作按钮（同心圆）图形同步增大至 40×40（横屏 34×34），颜色统一 #fff5d8；二者共用 .seg-icon，大小/颜色天然一致。</li>
+              <li>第一人称（aimView）视野：默认镜头距离 R*18→R*12（更贴近白球后方）、高度 R*8→R*5（更低、少俯视）；注视点由「白球 + 高度/2」改为「白球中心 + 1.5R」，始终把完整白球与贴球的球杆前段框在画面中央。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.38 · 2026-08-07 23:45:00</h3>
+            <p class="about-text dim"><b>力度条按最新规范完全重做：单组件UI、苹果扁平化轻拟物、单个外胶囊框、65% 紧贴左内壁、凹轨自带细圆角内边框、橙红填充左端紧贴文字、柔和极淡投影、无任何分隔装饰。</b></p>
+            <ul class="changelog-list">
+              <li>单组件外观：胶囊壳是唯一外框；左右两区块视觉一体，没有任何分隔线/隔断边框。</li>
+              <li>苹果扁平化轻拟物：白→极淡冷灰渐变 (#ffffff→#f5f7fa)，细冷调边框 (rgba(200,210,225,0.6))，顶部 1px 高光，柔和极淡外阴影 (rgba(70,90,130,0.12) 极低透明度)。</li>
+              <li>「65%」文字：紧贴左侧胶囊内壁，字号 26→28，颜色 #1a2547 深色无衬线（系统字体栈含 SF Pro Display）。</li>
+              <li>滑动轨道：自带细圆角内边框 1px (rgba(160,175,195,0.35))，凹陷冷调背景 (#eaedf3→#d4dae4)，顶部内阴影 + 底部细高光。</li>
+              <li>进度条：橙→红渐变 (#ffb84a→#ff7a35→#ec2a2a)，左端紧贴百分比文字右侧（gap 12→6，留 6px 自然呼吸，不留大片空白）。</li>
+              <li>写实黑 8 球：38px 径向阴影更深（#6a6a6a→#2a2a2a→#000），外阴影更利落。</li>
+              <li>关键修复：.power-track 加 min-width:260px 兜底。上一版只设了 flex:1 1 auto，但子元素全是 position:absolute（内容尺寸=0），窄渲染下 flex-grow 不足以撑开，导致胶囊看似「65% + 8 球」挤在一起、凹轨消失。</li>
+              <li>力度段 min-width 380→440；横屏同步（胶囊 44→48, 凹轨 22→26, 8 球 30→32）。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.37 · 2026-08-07 21:48:45</h3>
+            <p class="about-text dim"><b>力度条完全按图 1 重做，时间/白球按钮图形换高对比度配色并加大，123 按钮左移、力度条拿回横向空间。</b></p>
+            <ul class="changelog-list">
+              <li>力度条完全按图 1 重做：胶囊壳恢复图 1 的极淡冷调白 (#ffffff→#eef1f7)，凹陷药丸轨道换成更明显的冷调渐变 (#d6dbe4→#c0c8d3) 凸显「真凹陷」观感，描边与阴影也换成冷调中性灰（饱和度比 v1.1.35 更克制，避免再次「发紫」）。</li>
+              <li>力度条拿回横向空间：①②③ 按钮宽度从 clamp(78px,11vw,100px) 缩到 clamp(56px,7.5vw,74px)；底栏左边距 8px→2px 让按钮左移吃回空白；底栏 gap 4→3；瞄准段 min-width 130→110；力度段 min-width 220→380，胶囊内能完整展示「65%」+ 长药丸轨道 + 橙红填充 + 黑色 8 球。</li>
+              <li>时间 / 白球操作按钮图形换高对比度配色并加大：图标颜色从 #f3d79a（暗黄米）→ #fff5d8（亮奶白），对比木纹金边底由 ~1.6 提到 ~6+；尺寸 30×30→36×36；SVG 描边 2→2.4，更清晰。</li>
+              <li>横屏同步：①②③ 按钮宽度 72-92 → 52-68，图标 26×26→30×30，力度段 min-width 150→280，与竖屏逻辑一致。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.36 · 2026-08-07 19:52:30</h3>
+            <p class="about-text dim"><b>修复力度条「发紫」与轨道被裁成三角形的问题（v1.1.35 力度条重做的收尾修复）。</b></p>
+            <ul class="changelog-list">
+              <li>发紫：v1.1.35 力度条白胶囊与凹陷轨道的渐变带冷蓝灰调，在部分屏幕上观感偏紫；本次改为纯中性灰（#ffffff→#ededed 胶囊、#dcdcdc→#c4c4c4 轨道），边框与阴影也换成中性灰，彻底去除「发紫」观感。</li>
+              <li>三角形裁切：基础 .power-track 仍残留旧三角楔形的 clip-path，把新的药丸轨道连同填充和 8 球一起裁成了一个小三角；本次为 .bb-seg-power .power-track 显式加 clip-path:none 兜底，轨道与 8 球恢复完整药丸形状。</li>
+              <li>位置与功能不变：力度条整体布局、百分比数字、橙→红填充、黑色 8 球滑块与拖动设力逻辑均与 v1.1.35 一致。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.35 · 2026-08-07 17:56:15</h3>
+            <p class="about-text dim"><b>电脑对战比分栏改为单行紧凑不挡球桌；力度条完全按图 2 重做（白胶囊 + 渐变填充 + 8 球）。</b></p>
+            <ul class="changelog-list">
+              <li>比分栏（vs-bot）：玩家选项由竖排改为横排，整张卡片压成单行紧凑布局，高度收敛至 ~40px，整体落在球桌顶沿上方的留白带里，不再覆盖桌面任何部分。</li>
+              <li>力度条：完全按图 2 重做——去掉木纹外壳改为透明容器，内部为白色胶囊外壳，左侧大号深蓝粗体「65%」数字，右侧凹陷药丸轨道 + 橙→红渐变填充（宽度=--p），黑色 8 球作为滑块（位置=--p）；位置与功能（拖动设力）保持不变。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.34 · 2026-08-07 16:00:00</h3>
+            <p class="about-text dim"><b>抬杆高度区进一步压低防裁切；「自己练习」改用训练式计分栏，仅显示进球数 + 时间。</b></p>
+            <ul class="changelog-list">
+              <li>白球操作弹窗：将「抬杆高度」图形区高度比由 2.3:1 收敛至 3:1（横屏矮屏同步至 2.6:1），避免该区块底部被弹窗裁切。</li>
+              <li>计分栏：菜单「自己练习」(solo) 启动的对局改为使用训练式计分栏——仅显示你的进球数与用时，彻底去掉「我方 / 对方」及「玩家」名称标签，框体保持紧凑不出界。</li>
+              <li>说明：此前 solo 练习的计分栏里出现的「玩家」即指唯一玩家（你自己），「solo」对应菜单所选的「自己练习」；本次重设计后该名称不再显示。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.33 · 2026-08-07 14:03:45</h3>
+            <p class="about-text dim"><b>变更履历补齐全部缺口；白球弹窗不出屏；训练比分栏收紧不出界。</b></p>
+            <ul class="changelog-list">
+              <li>变更履历：补齐 v1.0.5–v1.0.7、v1.0.9–v1.0.16、v1.1.16–v1.1.29 全部缺口，自 v1.0.4 起无版本断层。</li>
+              <li>白球操作弹窗：限制最大高度并允许内部滚动，圆盘与抬杆区尺寸收敛，确保「白球击球点 / 抬杆高度」两块区域都不超出屏幕范围。</li>
+              <li>训练模式比分栏：隐藏我方 / 对方，框体进一步收紧并贴合安全区，确保不超出球桌与屏幕范围。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.32 · 2026-08-07 12:07:30</h3>
+            <p class="about-text dim"><b>白球操作面板拆分两块并各自加指引；横向瞄准条改为常驻；回合时间默认无限制；补齐变更履历。</b></p>
+            <ul class="changelog-list">
+              <li>变更履历：补齐 v1.1.30 / v1.1.31 / v1.1.32 的版本变更记录，随版本迭代同步更新，不再遗漏。</li>
+              <li>白球操作面板：将展开页拆分为上下两块等宽区域——上「白球击球点」、下「抬杆高度（球杆）」，各自区域上方印上简洁操作指引（点击白球设置击球位置 / 拖动球杆调整抬杆高度）。</li>
+              <li>抬杆白球：球杆高度区的示意白球由半白（被裁切）改为完整白球。</li>
+              <li>横向瞄准滑动条：移除「开关」选项，改为默认常驻功能（无需开启），设置页不再出现该开关。</li>
+              <li>首页对手：恢复「电脑 · 稳健」按钮（v1.1.31 误删为「电脑」）；游戏内对手名仍沿用「电脑」。</li>
+              <li>电脑对战回合时间：默认改为「无限制」（不显示击球倒计时）；选择 10 / 20 / 30 秒仍生效，超时会自动判负。</li>
+              <li>训练模式比分栏：隐藏「我方 / 对方」，仅显示「已进球 + 时间」，并进一步收紧框体保持紧凑。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.31 · 2026-08-07 10:11:15</h3>
+            <p class="about-text dim"><b>比分栏动态紧凑不挡球桌；力度条按参考图重设计；展开选项置最高层；细微瞄准角度收紧到 ±1°；回合时间驱动倒计时。</b></p>
+            <ul class="changelog-list">
+              <li>比分栏：改为动态大小、不遮挡球桌、内部设计更紧凑；训练模式仅显示「已进球数 + 时间」。</li>
+              <li>力度条：按参考图重设计——木纹金边面板 + 橙色三角楔形（随力度生长）+ 蓝白银竖条标尺 + 左侧百分比文字。</li>
+              <li>层级：展开选项（白球击球点面板等）设为最高层 z-index 2000，比分栏设为最低层 z-index 1，解决展开选项相互重叠、互相遮挡。</li>
+              <li>电脑对战：回合时间选项现在驱动击球按钮的圆环倒计时，可直观看到设置生效；超时未击球本回合判负。</li>
+              <li>细微瞄准：横向滑动条左右映射的瞄准角度由 ±2° 收紧到 ±1°，比屏幕拖动瞄准的角分辨率更细微，专用于「差一点点」时的极精细修正。</li>
+              <li>电脑名字：游戏内对手名由「电脑 · 稳健」改为「电脑」。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.30 · 2026-08-07 08:15:00</h3>
+            <p class="about-text dim"><b>工程纪律：新增版本号硬约束，加固离线包构建流程。</b></p>
+            <ul class="changelog-list">
+              <li>版本纪律：新增「CONSTRAINTS.md 硬约束 4」——任何代码改动都必须迭代版本号、三处联动（menu.html 版本戳 / AndroidManifest versionCode、versionName / version.ts 由构建自动写入）、versionCode 必须 &gt; 上一版（沿用 YYMMDDHH，沙盒时钟回退时手动取更大值）。</li>
+              <li>构建：build-apk.sh 增加 4 个 JS 产物（index.js / three_module.js / three_core.js / three_examples.js）的「字节数校验 + 失败自动重试」复制循环，避免安装包缺文件导致黑屏。</li>
+              <li>恢复：将 v1.1.29 误删的 menu-cn.js 通过 git 历史恢复，并同步到 v1.1.30。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.29 · 2026-08-06 23:55:00</h3>
+            <p class="about-text dim"><b>击球点圆盘加指引 + 抬杆比例收敛 + 力度进度统一管理。</b></p>
+            <ul class="changelog-list">
+              <li>击球点圆盘上方增加标题与操作描述（点击白球设置击球位置）。</li>
+              <li>图形化抬杆比例由 2.6:1 收敛到 2:1，避免横向拉伸变形。</li>
+              <li>修复白球被压扁成椭圆的问题；力度进度 --p 改由容器统一管理，旧 8 球滑块保留并隐藏以便平滑回退。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.28 · 2026-08-06 23:09:46</h3>
+            <p class="about-text dim"><b>移除调试诊断浮层，恢复纯净体验。</b></p>
+            <ul class="changelog-list">
+              <li>移除 v1.1.21 引入的调试诊断浮层，全局未捕获异常仅打印到 console。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.27 · 2026-08-06 22:24:31</h3>
+            <p class="about-text dim"><b>计分板内部结构重构。</b></p>
+            <ul class="changelog-list">
+              <li>将 p1/p2 分数拆到独立 wrapper，便于分别控制显隐与动画。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.26 · 2026-08-06 21:39:17</h3>
+            <p class="about-text dim"><b>计分板 tab 与比分同步细节修复。</b></p>
+            <ul class="changelog-list">
+              <li>当前回合高亮与双方分数对齐校准，切换更顺滑。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.25 · 2026-08-06 20:54:03</h3>
+            <p class="about-text dim"><b>初始化顺序调整。</b></p>
+            <ul class="changelog-list">
+              <li>View（renderer）就绪后再执行 Hud / 通知 / 菜单等后续 setup，避免时序竞态。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.24 · 2026-08-06 20:08:49</h3>
+            <p class="about-text dim"><b>容器建好即启动渲染循环。</b></p>
+            <ul class="changelog-list">
+              <li>容器一创建好就立即启动渲染循环，不再等待初始化完成，首帧更及时。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.23 · 2026-08-06 19:23:34</h3>
+            <p class="about-text dim"><b>底部栏左移避让圆角。</b></p>
+            <ul class="changelog-list">
+              <li>底部栏左侧增加内边距，整体左移，让右侧按钮远离屏幕圆角。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.22 · 2026-08-06 18:38:20</h3>
+            <p class="about-text dim"><b>击球 / 摆球手感微调。</b></p>
+            <ul class="changelog-list">
+              <li>击球与摆球交互手感微调；辅助瞄准线默认长度与淡入淡出优化。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.21 · 2026-08-06 17:53:06</h3>
+            <p class="about-text dim"><b>新增调试诊断浮层（后续 v1.1.28 已移除）。</b></p>
+            <ul class="changelog-list">
+              <li>renderer 未就绪时显示诊断浮层，兜底调试色改为深紫以便区分。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.20 · 2026-08-06 17:07:51</h3>
+            <p class="about-text dim"><b>底部栏与计分板样式打磨。</b></p>
+            <ul class="changelog-list">
+              <li>间距 / 字重 / 对齐统一，按钮与卡片视觉更一致。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.19 · 2026-08-06 16:22:37</h3>
+            <p class="about-text dim"><b>屏幕圆角安全区 + 视角按钮图标化 + 加载兜底。</b></p>
+            <ul class="changelog-list">
+              <li>底部栏右侧留出屏幕圆角安全区，避免最右按钮被圆角遮挡。</li>
+              <li>③ 视角按钮同样仅留图标；canvas 强制铺满容器。</li>
+              <li>进入游戏加载覆盖层在 4.5s 后兜底自动淡出。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.18 · 2026-08-06 15:37:23</h3>
+            <p class="about-text dim"><b>顶部计分板卡片化 + ② 仅图标 + 图形化抬杆 + 训练计时。</b></p>
+            <ul class="changelog-list">
+              <li>顶部计分板改为卡片式（木纹金边）。</li>
+              <li>② 白球击球点按钮仅保留图标（去掉文字）。</li>
+              <li>白球击球点面板加入图形化抬杆（拖动球杆调角度）。</li>
+              <li>训练模式：比分栏仅显示已进球 + 用时（mm:ss）。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.17 · 2026-08-06 14:52:09</h3>
+            <p class="about-text dim"><b>设置按钮金色齿轮 + 底部 5 段固定顺序 + ② 击球点面板。</b></p>
+            <ul class="changelog-list">
+              <li>设置按钮定型为右上角纯金色齿轮（无文字）。</li>
+              <li>底部操作栏固定 5 段顺序：① 摆球/击球 · ② 白球击球点 · ③ 视角 · ④ 力度 · ⑤ 细微瞄准。</li>
+              <li>新增 ② 白球击球点展开面板（圆盘点选加塞 + 复位）。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.16 · 2026-08-06 14:06:54</h3>
+            <p class="about-text dim"><b>底部栏改版 + 设置按钮右上角雏形。</b></p>
+            <ul class="changelog-list">
+              <li>底部操作栏改为自适应 5 段布局雏形。</li>
+              <li>设置按钮移到屏幕右上角（金色齿轮雏形）。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.1.15 · 2026-08-06 13:21:40</h3>
             <p class="about-text dim"><b>3D 相机 FOV 随屏幕宽高比自适应，超宽屏（如 20:9 / 2400×1080）球台铺满宽度。</b></p>
             <ul class="changelog-list">
               <li>根因：游戏内 3D 场景在横屏时纵向 FOV 固定为 40°，屏幕越宽横向 FOV 越大，球台只占画面中部，两侧露出深绿底（被误认为黑边）。这与 v1.1.14 修复的 CSS 限宽无关。</li>
@@ -604,7 +1091,7 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.1.14 · 2026-08-06</h3>
+            <h3>v1.1.14 · 2026-08-06 12:36:26</h3>
             <p class="about-text dim"><b>折叠屏 / 宽屏铺满屏幕：移除 v1.1.10 引入的 720px 居中限宽。</b></p>
             <ul class="changelog-list">
               <li>3D 视图：<code>.view3d</code> 移除 <code>max-width: 720px; margin: 0 auto;</code>，3D 画布铺满全屏（折叠屏内屏展开、超宽屏、常规手机都铺满，不再出现左右黑边）。</li>
@@ -616,7 +1103,7 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.1.13 · 2026-08-06</h3>
+            <h3>v1.1.13 · 2026-08-06 11:51:11</h3>
             <p class="about-text dim"><b>删除「震动反馈」开关设置，恢复零权限。</b></p>
             <ul class="changelog-list">
               <li>设置：移除游戏设置页与帮助浮层里的「震动反馈」开关，及其在 localStorage 中的存储项。</li>
@@ -627,7 +1114,7 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.1.12 · 2026-08-06</h3>
+            <h3>v1.1.12 · 2026-08-06 11:05:57</h3>
             <p class="about-text dim"><b>画质锯齿修复 + 关于页增加变更履历按钮。</b></p>
             <ul class="changelog-list">
               <li>画质：WebGL <code>DPR</code> 上限按 <code>lod</code> 0~4 调整为 1 / 1.25 / 1.5 / 2 / 2.5，默认档（lod=1）渲染像素从 <code>0.75x</code> 提升到 <code>1.25x</code>，球移动时的边缘锯齿显著缓解。</li>
@@ -637,7 +1124,7 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.1.11 · 2026-08-06</h3>
+            <h3>v1.1.11 · 2026-08-06 10:20:43</h3>
             <p class="about-text dim"><b>修复新手引导每次击球都从第一步重新显示。</b></p>
             <ul class="changelog-list">
               <li>教程：<code>Tutorial.start(force=true)</code> 在本局内只显示一次（<code>shownThisGame</code> 守护），force 不再等于每杆重显。</li>
@@ -647,7 +1134,7 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.1.10 · 2026-08-06</h3>
+            <h3>v1.1.10 · 2026-08-06 09:35:29</h3>
             <p class="about-text dim"><b>折叠屏适配 + 进入游戏短暂黑屏 + 训练引导循环回到第一步 一次性修复。</b></p>
             <ul class="changelog-list">
               <li>WebGL：折叠瞬间容器 0×0 不再永久放弃，改用 <code>requestAnimationFrame</code> 惰性重试；尺寸恢复后由 <code>View.ensureRendererAndRender()</code> 主动重建 renderer。</li>
@@ -659,7 +1146,7 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.1.9 · 2026-08-06</h3>
+            <h3>v1.1.9 · 2026-08-06 08:50:14</h3>
             <p class="about-text dim"><b>新增雪山户外场景。</b></p>
             <ul class="changelog-list">
               <li>场景：雪山用真正搭建的几何 3D 环境（蓝天穹顶 + 远景雪山 + 地面雪原），配套太阳光、半球光、雾、大气透视与 ACES 色调映射防过曝。</li>
@@ -668,7 +1155,7 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.1.8 · 2026-08-06</h3>
+            <h3>v1.1.8 · 2026-08-06 08:05:00</h3>
             <p class="about-text dim"><b>练习模式单独入口与训练引导闭环。</b></p>
             <ul class="changelog-list">
               <li>模式：练习模式单独入口，强制显示新手引导（首次进入 + 手动重放）。</li>
@@ -678,7 +1165,7 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.1.7 · 2026-08-05</h3>
+            <h3>v1.1.7 · 2026-08-05 23:50:00</h3>
             <p class="about-text dim"><b>球杆主题系统。</b></p>
             <ul class="changelog-list">
               <li>设置：球杆主题切换独立于台球桌颜色，可选多套（含自定义）。</li>
@@ -686,7 +1173,7 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.1.6 · 2026-08-05</h3>
+            <h3>v1.1.6 · 2026-08-05 22:05:33</h3>
             <p class="about-text dim"><b>雪景过曝 / 阴影 / 雾微调。</b></p>
             <ul class="changelog-list">
               <li>雪景：太阳光强度由 2.4 降到 1.8；ACES 色调映射曝光 0.95；阴影锥缩到 ±4 仅覆盖台呢；雾起点推远避免近景雾糊。</li>
@@ -694,7 +1181,7 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.1.5 · 2026-08-05</h3>
+            <h3>v1.1.5 · 2026-08-05 20:21:07</h3>
             <p class="about-text dim"><b>环境场景实时切换。</b></p>
             <ul class="changelog-list">
               <li>设置：环境场景（室内 / 足球场 / 篮球场 / 雪山）切换不重启游戏，立即生效。</li>
@@ -702,7 +1189,7 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.1.4 · 2026-08-05</h3>
+            <h3>v1.1.4 · 2026-08-05 18:36:40</h3>
             <p class="about-text dim"><b>台球桌颜色卡片化与实时换肤。</b></p>
             <ul class="changelog-list">
               <li>设置：台球桌颜色用色块卡片显示，点击即时切换，无需重启。</li>
@@ -711,7 +1198,7 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.1.3 · 2026-08-05</h3>
+            <h3>v1.1.3 · 2026-08-05 16:52:13</h3>
             <p class="about-text dim"><b>中文全量本地化与设置面板。</b></p>
             <ul class="changelog-list">
               <li>UI：菜单、设置、规则、教程、错误提示等全部中文。</li>
@@ -720,7 +1207,7 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.1.2 · 2026-08-05</h3>
+            <h3>v1.1.2 · 2026-08-05 15:07:47</h3>
             <p class="about-text dim"><b>触屏瞄准交互优化。</b></p>
             <ul class="changelog-list">
               <li>操作：触屏长按进入瞄准态，可拖动球杆方向。</li>
@@ -728,7 +1215,7 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.1.1 · 2026-08-05</h3>
+            <h3>v1.1.1 · 2026-08-05 13:23:20</h3>
             <p class="about-text dim"><b>桌面浏览器适配。</b></p>
             <ul class="changelog-list">
               <li>UI：横屏布局自适应 1280×720 与更高分辨率。</li>
@@ -736,7 +1223,7 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.1.0 · 2026-08-05</h3>
+            <h3>v1.1.0 · 2026-08-05 11:38:53</h3>
             <p class="about-text dim"><b>Web 打包 + APK 离线封装。</b></p>
             <ul class="changelog-list">
               <li>构建：webpack 5 + TypeScript 编译，<code>dist/</code> 由 APK 打包。</li>
@@ -745,7 +1232,7 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.0.21 · 2026-08-05</h3>
+            <h3>v1.0.21 · 2026-08-05 09:54:27</h3>
             <p class="about-text dim"><b>电脑对手 AI 升级。</b></p>
             <ul class="changelog-list">
               <li>AI：稳健 / 激进 两种策略，保留本地决策无联网。</li>
@@ -753,7 +1240,7 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.0.20 · 2026-08-05</h3>
+            <h3>v1.0.20 · 2026-08-05 08:10:00</h3>
             <p class="about-text dim"><b>斯诺克规则完整化。</b></p>
             <ul class="changelog-list">
               <li>规则：斯诺克犯规判罚、自由球、置球点等完整支持。</li>
@@ -761,7 +1248,7 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.0.19 · 2026-08-04</h3>
+            <h3>v1.0.19 · 2026-08-04 23:40:00</h3>
             <p class="about-text dim"><b>三库开伦模式。</b></p>
             <ul class="changelog-list">
               <li>规则：新增三库开伦（Carom）模式。</li>
@@ -769,7 +1256,7 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.0.18 · 2026-08-04</h3>
+            <h3>v1.0.18 · 2026-08-04 22:14:33</h3>
             <p class="about-text dim"><b>九球规则完整化。</b></p>
             <ul class="changelog-list">
               <li>规则：九球 push-out / 跳球等扩展规则。</li>
@@ -777,7 +1264,7 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.0.17 · 2026-08-04</h3>
+            <h3>v1.0.17 · 2026-08-04 20:49:05</h3>
             <p class="about-text dim"><b>八球规则与训练入口。</b></p>
             <ul class="changelog-list">
               <li>规则：八球规则完整支持（含开球与重置）。</li>
@@ -785,7 +1272,71 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.0.8 · 2026-08-04</h3>
+            <h3>v1.0.16 · 2026-08-04 19:23:38</h3>
+            <p class="about-text dim"><b>各模式规则收尾与切换稳定性。</b></p>
+            <ul class="changelog-list">
+              <li>八球 / 九球 / 三库开伦 / 斯诺克 规则收尾，模式间切换更稳定。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.0.15 · 2026-08-04 17:58:11</h3>
+            <p class="about-text dim"><b>斯诺克计分与红球 / 彩球流程。</b></p>
+            <ul class="changelog-list">
+              <li>斯诺克计分、红球与彩球顺序、重新置球等流程支持。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.0.14 · 2026-08-04 16:32:44</h3>
+            <p class="about-text dim"><b>三库开伦几何支撑。</b></p>
+            <ul class="changelog-list">
+              <li>三库开伦的库边反弹与撞球顺序计算支撑。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.0.13 · 2026-08-04 15:07:16</h3>
+            <p class="about-text dim"><b>训练模式基础。</b></p>
+            <ul class="changelog-list">
+              <li>训练模式基础：自由摆球 + 无对手练习入口。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.0.12 · 2026-08-04 13:41:49</h3>
+            <p class="about-text dim"><b>九球规则初版。</b></p>
+            <ul class="changelog-list">
+              <li>九球规则初版（顺序球 + 9 号球决胜）。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.0.11 · 2026-08-04 12:16:22</h3>
+            <p class="about-text dim"><b>犯规 / 自由球判罚框架。</b></p>
+            <ul class="changelog-list">
+              <li>犯规与自由球判罚基础框架。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.0.10 · 2026-08-04 10:50:55</h3>
+            <p class="about-text dim"><b>开球摆球与重置流程。</b></p>
+            <ul class="changelog-list">
+              <li>开球自动三角摆球与重置流程完善。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.0.9 · 2026-08-04 09:25:27</h3>
+            <p class="about-text dim"><b>美式八球规则初版。</b></p>
+            <ul class="changelog-list">
+              <li>美式八球规则初版（落袋判定与花色分组）。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.0.8 · 2026-08-04 08:00:00</h3>
             <p class="about-text dim"><b>三大交互修复（v1.0.7 用户反馈）。</b></p>
             <ul class="changelog-list">
               <li>修复：选皮肤进游戏台布不变。</li>
@@ -795,7 +1346,31 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.0.4 · 2026-08-03</h3>
+            <h3>v1.0.7 · 2026-08-03 23:30:00</h3>
+            <p class="about-text dim"><b>触屏操作初步适配。</b></p>
+            <ul class="changelog-list">
+              <li>触屏拖动瞄准与击球的基础适配。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.0.6 · 2026-08-03 22:20:00</h3>
+            <p class="about-text dim"><b>台球桌与球体渲染优化。</b></p>
+            <ul class="changelog-list">
+              <li>台球桌与球体的光照 / 材质 / 阴影优化。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.0.5 · 2026-08-03 21:10:00</h3>
+            <p class="about-text dim"><b>中文菜单与设置基础框架。</b></p>
+            <ul class="changelog-list">
+              <li>菜单、设置、规则选择的中文本地化起步框架。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.0.4 · 2026-08-03 20:00:00</h3>
             <p class="about-text dim"><b>离线中文初始版。</b></p>
             <ul class="changelog-list">
               <li>基础：基于 tailuge/billiards 改造，中文 UI + 离线化 + Android 封装。</li>
@@ -807,7 +1382,7 @@
     </div>
 
     <script>
-      window.__BILLIARDS_VERSION__ = "1.1.15-26080606";
+      window.__BILLIARDS_VERSION__ = "1.2.1-26080915";
     </script>
     <script src="menu-cn.js"></script>
   </body>
