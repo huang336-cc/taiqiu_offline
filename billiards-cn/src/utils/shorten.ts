@@ -7,7 +7,7 @@ export function shorten(url, action) {
 
 export function share(url) {
   const shareData = {
-    title: "台球大师",
+    title: "奥特曼的台球",
     url: url,
   }
   if (navigator.canShare?.(shareData)) {
