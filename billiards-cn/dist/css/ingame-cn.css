@@ -1,5 +1,5 @@
 /* ==========================================================================
-   台球大师 · 离线版 —— 游戏内中文界面与手机适配
+   奥特曼的台球 · 离线版 —— 游戏内中文界面与手机适配
    在原版样式之后加载，只做“覆盖”，不改动原有布局逻辑。
    ========================================================================== */
 
@@ -463,6 +463,16 @@ input[type="range"].aim-angle-slider::-moz-range-thumb {
 
 .view3d-loading.is-hidden {
   opacity: 0;
+}
+
+/* v1.1.19 兜底：JS 资源回调未触发时，加载覆盖层也会在 4.5s 后自动淡出，
+   避免「永久绿幕/黑屏」无法恢复；正常情况下 JS 会更早移除它。 */
+.view3d-loading {
+  animation: view3d-loading-fallback-hide 4.5s ease forwards;
+}
+@keyframes view3d-loading-fallback-hide {
+  0%, 85% { opacity: 1; }
+  100% { opacity: 0; visibility: hidden; pointer-events: none; }
 }
 
 .view3d-loading-spinner {
