@@ -1,4 +1,4 @@
-# 台球大师 · 中文离线版
+# 奥特曼的台球 · 中文离线版
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Platform](https://img.shields.io/badge/platform-Android%205.0%2B-brightgreen.svg)](#下载)
