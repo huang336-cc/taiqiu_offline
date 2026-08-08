@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="zh-CN">
   <head>
-    <title>台球大师 · 离线版</title>
+    <title>奥特曼的台球 · 离线版</title>
     <link rel="icon" type="image/png" href="favicon.png" />
     <meta charset="UTF-8" />
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
@@ -15,25 +15,23 @@
     <link rel="stylesheet" type="text/css" href="css/aiminputs.css" />
     <link rel="stylesheet" type="text/css" href="css/powerinput.css" />
     <link rel="stylesheet" type="text/css" href="css/notification.css" />
-    <link rel="stylesheet" type="text/css" href="css/tray.css" />
     <link rel="stylesheet" type="text/css" href="css/chat.css" />
     <link rel="stylesheet" type="text/css" href="css/menu.css" />
     <link rel="stylesheet" type="text/css" href="css/wood.css" />
     <link rel="stylesheet" type="text/css" href="css/ingame-cn.css" />
+    <!-- v1.1.16: 底部栏改版 + 设置按钮右上角 -->
+    <link rel="stylesheet" type="text/css" href="css/bottombar-v2.css?v=1.2.1" />
+    <!-- v1.1.18: 顶部计分板卡片（参考图2） -->
+    <link rel="stylesheet" type="text/css" href="css/scoreboard-v2.css" />
   </head>
 
   <body>
-    <h1 hidden>台球大师 单机离线版</h1>
+    <h1 hidden>奥特曼的台球 单机离线版</h1>
     <div id="viewP1" class="view3d">
       <!-- v1.1.10：资源异步加载期间的 Loading 覆盖层，避免几百毫秒黑屏 -->
       <div class="view3d-loading" id="view3dLoading">
         <div class="view3d-loading-spinner"></div>
         <div class="view3d-loading-text">加载中…</div>
-      </div>
-      <div id="snookerScoreOverlay">
-        <div id="snookerScore" aria-live="polite">
-          <div id="breakScore" class="breakScore"></div>
-        </div>
       </div>
       <div id="notificationOverlay">
         <div id="notification" aria-live="assertive" role="alert"></div>
@@ -50,197 +48,222 @@
         <div id="chatoutput" class="chatoutput"></div>
       </div>
     </div>
+    <!-- v1.1.17: 设置按钮（原 #menu）屏幕右上角，仅金色齿轮，无文字 -->
+    <button
+      class="menuButton"
+      title="设置"
+      id="menu"
+      type="submit"
+      aria-label="设置"
+    >
+      <span class="gear" aria-hidden="true">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M19.14 12.94c0.04-0.3 0.06-0.61 0.06-0.94 0-0.32-0.02-0.64-0.07-0.94l2.03-1.58a0.49 0.49 0 0 0 0.12-0.61l-1.92-3.32a0.488 0.488 0 0 0-0.59-0.22l-2.39 0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4 2.81a0.5 0.5 0 0 0-0.48-0.41h-3.84a0.5 0.5 0 0 0-0.48 0.41L9.25 5.35C8.66 5.59 8.12 5.92 7.63 6.29L5.24 5.33a0.5 0.5 0 0 0-0.59 0.22L2.74 8.87a0.5 0.5 0 0 0 0.12 0.61l2.03 1.58c-0.05 0.3-0.07 0.62-0.07 0.94 0 0.32 0.02 0.64 0.07 0.94L2.86 14.52a0.49 0.49 0 0 0-0.12 0.61l1.92 3.32c0.12 0.22 0.37 0.29 0.59 0.22l2.39-0.96c0.5 0.38 1.03 0.7 1.62 0.94l0.36 2.54a0.5 0.5 0 0 0 0.48 0.41h3.84c0.24 0 0.45-0.17 0.48-0.41l0.36-2.54c0.59-0.24 1.13-0.56 1.62-0.94l2.39 0.96c0.22 0.08 0.47 0 0.59-0.22l1.92-3.32a0.49 0.49 0 0 0-0.12-0.61l-2.03-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+        </svg>
+      </span>
+    </button>
+
+    <!-- v1.1.17: 底部操作栏 5 段固定顺序 ① 摆球/击球 · ② 白球击球点 · ③ 视角 · ④ 力度 · ⑤ 细微瞄准 -->
     <div id="panel" class="panel wood-texture">
-      <div class="aimControlColumn">
-        <div class="aimingArea">
+      <div class="bottom-bar">
+        <!-- ① 摆球 / 击球（cueHit）：统一木纹金边按钮，含倒计时扫光 -->
+        <div class="bb-seg bb-seg-cuehit">
           <button
-            class="hitButton timeout-btn"
+            class="seg-trigger timeout-btn"
             id="cueHit"
             type="button"
-            aria-label="击球"
+            aria-label="摆球 / 击球"
           >
-            击球
+            <span class="seg-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/>
+                <path d="M12 12 L12 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M12 12 L19 16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </span>
+            <span class="seg-label">击球</span>
           </button>
         </div>
-        <div id="tiltSliderContainer" class="tiltSliderContainer" hidden>
-          <angle-input id="cueTilt" aria-label="抬杆角度"></angle-input>
-        </div>
-        <template id="angle-input-template">
-          <div class="area" id="area">
-            <div class="ball"></div>
-            <div class="rotator" id="rot">
-              <div class="stick">
-                <div class="tip"></div>
-                <div class="ferrule"></div>
-                <div class="shaft"></div>
-                <div class="butt"></div>
-              </div>
-            </div>
-          </div>
-        </template>
-        <div id="ballContainerWrapper" class="ballContainerWrapper">
+
+        <!-- ② 白球击球点（cueBallTrigger）：点开后上方悬浮紧凑面板 -->
+        <div class="bb-seg bb-seg-cueball">
           <button
-            id="openElevation"
-            class="openElevation"
-            aria-label="抬杆角度"
-          >
-            +
-          </button>
-          <button
-            id="resetSpin"
-            class="resetSpin"
-            aria-label="加塞复位"
-          >
-            ⟲
-          </button>
-          <div id="ballContainer" class="ballContainer">
-            <div id="objectBall" class="objectBall"></div>
-            <div id="cueBall" class="cueBall">
-              <div id="cueTip" class="cueTip"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="powerAimRow">
-        <div id="powerSliderContainer" class="powerSliderContainer">
-          <div class="power-track"></div>
-          <input
-            class="powerSlider"
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value="0.65"
-            id="cuePower"
-            aria-label="击球力度"
-          />
-          <span id="powerPercent" class="powerPercent">65%</span>
-        </div>
-        <!-- 横向瞄准角度滑动条：贴在力度框旁边，与瞄准方向同步 -->
-        <div id="aimAngleBar" class="aim-angle-bar" hidden>
-          <button
+            class="seg-trigger"
+            id="cueBallTrigger"
             type="button"
-            class="aim-nudge"
-            id="aimNudgeL"
-            aria-label="瞄准左微调"
+            aria-haspopup="true"
+            aria-expanded="false"
+            aria-label="白球击球点"
           >
-            ‹
+            <span class="seg-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/>
+                <circle cx="12" cy="12" r="2.4" fill="currentColor"/>
+              </svg>
+            </span>
           </button>
-          <div class="aim-angle-track">
-            <span class="aim-angle-center"></span>
+
+          <!-- 紧靠 ② 上方的紧凑面板：击球点圆盘 + 抬杆高度，上下两块等宽区域，各自上方有操作指引 -->
+          <div id="cueballPopup" class="cueball-popup" hidden role="dialog" aria-label="白球操作设置">
+          <div class="cueball-popup-body">
+            <div class="cb-area cb-disc-area">
+              <div class="cb-area-head">
+                <div class="cb-area-title">白球击球点</div>
+                <div class="cb-area-desc">点击白球设置击球位置</div>
+              </div>
+              <div id="ballContainerWrapper" class="ballContainerWrapper">
+                <div id="ballContainer" class="ballContainer">
+                  <div id="objectBall" class="objectBall"></div>
+                  <div id="cueBall" class="cueBall">
+                    <div id="cueTip" class="cueTip"></div>
+                  </div>
+                </div>
+              </div>
+              <button id="resetSpin" class="resetSpin" aria-label="加塞复位">⟲</button>
+            </div>
+            <div class="cb-area cb-tilt-area">
+              <div class="cb-area-head">
+                <div class="cb-area-title">抬杆高度</div>
+                <div class="cb-area-desc">拖动球杆调整抬杆高度</div>
+              </div>
+              <angle-input id="cueTilt" aria-label="抬杆角度"></angle-input>
+            </div>
+          </div>
+            <span class="cueball-popup-arrow" aria-hidden="true"></span>
+          </div>
+        </div>
+
+        <!-- ③ 视角（camera）：统一木纹金边按钮 -->
+        <div class="bb-seg bb-seg-camera">
+          <button
+            class="menuButton aim"
+            title="切换视角"
+            id="camera"
+            type="submit"
+            aria-label="切换视角"
+          >
+            <span class="cam-row" aria-hidden="true">
+              <span class="seg-icon cam-icon">
+                <svg viewBox="0 0 36 28" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="2" y="6" width="32" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/>
+                  <path d="M12 6 L14 2 H22 L24 6 Z" fill="currentColor" stroke="none"/>
+                  <circle cx="18" cy="15" r="6" fill="none" stroke="currentColor" stroke-width="2.5"/>
+                </svg>
+              </span>
+              <span class="cam-mode"></span>
+            </span>
+            <span class="seg-label" hidden>视角</span>
+          </button>
+        </div>
+
+        <!-- ④ 击球力度条（v1.1.35：完全按图 2 重做 — 白色胶囊外壳 + 大号百分比 + 凹陷药丸轨道 + 橙红渐变填充 + 黑色 8 球滑块） -->
+        <div class="bb-seg bb-seg-power">
+          <div id="powerSliderContainer" class="powerSliderContainer">
+            <span id="powerPercent" class="powerPercent">65%</span>
+            <!-- v1.1.49：黄色 track 容器 fill:100% 真正撑满 .powerSliderContainer 的内容宽度，
+                 橙色 fill 和黑 8 球重新挂回 track 内（width/left:var(--p) 都以 track 宽度为基准），
+                 这样橙条天然不超出黄色 track，track 也彻底填满右侧空白 → 红圈段填满 + 不越界。 -->
+            <div class="power-track" aria-hidden="true">
+              <div class="power-fill"></div>
+              <div class="power-ball">8</div>
+            </div>
             <input
+              class="powerSlider"
               type="range"
-              id="aimAngle"
-              class="aim-angle-slider"
-              min="-1"
+              min="0"
               max="1"
-              step="0.0005"
-              value="0"
-              aria-label="横向瞄准角度"
+              step="0.01"
+              value="0.65"
+              id="cuePower"
+              aria-label="击球力度"
             />
           </div>
-          <button
-            type="button"
-            class="aim-nudge"
-            id="aimNudgeR"
-            aria-label="瞄准右微调"
-          >
-            ›
-          </button>
         </div>
-      </div>
-      <div class="outerMenu">
-        <button
-          class="menuButton half-height"
-          title="留言"
-          id="comment"
-          type="submit"
-          aria-label="留言"
-          hidden
-        >
-          🗨
-        </button>
-        <div id="commentMenu" class="comment-menu" style="display: none"></div>
-        <button
-          class="menuButton half-height"
-          title="截图"
-          id="diagram"
-          type="submit"
-          aria-label="截图"
-          hidden
-        >
-          📸
-        </button>
-        <button
-          class="menuButton half-height"
-          title="分享"
-          id="share"
-          type="submit"
-          aria-label="分享"
-          hidden
-        >
-          🔗
-        </button>
-        <button
-          class="menuButton half-height"
-          title="认输"
-          id="concede"
-          type="submit"
-          aria-label="认输"
-          hidden
-        >
-          🏳️
-        </button>
-        <button
-          class="menuButton half-height"
-          title="分析"
-          id="analysis"
-          type="submit"
-          aria-label="击球分析"
-          hidden
-        >
-          🔍
-        </button>
-        <button
-          class="menuButton half-height"
-          title="菜单"
-          id="menu"
-          type="submit"
-          aria-label="菜单"
-        >
-          <svg
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <line x1="3" y1="6" x2="21" y2="6"></line>
-            <line x1="3" y1="12" x2="21" y2="12"></line>
-            <line x1="3" y1="18" x2="21" y2="18"></line>
-          </svg>
-        </button>
-        <button
-          class="menuButton aim"
-          title="切换视角"
-          id="camera"
-          type="submit"
-          aria-label="切换视角"
-        >
-          🎥
-        </button>
+
+        <!-- ⑤ 细微瞄准条（缩短） -->
+        <div class="bb-seg bb-seg-aim">
+          <div id="aimAngleBar" class="aim-angle-bar" hidden>
+            <button
+              type="button"
+              class="aim-nudge"
+              id="aimNudgeL"
+              aria-label="瞄准左微调"
+            >
+              ‹
+            </button>
+            <div class="aim-angle-track">
+              <span class="aim-angle-center"></span>
+              <input
+                type="range"
+                id="aimAngle"
+                class="aim-angle-slider"
+                min="-1"
+                max="1"
+                step="0.0005"
+                value="0"
+                aria-label="横向瞄准角度"
+              />
+            </div>
+            <button
+              type="button"
+              class="aim-nudge"
+              id="aimNudgeR"
+              aria-label="瞄准右微调"
+            >
+              ›
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div id="ballTray" class="tray-container" aria-live="polite" role="log">
-      <div class="nav-btn btn-left" id="trayLeft">❮</div>
-      <div class="ball-tray-list" id="ballTrayList"></div>
-      <div class="nav-btn btn-right" id="trayRight">❯</div>
-    </div>
-    <div class="tray-score-container">
-      <div id="p1Score" class="p1Score"></div>
-      <div id="p2Score" class="p2Score"></div>
+    <template id="angle-input-template">
+      <div class="area" id="area">
+        <div class="ball"></div>
+        <div class="rotator" id="rot">
+          <div class="stick">
+            <div class="tip"></div>
+            <div class="ferrule"></div>
+            <div class="shaft"></div>
+            <div class="butt"></div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <div id="scoreCard" class="score-card">
+      <div class="sc-tabs">
+        <button type="button" class="sc-tab is-active" id="scTab1" data-player="1">
+          <span class="sc-tab-no">1</span>
+          <span class="sc-tab-name">我方</span>
+        </button>
+        <button type="button" class="sc-tab" id="scTab2" data-player="2">
+          <span class="sc-tab-no">2</span>
+          <span class="sc-tab-name">对方</span>
+        </button>
+      </div>
+      <div class="sc-main">
+        <div class="sc-score sc-score-p1">
+          <div id="p1Score" class="p1Score"></div>
+        </div>
+        <div class="sc-score sc-score-p2">
+          <div id="p2Score" class="p2Score"></div>
+        </div>
+      </div>
+      <!-- v1.1.31：训练模式专用「已进球」+ 时间（平时隐藏） -->
+      <div class="sc-train" id="scTrain" aria-label="已进球">
+        <span class="sc-train-label">已进球</span>
+        <span id="pocketedCount" class="sc-train-count">0</span>
+      </div>
+      <div class="sc-meta" id="scMeta">
+        <div class="sc-time" id="scTime">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/>
+            <path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <span id="scTimeText">00:00</span>
+        </div>
+      </div>
     </div>
 
     <script defer src="three_core.js"></script>
