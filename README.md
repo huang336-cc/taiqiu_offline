@@ -11,7 +11,7 @@
   <img src="docs/screenshots/topview-eightball.jpg" alt="八球顶视" width="48%" />
 </p>
 <p align="center">
-  <img src="docs/screenshots/cueview-nineball.jpg" alt="九球击球视角" width="48%" />
+  <img src="docs/screenshots/cueview-nineball.jpg" alt="八球击球视角" width="48%" />
 </p>
 
 > **修改声明**
