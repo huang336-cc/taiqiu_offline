@@ -53,7 +53,9 @@ const DEFAULTS: GameSettings = {
   lastRule: "nineball",
   vsBot: false,
   fpsCap: 0,
-  targetLineLength: 2,
+  // v1.2.5：默认值改为最长（3）。用户反馈辅助线太短，默认给最长档，
+  // 完整显示「白球→被击球→袋口」走向；旧存档用户仍保留各自选择。
+  targetLineLength: 3,
   aimLine: true,
   aimSlider: true,
   skin: "classic",
@@ -318,6 +320,9 @@ export class Settings {
       merged.lod = detectRecommendedLod()
     }
     merged.lod = clampLod(merged.lod)
+    // v1.2.11 #F10：横向瞄准滑动条不再可关闭，强制恒 true。
+    // 旧存档可能存了 false，这里纠正；UI 开关已从 help.html 删除。
+    merged.aimSlider = true
     Settings.cache = merged
     return merged
   }
@@ -377,6 +382,34 @@ export class Settings {
       globalThis.localStorage?.setItem(SEEN_GUIDE_KEY, "1")
     } catch (e) {
       console.warn("[Settings] markSeenGuide 兜底 key 写入失败", e)
+    }
+  }
+
+  /**
+   * v1.2.11 #F6：复位 seenGuide（与 markSeenGuide 对称，四通道复位）。
+   *
+   * 用于设置页「重新打开新手引导」——原 replayTutorial() 只改 localStorage
+   * 两个 key 与 globalThis，未更新 Settings.cache.seenGuide，导致
+   * hasSeenGuide() 仍读 cache 返回 true → 引导永不显示。
+   * 现在四通道同步复位，下次进对局 hasSeenGuide()=false → 显示 1 次，
+   * finish()→markSeenGuide 置回 true → 之后再不自动弹。
+   */
+  static resetSeenGuide() {
+    const s = Settings.get();
+    s.seenGuide = false;
+    (globalThis as any).__billiardsSeenGuide = false;
+    try {
+      globalThis.localStorage?.setItem(
+        STORAGE_KEY,
+        JSON.stringify(Settings.get())
+      );
+    } catch (e) {
+      console.warn("[Settings] resetSeenGuide 主 key 写入失败", e);
+    }
+    try {
+      globalThis.localStorage?.removeItem(SEEN_GUIDE_KEY);
+    } catch (e) {
+      /* 忽略 */
     }
   }
 

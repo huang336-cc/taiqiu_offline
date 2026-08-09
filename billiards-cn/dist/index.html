@@ -20,9 +20,11 @@
     <link rel="stylesheet" type="text/css" href="css/wood.css" />
     <link rel="stylesheet" type="text/css" href="css/ingame-cn.css" />
     <!-- v1.1.16: 底部栏改版 + 设置按钮右上角 -->
-    <link rel="stylesheet" type="text/css" href="css/bottombar-v2.css?v=1.2.1" />
+    <link rel="stylesheet" type="text/css" href="css/bottombar-v2.css?v=1.2.8" />
     <!-- v1.1.18: 顶部计分板卡片（参考图2） -->
     <link rel="stylesheet" type="text/css" href="css/scoreboard-v2.css" />
+    <!-- v1.2.9 #F5：回放进度条（可滑动 + 进球吸附点） -->
+    <link rel="stylesheet" type="text/css" href="css/replay-seek.css?v=1.2.9" />
   </head>
 
   <body>
@@ -102,35 +104,6 @@
               </svg>
             </span>
           </button>
-
-          <!-- 紧靠 ② 上方的紧凑面板：击球点圆盘 + 抬杆高度，上下两块等宽区域，各自上方有操作指引 -->
-          <div id="cueballPopup" class="cueball-popup" hidden role="dialog" aria-label="白球操作设置">
-          <div class="cueball-popup-body">
-            <div class="cb-area cb-disc-area">
-              <div class="cb-area-head">
-                <div class="cb-area-title">白球击球点</div>
-                <div class="cb-area-desc">点击白球设置击球位置</div>
-              </div>
-              <div id="ballContainerWrapper" class="ballContainerWrapper">
-                <div id="ballContainer" class="ballContainer">
-                  <div id="objectBall" class="objectBall"></div>
-                  <div id="cueBall" class="cueBall">
-                    <div id="cueTip" class="cueTip"></div>
-                  </div>
-                </div>
-              </div>
-              <button id="resetSpin" class="resetSpin" aria-label="加塞复位">⟲</button>
-            </div>
-            <div class="cb-area cb-tilt-area">
-              <div class="cb-area-head">
-                <div class="cb-area-title">抬杆高度</div>
-                <div class="cb-area-desc">拖动球杆调整抬杆高度</div>
-              </div>
-              <angle-input id="cueTilt" aria-label="抬杆角度"></angle-input>
-            </div>
-          </div>
-            <span class="cueball-popup-arrow" aria-hidden="true"></span>
-          </div>
         </div>
 
         <!-- ③ 视角（camera）：统一木纹金边按钮 -->
@@ -183,14 +156,15 @@
         <!-- ⑤ 细微瞄准条（缩短） -->
         <div class="bb-seg bb-seg-aim">
           <div id="aimAngleBar" class="aim-angle-bar" hidden>
-            <button
-              type="button"
+            <div
+              role="button"
+              tabindex="0"
               class="aim-nudge"
               id="aimNudgeL"
               aria-label="瞄准左微调"
             >
               ‹
-            </button>
+            </div>
             <div class="aim-angle-track">
               <span class="aim-angle-center"></span>
               <input
@@ -204,14 +178,15 @@
                 aria-label="横向瞄准角度"
               />
             </div>
-            <button
-              type="button"
+            <div
+              role="button"
+              tabindex="0"
               class="aim-nudge"
               id="aimNudgeR"
               aria-label="瞄准右微调"
             >
               ›
-            </button>
+            </div>
           </div>
         </div>
       </div>
@@ -231,29 +206,25 @@
       </div>
     </template>
 
-    <div id="scoreCard" class="score-card">
-      <div class="sc-tabs">
-        <button type="button" class="sc-tab is-active" id="scTab1" data-player="1">
-          <span class="sc-tab-no">1</span>
-          <span class="sc-tab-name">我方</span>
-        </button>
-        <button type="button" class="sc-tab" id="scTab2" data-player="2">
-          <span class="sc-tab-no">2</span>
-          <span class="sc-tab-name">对方</span>
-        </button>
-      </div>
-      <div class="sc-main">
-        <div class="sc-score sc-score-p1">
-          <div id="p1Score" class="p1Score"></div>
+    <!-- v1.2.6：比分栏改为「两列分列展示」：左侧玩家 / 右侧对手（含电脑），各自显示
+         玩家名 + 大号进球数 + 进球的整颗球颜色；时间统一放在最底下。
+         玩家名固定为「玩家」（vs-bot 对方显示「电脑」，其他模式显示「对手」）。 -->
+    <div id="scoreCard" class="score-card v2">
+      <div class="sc-players">
+        <div class="sc-player" data-player="1">
+          <div class="sc-player-head">
+            <span class="sc-player-label" id="scP1Label">玩家</span>
+            <span class="sc-player-score" id="p1Score">0</span>
+          </div>
+          <div class="sc-player-balls" id="p1Balls"></div>
         </div>
-        <div class="sc-score sc-score-p2">
-          <div id="p2Score" class="p2Score"></div>
+        <div class="sc-player" data-player="2">
+          <div class="sc-player-head">
+            <span class="sc-player-label" id="scP2Label">对手</span>
+            <span class="sc-player-score" id="p2Score">0</span>
+          </div>
+          <div class="sc-player-balls" id="p2Balls"></div>
         </div>
-      </div>
-      <!-- v1.1.31：训练模式专用「已进球」+ 时间（平时隐藏） -->
-      <div class="sc-train" id="scTrain" aria-label="已进球">
-        <span class="sc-train-label">已进球</span>
-        <span id="pocketedCount" class="sc-train-count">0</span>
       </div>
       <div class="sc-meta" id="scMeta">
         <div class="sc-time" id="scTime">
@@ -266,10 +237,54 @@
       </div>
     </div>
 
-    <!-- v1.2.2：积分牌下方「已进球」—— 整颗球 + 号码，提醒用户当前球形 -->
-    <div class="pocketed-balls" id="pocketedBalls" aria-label="已进球" hidden>
-      <span class="pb-label">已进球</span>
-      <div class="pb-list" id="pocketedBallsList"></div>
+    <!-- v1.2.9 #F5：回放进度条（仅回放模式显示）。可拖动时间点到本杆任意时刻，
+         并带「进球前时间点」吸附点（红球亮点），滑动到附近自动吸附，直觉察觉进球。 -->
+    <div id="replaySeekBar" class="replay-seek-bar" hidden>
+      <span class="replay-seek-label">回放</span>
+      <div class="replay-seek-wrap">
+        <input
+          id="replaySeek"
+          type="range"
+          min="0"
+          max="1000"
+          step="1"
+          value="0"
+          aria-label="回放进度"
+        />
+        <div id="replaySeekSnaps" class="replay-seek-snaps" aria-hidden="true"></div>
+      </div>
+    </div>
+
+    <!-- v1.2.5：白球操作弹窗移到 body 直接子级，脱离底部栏的层叠/变形上下文，
+         使 position:fixed 稳定相对视口定位；具体 left/bottom 由 aiminputs.ts 的
+         positionCueBallPopup() 依据触发按钮实时计算并夹紧在视口内（规避小米 13 等
+         WebView 下 fixed 退化为相对祖先定位而溢出屏幕的 bug）。 -->
+    <div id="cueballPopup" class="cueball-popup" hidden role="dialog" aria-label="白球操作设置">
+      <div class="cueball-popup-body">
+        <div class="cb-area cb-disc-area">
+          <div class="cb-area-head">
+            <div class="cb-area-title">白球击球点</div>
+            <div class="cb-area-desc">点击白球设置击球位置</div>
+          </div>
+          <div id="ballContainerWrapper" class="ballContainerWrapper">
+            <div id="ballContainer" class="ballContainer">
+              <div id="objectBall" class="objectBall"></div>
+              <div id="cueBall" class="cueBall">
+                <div id="cueTip" class="cueTip"></div>
+              </div>
+            </div>
+          </div>
+          <button id="resetSpin" class="resetSpin" aria-label="加塞复位">⟲</button>
+        </div>
+        <div class="cb-area cb-tilt-area">
+          <div class="cb-area-head">
+            <div class="cb-area-title">抬杆高度</div>
+            <div class="cb-area-desc">拖动球杆调整抬杆高度</div>
+          </div>
+          <angle-input id="cueTilt" aria-label="抬杆角度"></angle-input>
+        </div>
+      </div>
+      <span class="cueball-popup-arrow" aria-hidden="true"></span>
     </div>
 
     <script defer src="three_core.js"></script>

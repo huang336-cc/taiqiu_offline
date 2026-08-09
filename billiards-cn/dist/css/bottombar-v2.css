@@ -236,13 +236,18 @@ html body.game-ready #panel {
 
 /* ---------- 3. ② 白球击球点 popup：圆盘 + 图形化抬杆 ---------- */
 .cueball-popup {
-  position: absolute;
-  /* v1.2.2：原 left:50% + translateX(-50%) 会把 256px 弹窗以最左侧的 ② 按钮为中心，
-     导致弹窗左半边溢出屏幕左缘。改为锚定到按钮左缘（贴近屏幕左安全区），不再居中溢出。 */
+  /* v1.2.4：改为相对【视口】固定定位，彻底根治「最外框超出屏幕尺寸」。
+     根因：此前 position:absolute 以 ② 按钮（距视口左约 87px、宽仅 ~74px）为
+     包含块，left:8px 实际是按钮内左缘 8px（≈ 视口 95px 处），256px 宽弹窗
+     右沿会越过窄屏右缘；之前 v1.2.2 的 left:50% 则反向溢出左缘。
+     改为 fixed + 视口安全区左锚 + max-width 后，无论按钮在何处、屏幕多窄，
+     弹窗都贴视口左安全区、宽度不超视口，不再溢出。 */
+  position: fixed;
   left: max(8px, env(safe-area-inset-left, 8px));
   right: auto;
   transform: none;
-  bottom: calc(100% + 12px);
+  /* 紧贴底部栏上方（底部栏高 70px + 底部安全区），不再用 100% 相对按钮 */
+  bottom: calc(70px + var(--cn-safe-bottom, 0px) + 12px);
   width: 256px;
   /* 极窄屏兜底：弹窗宽度不超过视口，避免右缘溢出 */
   max-width: calc(100vw - 16px);
@@ -268,10 +273,10 @@ html body.game-ready #panel {
   align-items: stretch;
   gap: 8px;
 }
-/* 向下小箭头，指向 ② 按钮（弹窗左锚后，箭头改指到 ② 按钮中心） */
+/* 向下小箭头，指向 ② 按钮（弹窗改为视口左锚后，箭头改指到 ② 按钮大致水平位置） */
 .cueball-popup-arrow {
   position: absolute;
-  left: 34px;
+  left: 96px;
   bottom: -11px;
   transform: none;
   width: 0;
@@ -473,6 +478,13 @@ html body.game-ready #panel {
   position: relative;
   flex: 1 1 0%;
   width: 100%;
+  /* v1.2.10 #F9：恢复 v1.2.8 的 260px 下限。
+     v1.2.9 改为 min-width:0 后，在窄屏 / 部分 Android WebView 下
+     .power-track 被 flex 收缩压扁 → .power-fill { width:var(--p) }
+     计算宽度 ≈ 0，橙→红渐变填充完全看不见，只剩黑 8 球露出来。
+     回到 260px 保证 track 有稳定宽度，fill 必现。
+     代价：极窄屏 100% 时 8 球可能略越右缘，但用户原话"恢复上一版"
+     明确认可此取舍。 */
   min-width: 260px;
   height: 32px;
   background: linear-gradient(180deg, #ffe6c2 0%, #f3cb88 100%);
@@ -527,7 +539,10 @@ html body.game-ready #panel {
    100% 时精准卡在 track 右缘圆角内侧，不会再越出黄色 track。 */
 .bb-seg-power .power-ball {
   position: absolute;
-  left: var(--p, 65%);
+  /* v1.2.8 #E3：黑 8 球在 0%/100% 两端会整体越出黄色 track 边框。
+     用 clamp 把球心限制在 [半宽, 轨道宽-半宽] 区间内，球始终完整落在
+     凹轨内（translate(-50%) 以球心定位，半宽 = 38px/2 = 19px）。 */
+  left: clamp(19px, var(--p, 65%), calc(100% - 19px));
   top: 50%;
   transform: translate(-50%, -50%);
   width: 38px;
@@ -684,22 +699,31 @@ html body.game-ready #panel {
   filter: brightness(0.92);
 }
 #menu .gear {
+  /* v1.2.6：与底栏统一木纹金边按钮配色同步：渐变木色背景 + 金色描边 + 与 .seg-trigger 同款 inset 高光与投影 */
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #f4cc6a 0%, #c89838 55%, #a87828 100%);
-  border: 2.5px solid #6a4818;
+  background: linear-gradient(180deg, #6b4a22 0%, #4a3014 100%);
+  border: 2px solid #c89534;
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow:
-    0 4px 14px rgba(0, 0, 0, 0.55),
-    inset 0 2px 3px rgba(255, 255, 255, 0.35);
+    inset 0 1px 2px rgba(255, 255, 255, 0.18),
+    0 4px 14px rgba(0, 0, 0, 0.55);
 }
 #menu .gear svg {
+  /* SVG 描边色随父元素 color（#f3d79a 奶白），与底栏图标统一 */
   width: 32px;
   height: 32px;
-  fill: #2a1a08;
+  fill: none;
+  stroke: #f3d79a;
+  stroke-width: 2.2;
+}
+#menu .gear svg [fill="currentColor"],
+#menu .gear svg circle[fill="currentColor"] {
+  fill: #f3d79a;
+  stroke: none;
 }
 /* 隐藏原 .menuButton svg 里的汉堡图标（被齿轮 SVG 取代） */
 #menu > svg {

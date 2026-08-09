@@ -87,6 +87,19 @@ export class Container {
    * simulation accuracy. */
   timeScale = 1
 
+  /**
+   * v1.2.9 #F3 / #F5：回放模式专用状态。
+   * - replayPaused：用户正在拖动进度条（seek）时为 true，强制 timeScale=0
+   *   冻结物理，避免与拖动冲突；松手后复位由 Replay 控制器恢复。
+   * - replayTimeScaleHook：每帧由 Replay 控制器回调，返回本帧应使用的 timeScale
+   *   （#F3 依据本杆「最后碰撞/进袋 + 提前量」动态决定 1 或 REPLAY_FAST）。
+   * - replayFrameHook：每帧由 Replay 控制器回调，用于刷新进度条 UI（#F5）。
+   * 三者均由 Replay 在 onFirst 内挂载、退出回放时清空。
+   */
+  replayPaused = false
+  replayTimeScaleHook: (() => number) | null = null
+  replayFrameHook: (() => void) | null = null
+
   private hudScores = {
     p1: 0,
     p2: 0,
@@ -329,6 +342,20 @@ try {
   advance(elapsed) {
     this.frame?.(elapsed)
 
+    // v1.2.9 #F3 / #F5：回放模式下每帧决定 timeScale。
+    // - 用户拖动进度条（seek）时冻结物理（timeScale=0）；
+    // - 否则由 Replay 控制器回调给出本杆的动态倍速（常速 → 最后碰撞/进袋后倍速）；
+    // - 非回放时保持 timeScale 原值（实时对局恒为 1）。
+    if (this.replayMode) {
+      if (this.replayPaused) {
+        this.timeScale = 0
+      } else if (this.replayTimeScaleHook) {
+        this.timeScale = this.replayTimeScaleHook()
+      } else {
+        this.timeScale = 1
+      }
+    }
+
     const steps = Math.floor((elapsed * this.timeScale) / this.step)
     const computedElapsed = steps * this.step
     const stateBefore = this.table.allStationary()
@@ -346,6 +373,11 @@ try {
       this.table.cue.hittingAnimation = false
     }
     this.sound.processOutcomes(this.table.outcome)
+
+    // v1.2.9 #F5：回放每帧刷新进度条 UI（仅回放模式、由 Replay 控制器提供回调）
+    if (this.replayMode) {
+      this.replayFrameHook?.()
+    }
   }
 
   processEvents() {

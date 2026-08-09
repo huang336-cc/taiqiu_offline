@@ -228,7 +228,6 @@ export class View {
 
     this.renderer?.render(this.scene, cam.camera)
   }
-
   /**
    * v1.1.10：供 index.ts 的 resize/orientationchange 监听器调用。
    * 折叠/旋转后主动触发一次尺寸更新 + 渲染。
@@ -280,8 +279,8 @@ export class View {
     this.table.mesh = this.assets.table
     const isSnooker = this.assets.rules.asset === Snooker.tablemodel
     this.scene.add(new Grid().generateLineSegments(isSnooker))
-    // item 6：在库边木块上贴品牌 LOGO
-    this.applyCushionLogos()
+    // v1.2.11 #F7：删除台面上的奥特曼 LOGO 圆盘（用户要求删除台球桌面上的图标）。
+    // this.applyCushionLogos()
     // 初始应用环境场景
     this.applyScene(Settings.get().scene)
   }
@@ -333,7 +332,13 @@ export class View {
         })
       )
       m.position.set(p.pos[0], p.pos[1], 0)
-      m.rotation.x = -Math.PI / 2
+      /* v1.2.8 #E5：LOGO 圆盘「水平平铺」在台呢上，而非「立」在台上。
+         本游戏为 Z-up（见 v1.1.6 注释），CircleGeometry 默认在 XY 平面、法线 +Z（即朝上），
+         圆盘天然贴合台面。原 rotation.x = -π/2 会把法线拧到 +Y（水平方向），
+         导致圆盘竖立在台面上、像一块立牌 —— 这正是用户反馈的「立在台球桌上」。
+         改为 0：圆盘法线回到 +Z，平躺于台呢，俯视/斜俯视下即「平铺」效果。
+         rotation.z = rotZ 仍用于在盘面内旋转短边 LOGO 的方向。 */
+      m.rotation.x = 0
       m.rotation.z = p.rotZ
       m.renderOrder = 5
       m.userData.pendingLogo = true

@@ -29,3 +29,7 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# 发布产物（APK 通过 Release 附件发布，源码包不入库）
+apk-publish/*.apk
+apk-publish/*.tar.gz

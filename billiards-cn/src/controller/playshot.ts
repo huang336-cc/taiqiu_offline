@@ -17,7 +17,9 @@ export class PlayShot extends ControllerBase {
   }
 
   override onFirst() {
-    this.container.table.cue.aimInputs?.animateSliderHit()
+    // v1.2.11 #F8：不再调用 animateSliderHit()。
+    // 原先击球后力度条先清 0 再补间回原值，用户要求击球后维持原百分比不动。
+    // this.container.table.cue.aimInputs?.animateSliderHit()
   }
 
   override handleStationary(_) {

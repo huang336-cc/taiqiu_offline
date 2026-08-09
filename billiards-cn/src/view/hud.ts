@@ -1,25 +1,37 @@
 import { id } from "../utils/dom"
 import type { Table } from "../model/table"
 import type { Ball } from "../model/ball"
+import { Session } from "../network/client/session"
 
 export class Hud {
   p1Element: HTMLElement | null
   p2Element: HTMLElement | null
   middleElement: HTMLElement | null
   breakElement: HTMLElement | null
-  // v1.1.18 顶部计分板卡（图2 风格）
-  tab1Element: HTMLButtonElement | null
-  tab2Element: HTMLButtonElement | null
-  scoreP1Wrapper: HTMLElement | null
-  scoreP2Wrapper: HTMLElement | null
+  /** v1.2.6：v2 计分板——选手列容器 + 标签 + 已进球行 */
+  private readonly p1PlayerEl: HTMLElement | null
+  private readonly p2PlayerEl: HTMLElement | null
+  private readonly p1LabelEl: HTMLElement | null
+  private readonly p2LabelEl: HTMLElement | null
+  private readonly p1BallsEl: HTMLElement | null
+  private readonly p2BallsEl: HTMLElement | null
+  /** 顶部「break」分（老 HUD 兼容），新 v2 比分栏不展示 */
+  breakScoreElement: HTMLElement | null
   timeTextElement: HTMLElement | null
-  // v1.1.31：训练模式专用的「已进球」计数器（#pocketedCount）
-  pocketedElement: HTMLElement | null
-  // v1.2.2：积分牌下方「已进球」整颗球列表（#pocketedBallsList）
-  private readonly pocketedOuter: HTMLElement | null
-  private readonly pocketedList: HTMLElement | null
-  private pocketedKey = ""
-  // 训练模式判定：body 上有 train-mode 类时，updateScores 把 p1 视作已进球写入这里
+
+  /**
+   * v1.2.6：每位玩家已进球球号集合。在 advance() 每帧调用 updatePocketedBalls 时，
+   * 通过对比前后落袋集合，把新增的球号归到「当前回合选手」（setActivePlayer 设置）。
+   * 这样进球归属准确：球在 shot 动画期间落袋，active 仍是出杆选手，不会被算到下一杆。
+   */
+  private readonly playerPocketed: { 1: Set<number>; 2: Set<number> } = {
+    1: new Set(),
+    2: new Set(),
+  }
+  private prevPocketedAll = new Set<number>()
+  private activePlayer: 1 | 2 = 1
+
+  // 训练模式判定
   private readonly isTrainMode: boolean = false
   private timerId: number | null = null
   private timerStart: number = 0
@@ -27,38 +39,25 @@ export class Hud {
   constructor() {
     this.p1Element = id("p1Score")
     this.p2Element = id("p2Score")
-    this.breakElement = id("breakScore")
-    this.pocketedElement = id("pocketedCount")
-    this.pocketedOuter = id("pocketedBalls")
-    this.pocketedList = id("pocketedBallsList")
+    this.breakScoreElement = id("breakScore")
+    this.p1PlayerEl = document.querySelector<HTMLElement>(".sc-player[data-player='1']")
+    this.p2PlayerEl = document.querySelector<HTMLElement>(".sc-player[data-player='2']")
+    this.p1LabelEl = id("scP1Label")
+    this.p2LabelEl = id("scP2Label")
+    this.p1BallsEl = id("p1Balls")
+    this.p2BallsEl = id("p2Balls")
 
-    let middle = id("hudMiddle")
-    if (!middle && this.p1Element && this.p1Element.parentNode) {
-      middle = document.createElement("div")
-      middle.id = "hudMiddle"
-      middle.className = "hudMiddle"
-      // v1.1.27：v1.1.18 的 tab 计分板把 p1Score/p2Score 拆到不同 wrapper，
-      // 此时 p2Element 不是 p1Element.parentNode 的子节点，原 insertBefore 会抛
-      // "The node before which the new node is to be inserted is not a child of this node"。
-      // 兜底：仅当 p2 确实是同一 parent 的子节点时才 insertBefore，否则 append。
-      const parent = this.p1Element.parentNode
-      if (this.p2Element && this.p2Element.parentNode === parent) {
-        parent.insertBefore(middle, this.p2Element)
-      } else {
-        parent.appendChild(middle)
-      }
-    }
-    this.middleElement = middle
+    this.middleElement = id("hudMiddle")
 
-    this.tab1Element = id("scTab1") as HTMLButtonElement
-    this.tab2Element = id("scTab2") as HTMLButtonElement
-    this.scoreP1Wrapper = this.p1Element?.parentElement ?? null
-    this.scoreP2Wrapper = this.p2Element?.parentElement ?? null
     this.timeTextElement = id("scTimeText")
 
-    // v1.1.18：训练模式 → 给 body 加类，CSS 切换显示（仅显示已进球 + 时间）
-    // v1.1.34：菜单「自己练习」(solo) 以 practice=true 启动，同样只显示进球数 + 时间，
-    //          彻底去掉「我方 / 对方」与「玩家 (solo)」等名称标签。
+    // v1.2.6：根据模式设置选手标签：p1 永远是「玩家」，p2 在电脑对战时为「电脑」，其他为「对手」
+    if (this.p1LabelEl) this.p1LabelEl.textContent = "玩家"
+    if (this.p2LabelEl) {
+      this.p2LabelEl.textContent = Session.isBotMode() ? "电脑" : "对手"
+    }
+
+    // 训练模式 → body.train-mode（CSS 隐藏 p2 列与共享已进球区）
     try {
       const params = new URLSearchParams(location.search)
       const ruleType = params.get("ruletype") ?? ""
@@ -74,31 +73,21 @@ export class Hud {
     } catch (_) {
       // 忽略 URL 解析失败
     }
-    // v1.1.31：缓存训练模式判定，updateScores 据此把 p1 写到已进球计数器
     this.isTrainMode = document.body.classList.contains("train-mode")
 
-    // v1.1.31：训练模式也要计时（之前是隐藏时间，本版改为仅显示已进球 + 时间）
     if (this.timeTextElement) {
       this.startTimer()
     }
   }
 
   setActivePlayer(active: 0 | 1 | 2) {
-    this.p1Element?.classList.toggle("is-active", active === 1)
-    this.p2Element?.classList.toggle("is-active", active === 2)
-    this.tab1Element?.classList.toggle("is-active", active === 1)
-    this.tab2Element?.classList.toggle("is-active", active === 2)
-    this.scoreP1Wrapper?.classList.toggle("is-active", active === 1)
-    if (this.scoreP1Wrapper) {
-      this.scoreP1Wrapper.setAttribute("data-player", "1")
-    }
-    this.scoreP2Wrapper?.classList.toggle("is-active", active === 2)
-    if (this.scoreP2Wrapper) {
-      this.scoreP2Wrapper.setAttribute("data-player", "2")
-    }
+    const p = active === 2 ? 2 : 1
+    this.activePlayer = p
+    this.p1PlayerEl?.classList.toggle("is-active", active === 1)
+    this.p2PlayerEl?.classList.toggle("is-active", active === 2)
   }
 
-  /** v1.1.18：启动用时计时（mm:ss）。每秒刷新一次，离开页面前自动清理。 */
+  /** v1.1.18：启动用时计时（mm:ss） */
   private startTimer() {
     if (this.timerId !== null) return
     this.timerStart = performance.now()
@@ -125,130 +114,106 @@ export class Hud {
     }
   }
 
-  private setHTML(element: HTMLElement | null, html: string) {
-    if (element) {
-      element.innerHTML = html
+  /**
+   * v1.2.6：刷新比分栏 + 按选手拆分已进球。
+   * - p1Score / p2Score 写入大号进球数（去掉旧的 name+value HTML，标签在专用元素）。
+   * - updatePocketedBalls 每帧调用：diff 前后落袋集合 → 新增球号归到「当前回合选手」。
+   * - 重开局（桌面无球落袋）时复位双方集合。
+   */
+  updateScores(
+    p1: number,
+    p2: number,
+    _p1Name?: string,
+    _p2Name?: string,
+    b: number = 0,
+    hideScore: boolean = false,
+    _p1Star: boolean = false,
+    _p2Star: boolean = false
+  ) {
+    if (hideScore) {
+      // 兼容老调用：练习模式隐藏分数，仅写 p1 占位
+      this.setText(this.p1Element, "")
+      this.setText(this.p2Element, "")
+      return
     }
+    this.setText(this.p1Element, String(p1))
+    this.setText(this.p2Element, String(p2))
   }
 
   /**
-   * v1.2.2：刷新积分牌下方的「已进球」整颗球列表。
-   * 取所有已落袋的编号球（不含母球），按号码升序渲染成「实心圆 + 号码」，
-   * 花球（号码 > 8）叠加白色横纹带。仅在落袋集合变化时重建 DOM。
+   * 每帧调用：刷新每位选手已进球的颜色球行。
+   * 关键：球在 advance 动画期间落袋，active 仍是出杆选手，
+   * 因此把新增球号归到 activePlayer 是正确的。
    */
   updatePocketedBalls(table: Table) {
-    const outer = this.pocketedOuter
-    const list = this.pocketedList
-    if (!outer || !list) return
     const pocketed = table.balls
       .filter(
         (b): b is Ball =>
           typeof b.label === "number" && b.label >= 1 && !b.onTable()
       )
-      .sort((a, b) => (a.label as number) - (b.label as number))
-    const key = pocketed.map((b) => b.label).join(",")
-    if (key === this.pocketedKey) return
-    this.pocketedKey = key
-    this.renderPocketedBalls(pocketed)
-    outer.hidden = pocketed.length === 0
+    const currentSet = new Set<number>(pocketed.map((b) => b.label as number))
+
+    // 重开局检测：桌面所有球归位 → 复位双方归因
+    if (currentSet.size === 0 && this.prevPocketedAll.size > 0) {
+      this.playerPocketed[1].clear()
+      this.playerPocketed[2].clear()
+    }
+
+    // diff：把新增球号归到当前回合选手
+    for (const label of currentSet) {
+      if (!this.prevPocketedAll.has(label)) {
+        this.playerPocketed[this.activePlayer].add(label)
+      }
+    }
+    this.prevPocketedAll = currentSet
+
+    this.renderPlayerBalls(this.p1BallsEl, this.playerPocketed[1], table)
+    this.renderPlayerBalls(this.p2BallsEl, this.playerPocketed[2], table)
   }
 
-  private renderPocketedBalls(balls: Ball[]) {
-    const list = this.pocketedList
-    if (!list) return
-    list.innerHTML = ""
-    for (const b of balls) {
-      const label = b.label as number
-      const hex = b.ballmesh?.color
-        ? "#" + b.ballmesh.color.getHexString()
+  private renderPlayerBalls(
+    container: HTMLElement | null,
+    labels: Set<number>,
+    table: Table
+  ) {
+    if (!container) return
+    // 排序保证稳定的视觉顺序
+    const sorted = Array.from(labels).sort((a, b) => a - b)
+    // 仅在内容变化时重建（按 label 序列作为 key）
+    const key = sorted.join(",")
+    if (container.dataset.key === key) return
+    container.dataset.key = key
+    container.innerHTML = ""
+    for (const label of sorted) {
+      const ball = table.balls.find((b) => b.label === label)
+      const hex = ball?.ballmesh?.color
+        ? "#" + ball.ballmesh.color.getHexString()
         : "#cccccc"
       const striped = label > 8
       const div = document.createElement("div")
-      div.className = "pb-ball" + (striped ? " striped" : "")
+      div.className = "sc-ball" + (striped ? " striped" : "")
       div.style.background = hex
       div.title = String(label)
       const num = document.createElement("span")
-      num.className = "pb-num"
+      num.className = "sc-ball-num"
       num.textContent = String(label)
       div.appendChild(num)
-      list.appendChild(div)
+      container.appendChild(div)
     }
   }
 
-  updateBreak(score: number) {
-    this.setText(this.p1Element, "")
-    this.setText(this.p2Element, "")
-    this.setText(this.middleElement, "")
-    if (score > 0 && this.breakElement) {
-      this.breakElement.textContent = ""
-      this.breakElement.appendChild(document.createTextNode("Break"))
-      this.breakElement.appendChild(document.createElement("br"))
-      this.breakElement.appendChild(document.createTextNode(score.toString()))
-    } else {
-      this.setText(this.breakElement, "")
+  /** v1.2.6：新局开始时复位双方归因（Hud 重建时也会经构造函数重新初始化） */
+  resetPocketedAttribution() {
+    this.playerPocketed[1].clear()
+    this.playerPocketed[2].clear()
+    this.prevPocketedAll.clear()
+    if (this.p1BallsEl) {
+      this.p1BallsEl.innerHTML = ""
+      delete this.p1BallsEl.dataset.key
     }
-  }
-
-  updateScores(
-    p1: number,
-    p2: number,
-    p1Name?: string,
-    p2Name?: string,
-    b: number = 0,
-    hideScore: boolean = false,
-    p1Star: boolean = false,
-    p2Star: boolean = false
-  ) {
-    this.setText(this.p1Element, "")
-    this.setText(this.p2Element, "")
-    this.setText(this.middleElement, "")
-    this.setText(this.breakElement, "")
-
-    if (hideScore) {
-      // Drill mode: show the player name only, no score count, no break.
-      this.setText(this.p1Element, p1Name ?? "")
-      return
-    }
-
-    // v1.1.31：训练模式仅显示「已进球」+ 时间，p1 值就是已进球数。
-    if (this.isTrainMode && this.pocketedElement) {
-      this.pocketedElement.textContent = String(p1)
-      // 训练模式不再渲染双方分数（CSS 也会隐藏 sc-main）
-      return
-    }
-
-    const p1Str = p1Star ? `${p1}⭐` : `${p1}`
-    const p2Str = p2Star ? `⭐${p2}` : `${p2}`
-
-    if (p1Name && p2Name) {
-      this.setHTML(
-        this.p1Element,
-        `<div class="hud-name">${p1Name}</div><div class="hud-value">${p1Str}</div>`
-      )
-      this.setHTML(
-        this.p2Element,
-        `<div class="hud-name">${p2Name}</div><div class="hud-value">${p2Str}</div>`
-      )
-      this.setHTML(
-        this.middleElement,
-        `<div class="hud-name">:</div><div class="hud-value"></div>`
-      )
-    } else if (p1Name) {
-      this.setHTML(
-        this.p1Element,
-        `<div class="hud-name">${p1Name}</div><div class="hud-value">${p1Str}</div>`
-      )
-    } else if (p2Name) {
-      this.setHTML(
-        this.p2Element,
-        `<div class="hud-name">${p2Name}</div><div class="hud-value">${p2Str}</div>`
-      )
-    } else {
-      this.setHTML(this.p1Element, `<div class="hud-value">${p1Str}</div>`)
-    }
-
-    if (b > 0) {
-      this.setText(this.breakElement, `Break: ${b}`)
+    if (this.p2BallsEl) {
+      this.p2BallsEl.innerHTML = ""
+      delete this.p2BallsEl.dataset.key
     }
   }
 }

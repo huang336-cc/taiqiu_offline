@@ -1,6 +1,7 @@
 import { id } from "../../utils/dom"
 import { Settings } from "../../utils/settings"
 import { unitAtAngle } from "../../utils/three-utils"
+import { Tutorial } from "../tutorial"
 import type { Container } from "../../container/container"
 
 /**
@@ -38,11 +39,12 @@ export class AimSlider {
   /** 拖动起点：屏幕 X 与当时的瞄准角，用于相对增量（不截断、可继续滑动） */
   private dragStartX = 0
   private dragStartAngle = 0
-  /** 长按微调按钮的连发定时器 */
-  private repeatTimer: ReturnType<typeof setInterval> | null = null
-  private repeatDelay: ReturnType<typeof setTimeout> | null = null
+  /** 拖动起点元素（用于区分「轻点微调按钮」与「滑动」） */
+  private dragStartTarget: HTMLElement | null = null
+  /** 本次手势是否发生了有效滑动（>3px 视为拖动，否则视为轻点） */
+  private didDrag = false
 
-  /** 单次微调步长（弧度）≈0.11°，配合长按连发可做精细修正 */
+  /** 单次微调步长（弧度）≈0.11°，轻点左右微调按钮时走一步 */
   private static readonly NUDGE_STEP = 0.002
 
   constructor(container: Container) {
@@ -71,50 +73,30 @@ export class AimSlider {
       this.bar?.addEventListener(type, swallow)
     }
 
+    // 仅在 track / bar 上挂 pointerdown 以发起拖动；move/up 改由 window
+    // 捕获阶段监听负责（见 onDragStart），以彻底绕开 WebView 的
+    // setPointerCapture 不派发 move、以及浏览器把横向拖动当成滚动触发
+    // pointercancel 导致「滑动无反应」的问题。
     if (this.track) {
-      // v1.2.2：改为在轨道（#aim-angle-track）上做相对拖动，
-      // 不再依赖 input[type=range] 的 value（原生 range 到两端会夹住，无法继续滑动瞄准）。
-      // 指针捕获保证手指滑出轨道范围也继续收到 move 事件。
       this.track.addEventListener("pointerdown", this.onDragStart)
-      this.track.addEventListener("pointermove", this.onDragMove)
-      this.track.addEventListener("pointerup", this.onDragEnd)
-      this.track.addEventListener("pointercancel", this.onDragEnd)
     }
-    this.bindNudge(this.nudgeLeft, -1)
-    this.bindNudge(this.nudgeRight, 1)
-  }
-
-  /** 左右微调按钮：点一下走一步，长按连发 */
-  private bindNudge(el: HTMLElement | null, sign: number) {
-    if (!el) return
-    const start = (e: Event) => {
-      e.preventDefault()
-      if (this.isDisabled()) return
-      this.cue.beginAimInteraction()
-      this.nudge(sign)
-      this.repeatDelay = setTimeout(() => {
-        this.repeatTimer = setInterval(() => this.nudge(sign), 40)
-      }, 320)
+    if (this.bar && this.bar !== this.track) {
+      this.bar.addEventListener("pointerdown", this.onDragStart)
     }
-    const stop = () => {
-      if (this.repeatDelay !== null) {
-        clearTimeout(this.repeatDelay)
-        this.repeatDelay = null
-      }
-      if (this.repeatTimer !== null) {
-        clearInterval(this.repeatTimer)
-        this.repeatTimer = null
-        this.cue.endAimInteraction()
-        return
-      }
-      // 只点了一下：没进入连发，也要把 begin 的计数还回去
-      this.cue.endAimInteraction()
-      this.cue.flashAimInteraction()
+    // v1.2.9 #F2：把拖动发起也直接挂到 ‹ › 微调按钮本身（不再仅靠冒泡）。
+    // 原生 <button> 在触摸拖动时会立刻触发 pointercancel（被当作点击/选择手势），
+    // 导致「按住滑动」在 onDragEnd 里被立即结束、表现为「按钮无法滑动拉杆」。
+    // 已把按钮改为 div[role=button]，这里再显式绑定 + onDragStart 内 preventDefault，
+    // 双保险确保从按钮按下也能稳定进入拖动。
+    if (this.nudgeLeft) {
+      this.nudgeLeft.addEventListener("pointerdown", this.onDragStart)
     }
-    el.addEventListener("pointerdown", start)
-    el.addEventListener("pointerup", stop)
-    el.addEventListener("pointerleave", stop)
-    el.addEventListener("pointercancel", stop)
+    if (this.nudgeRight) {
+      this.nudgeRight.addEventListener("pointerdown", this.onDragStart)
+    }
+    // v1.2.7 #D4：不再为左右微调按钮单独绑定 pointerdown。
+    // 整条（含 ‹ › 按钮）统一作为拖动/轻点表面，由 onDragStart/onDragEnd 处理，
+    // 既支持「按住滑动微调」，也保留「轻点单步微调」（见 onDragEnd）。
   }
 
   private nudge(sign: number) {
@@ -153,17 +135,40 @@ export class AimSlider {
 
   private onDragStart = (e: PointerEvent) => {
     if (this.isDisabled()) return
+    // v1.2.9 #F2：阻止原生按钮 / 链接的默认手势（聚焦、文本选择、点击态），
+    // 避免触摸拖动时被浏览器当成「点击并取消」，进而立刻触发 pointercancel
+    // 而结束拖动。放在最前，确保后续拖动逻辑稳定接管。
+    try {
+      e.preventDefault()
+    } catch {
+      /* 个别环境不支持 preventDefault，忽略 */
+    }
+    // v1.2.7 #D4：移除「落在微调按钮上不触发拖动」的守卫——整条（含左右 ‹ › 按钮）
+    // 都可按下并滑动微调瞄准。轻点微调按钮（无移动）仍保留「单步微调」，见 onDragEnd。
+    this.dragStartTarget = (e.target as HTMLElement) ?? null
+    // v1.2.6：新手引导步骤 2 推进——首次拖动瞄准条 = 用户在做瞄准动作
+    Tutorial.notifyAimDrag()
     this.dragging = true
+    this.didDrag = false
     // 记录起点：屏幕 X 与当时的真实瞄准角，后续用相对增量（不截断）
     this.dragStartX = e.clientX
     this.dragStartAngle = this.cue.aim.angle
     this.cue.beginAimInteraction()
-    // 捕获指针：手指滑出轨道范围也继续收到 move 事件，可一直滑下去
+    // 捕获指针（best-effort）：支持的浏览器里手指滑出范围也继续收到 move。
+    // 用 e.currentTarget（bar 或 track），因为监听现在同时挂在两者上。
+    const captureEl = (e.currentTarget as HTMLElement) ?? this.track ?? this.bar
     try {
-      this.track?.setPointerCapture(e.pointerId)
+      captureEl?.setPointerCapture(e.pointerId)
     } catch {
       /* 某些 WebView 在非 primary pointer 上会抛错，忽略 */
     }
+    // v1.2.6 #235：在 window 捕获阶段挂 move/up/cancel。
+    // 捕获阶段早于 bar 的冒泡 stopPropagation，因此即便手指滑出元素、
+    // 或浏览器把横拖当滚动而触发 pointercancel，也能持续收到 move 事件，
+    // 彻底解决「细微瞄准栏滑动无反应」的问题。
+    window.addEventListener("pointermove", this.onDragMove, true)
+    window.addEventListener("pointerup", this.onDragEnd, true)
+    window.addEventListener("pointercancel", this.onDragEnd, true)
   }
 
   private onDragMove = (e: PointerEvent) => {
@@ -173,6 +178,8 @@ export class AimSlider {
     const rect = track.getBoundingClientRect()
     if (rect.width <= 0) return
     const dx = e.clientX - this.dragStartX
+    // 移动超过阈值即判定为「拖动」，不再视作轻点
+    if (Math.abs(dx) > 3) this.didDrag = true
     // 一条满轨宽 = ±AIM_FINE_HALF_RANGE（与旧 range 灵敏度一致，但不再夹住两端）
     const HALF = Math.PI / 180
     const delta = (dx / rect.width) * 2 * HALF * this.viewSign()
@@ -188,12 +195,18 @@ export class AimSlider {
 
   private onDragEnd = (e: PointerEvent) => {
     if (!this.dragging) return
+    const wasTap = !this.didDrag
+    const startTarget = this.dragStartTarget
     this.dragging = false
     try {
       this.track?.releasePointerCapture(e.pointerId)
     } catch {
       /* 无捕获时忽略 */
     }
+    // 摘掉 window 捕获阶段的拖动监听，避免影响其它交互
+    window.removeEventListener("pointermove", this.onDragMove, true)
+    window.removeEventListener("pointerup", this.onDragEnd, true)
+    window.removeEventListener("pointercancel", this.onDragEnd, true)
     this.cue.endAimInteraction()
     this.cue.flashAimInteraction()
     // 松手归中：滑块回 0，基准锁定为当前瞄准角，下次拖动重新相对当前方向微调
@@ -202,6 +215,12 @@ export class AimSlider {
       this.slider.style.setProperty("--v", "50%")
     }
     this.cue.setAimBase(this.cue.aim.angle)
+    // v1.2.7 #D4：轻点（无滑动）落在左右微调按钮上 → 单步微调，保留原「点一下走一步」。
+    // 滑动则已在 onDragMove 中实时调整瞄准角，这里不再重复。
+    if (wasTap && startTarget?.closest?.(".aim-nudge")) {
+      const sign = startTarget.closest("#aimNudgeL") ? -1 : 1
+      this.nudge(sign)
+    }
   }
 
   /**
@@ -230,6 +249,7 @@ export class AimSlider {
   /** 读取设置里的开关，决定这条悬浮条是否出现 */
   applyVisibility() {
     if (!this.bar) return
-    this.bar.hidden = !Settings.get().aimSlider
+    // v1.2.11 #F10：横向瞄准滑动条不再可关闭，始终显示。
+    this.bar.hidden = false
   }
 }

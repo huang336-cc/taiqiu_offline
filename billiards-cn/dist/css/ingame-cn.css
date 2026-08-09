@@ -227,35 +227,63 @@ body.lod-low .hitButton {
    9. 分步实操新手引导横幅（item 6）
    -------------------------------------------------------------------------- */
 .tutorial-banner {
+  /* v1.2.9 #F6：在 v1.2.8（top:40%）基础上「整体缩小 + 再上移」：
+     top 40% → 28%（更高，进一步让出白球 / 被击球前景视野），
+     padding / 字号 / 最大宽度同步收紧，使示意框更紧凑不挡视线。 */
   position: fixed;
-  top: max(12px, env(safe-area-inset-top));
   left: 50%;
-  transform: translateX(-50%);
+  top: 28%;
+  transform: translate(-50%, -50%);
   z-index: 9999;
-  max-width: calc(100% - 24px);
-  padding: 12px 18px;
-  border-radius: 12px;
+  max-width: min(420px, calc(100% - 40px));
+  padding: 8px 14px;
+  border-radius: 10px;
   background: rgba(15, 28, 24, 0.92);
   border: 1px solid var(--cn-gold, #e8c87a);
   color: #f2f3ef;
-  font-size: 15px;
-  line-height: 1.5;
+  font-size: 12.5px;
+  line-height: 1.45;
   text-align: center;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
   pointer-events: none;
-  animation: tut-pop 0.25s ease-out;
+  animation: tut-pop 0.25s ease-out both;
 }
 .tutorial-banner .tut-text b {
   color: var(--cn-gold, #e8c87a);
 }
+/* v1.2.6：「知道了」按钮——引导可交互推进（点完才让游戏控件解锁）。
+   横幅默认 pointer-events:none 让出触摸，按钮需重新开启 pointer-events。 */
+.tutorial-banner .tut-actions {
+  margin-top: 8px;
+  pointer-events: auto;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+.tutorial-banner .tut-btn {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 14px;
+  border-radius: 8px;
+  border: 1.5px solid var(--cn-gold, #e8c87a);
+  background: linear-gradient(180deg, #6b4a22 0%, #4a3014 100%);
+  color: #fff5d8;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tutorial-banner .tut-btn:active {
+  transform: scale(0.96);
+  filter: brightness(0.94);
+}
 @keyframes tut-pop {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(-8px);
+    transform: translate(-50%, -50%) translateY(8px);
   }
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
+    transform: translate(-50%, -50%) translateY(0);
   }
 }
 
@@ -280,6 +308,9 @@ body.lod-low .hitButton {
   background: rgba(4, 12, 20, 0.5);
   border: 1px solid rgba(232, 195, 122, 0.28);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  /* v1.2.4：禁止整条瞄准条区域把触摸当成滚动，配合 .aim-angle-track 的
+     touch-action:none，确保手指滑动稳定触发拖动微调 */
+  touch-action: none;
 }
 
 .aim-angle-bar[hidden] {
@@ -319,6 +350,11 @@ body.lod-low .hitButton {
   display: flex;
   align-items: center;
   min-width: 0;
+  /* v1.2.4：关键修复——拖动瞄准条在触摸设备上「滑动不起作用」。
+     之前缺 touch-action，浏览器把手指拖动当成滚动手势而吞掉 pointermove/
+     pointercancel，导致 onDragMove 收不到事件。显式禁止触摸手势后，
+     指针事件正常派发，滑动微调视角恢复可用。 */
+  touch-action: none;
 }
 
 /* 轨道底纹：中间亮一点，提示「居中 = 初始瞄准方向」 */
@@ -450,16 +486,21 @@ input[type="range"].aim-angle-slider::-moz-range-thumb {
    GLTF 资源异步加载期间（几百毫秒）WebView 画布区域为空白/黑，
    用纯 CSS spinner 覆盖，资源就绪后由 JS 淡出。
    -------------------------------------------------------------------------- */
+/* v1.2.8 #E1：加载页改用「固定定位 + 纯色背景 + 超高层级」覆盖整个视口，
+   彻底盖住左上角的比分栏（z-index:1），不再出现「加载页与比分栏重合」。
+   此前 .view3d-loading 为 position:absolute（仅覆盖 3D 区域），部分 WebView
+   下比分栏会绘制在其之上。改为 fixed + z-index:100000 + 纯色背景后，
+   加载期间整屏都是统一纯色，比分栏被完全遮挡。 */
 .view3d-loading {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  z-index: 5000;
+  z-index: 100000;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 14px;
-  background: #0d5c3a;
+  background: #0a2a3d;
   transition: opacity 0.4s ease;
   pointer-events: none;
 }

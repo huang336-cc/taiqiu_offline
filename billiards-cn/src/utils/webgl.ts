@@ -2,30 +2,16 @@ import { WebGLRenderer, SRGBColorSpace, NoToneMapping, PCFShadowMap } from "thre
 import { Session } from "../network/client/session"
 
 /**
- * 诊断浮层：在真机上把 WebGL/运行时错误显示出来，避免「静默黑屏」无法排查。
- */
-
-let diagHadError = false
-let diagParent: HTMLElement | null = null
-
-/** 把 WebGL 相关错误显示到诊断浮层（同时打印到 console）。 */
-export function reportWebGLError(msg: string) {
-  diagHadError = true
-  if (diagParent) {
-    const el = ensureDiagOverlay(diagParent)
-    el.textContent = "[WebGL] " + msg
-    el.style.opacity = "1"
-  }
-  console.error("[WebGL] " + msg)
-}
-
-/**
  * 惰性创建/重建 WebGLRenderer。
  *
  * v1.1.10 关键改动：不再因为容器尺寸为 0 直接 return undefined。
  * 折叠屏在折叠/展开瞬间，容器 offsetWidth/Height 会短暂为 0，旧逻辑一旦在这一帧
  * 调用 renderer() 就会永久放弃创建（View.renderer 是 readonly 时尤甚），导致黑屏。
  * 现在返回 undefined 但记录待重试的 element，由 View 在下一帧/resize 时主动重试。
+ *
+ * v1.1.28：移除 v1.1.21 引入的诊断浮层（ensureDiagOverlay / diagState / setDiagStage /
+ *          reportWebGLEError）。游戏已在真机稳定运行（1142+ 帧连续渲染、零异常），
+ *          不再需要常驻状态显示；真正的 WebGL 创建/上下文错误改为 console.error/warn。
  */
 let pendingElement: HTMLElement | null = null
 let retryCount = 0
@@ -35,9 +21,6 @@ export function renderer(element: HTMLElement) {
   if (typeof process !== "undefined") {
     return undefined
   }
-
-  diagParent = element
-  const diag = ensureDiagOverlay(element)
 
   const width = element.offsetWidth
   const height = element.offsetHeight
@@ -53,9 +36,8 @@ export function renderer(element: HTMLElement) {
   // 尺寸恢复，重置重试计数
   retryCount = 0
   pendingElement = null
-  diagHadError = false
 
-  return createRenderer(element, diag, width, height)
+  return createRenderer(element, width, height)
 }
 
 /** 惰性重建入口：View 在 ResizeObserver/resize 检测到尺寸从 0 恢复时调用。 */
@@ -66,17 +48,16 @@ export function ensureWebRenderer(element: HTMLElement): WebGLRenderer | undefin
     return undefined
   }
   // 尺寸有效，尝试创建
-  diagParent = element
-  const diag = ensureDiagOverlay(element)
   retryCount = 0
   pendingElement = null
-  diagHadError = false
-  return createRenderer(element, diag, width, height)
+  return createRenderer(element, width, height)
 }
 
 function scheduleRetry() {
   if (retryCount >= MAX_RETRY) {
-    reportWebGLError("渲染容器持续为 0 超过 " + MAX_RETRY + " 帧，已放弃。可能是 WebView 异常。")
+    console.error(
+      "[WebGL] 渲染容器持续为 0 超过 " + MAX_RETRY + " 帧，已放弃。可能是 WebView 异常。"
+    )
     pendingElement = null
     retryCount = 0
     return
@@ -103,7 +84,6 @@ function scheduleRetry() {
 
 function createRenderer(
   element: HTMLElement,
-  diag: HTMLDivElement,
   width: number,
   height: number
 ): WebGLRenderer | undefined {
@@ -119,8 +99,9 @@ function createRenderer(
       alpha: false,
     })
   } catch (e) {
-    reportWebGLError(
-      "创建 WebGLRenderer 失败：" + (e instanceof Error ? e.message : String(e))
+    console.error(
+      "[WebGL] 创建 WebGLRenderer 失败：" +
+        (e instanceof Error ? e.message : String(e))
     )
     return undefined
   }
@@ -128,8 +109,8 @@ function createRenderer(
   // 兜底：如果上下文拿不到，three.js 在某些 WebView 上不会抛异常，而是留下一个无上下文的 canvas
   const gl = glRenderer.getContext()
   if (!gl) {
-    reportWebGLError(
-      "getContext() 返回空。请确认系统 WebView 已更新，并尝试开启硬件加速。"
+    console.error(
+      "[WebGL] getContext() 返回空。请确认系统 WebView 已更新，并尝试开启硬件加速。"
     )
     glRenderer.dispose()
     return undefined
@@ -138,12 +119,10 @@ function createRenderer(
   // 监听上下文丢失/恢复
   glRenderer.domElement.addEventListener("webglcontextlost", (e) => {
     e.preventDefault()
-    reportWebGLError("上下文丢失 (context lost)，正在尝试恢复…")
+    console.warn("[WebGL] 上下文丢失 (context lost)，正在尝试恢复…")
   })
   glRenderer.domElement.addEventListener("webglcontextrestored", () => {
-    diagHadError = false
-    const el = ensureDiagOverlay(element)
-    el.style.opacity = "0"
+    // 上下文已恢复，无需 UI 操作
   })
 
   glRenderer.shadowMap.enabled = true
@@ -160,30 +139,7 @@ function createRenderer(
   glRenderer.domElement.addEventListener("dragstart", (e) => e.preventDefault())
   element.appendChild(glRenderer.domElement)
 
-  requestAnimationFrame(() => {
-    if (glRenderer && !diagHadError) {
-      diag.style.opacity = "0"
-    }
-  })
-
   return glRenderer
-}
-
-function ensureDiagOverlay(parent: HTMLElement): HTMLDivElement {
-  const existing = parent.querySelector(".webgl-diag") as HTMLDivElement | null
-  if (existing) {
-    existing.style.opacity = "1"
-    return existing
-  }
-  const el = document.createElement("div")
-  el.className = "webgl-diag"
-  el.style.cssText =
-    "position:absolute;top:8px;left:8px;right:8px;z-index:10000;" +
-    "background:rgba(0,0,0,0.75);color:#ff6b6b;font-size:12px;" +
-    "padding:10px;border-radius:6px;pointer-events:none;" +
-    "font-family:monospace;white-space:pre-wrap;word-break:break-all;"
-  parent.appendChild(el)
-  return el
 }
 
 /**
@@ -227,22 +183,23 @@ function computeCappedDPR() {
 }
 
 /**
- * 全局未捕获异常兜底。
+ * 全局未捕获异常兜底：仅打印到 console（v1.1.28 已移除诊断浮层）。
  *
- * 此前渲染循环/资源加载中的异常会「静默杀掉」动画循环或只打印到 console，
- * 在真机上表现为无信息的黑屏。这里把 window error / unhandledrejection
- * 都汇聚到诊断浮层，便于定位根因。
+ * 此前会汇聚到诊断浮层便于远程定位黑屏；现在没有浮层，错误只在 console
+ * 可见。如真机再现"无声黑屏"，可通过 USB 调试 `adb logcat | grep Billiards`
+ * 抓取本文件的 console 输出定位根因。
  */
-if (typeof globalThis !== "undefined" && typeof (globalThis as any).addEventListener === "function") {
+if (
+  typeof globalThis !== "undefined" &&
+  typeof (globalThis as any).addEventListener === "function"
+) {
   ;(globalThis as any).addEventListener("error", (e: any) => {
     const msg = e?.message ?? (e?.error ? String(e.error) : "未知错误")
-    reportWebGLError("运行时异常: " + msg)
+    console.error("[Billiards] 运行时异常:", msg)
   })
   ;(globalThis as any).addEventListener("unhandledrejection", (e: any) => {
     const msg =
       e?.reason?.message ?? String(e?.reason ?? "未处理的 Promise 拒绝")
-    reportWebGLError("异步异常: " + msg)
+    console.error("[Billiards] 异步异常:", msg)
   })
-  // 暴露给 container.ts 的帧循环 catch 使用
-  ;(globalThis as any).reportWebGLError = reportWebGLError
 }

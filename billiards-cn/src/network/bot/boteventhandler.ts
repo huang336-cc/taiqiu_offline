@@ -22,6 +22,7 @@ import { BotShotContext, BotStrategy } from "./botstrategy"
 import { ClawBreak } from "./strategies/clawbreak"
 import { TheFarJaw } from "./strategies/thefarjaw"
 import { T, foulReason as translateFoul } from "../../utils/i18n"
+import { R } from "../../model/physics/constants"
 
 class BotContainer {
   table
@@ -369,7 +370,8 @@ export class BotEventHandler {
         this.container.table
       )
     }
-    const startPos = cueball.pos.clone()
+    // v1.2.5：玩家犯规后电脑自由摆球——搜索整桌最佳合法点，而非默认开球线。
+    const startPos = this.chooseBallInHandPosition()
     cueball.setStationary()
     const respotted = respottedOverride ?? this.container.rules.respot(outcome)
     let respot: RespotBody | undefined
@@ -392,6 +394,74 @@ export class BotEventHandler {
 
   private myActivePlayer(): 1 | 2 {
     return (Session.getInstance().playerIndex + 1) as 1 | 2
+  }
+
+  /**
+   * v1.2.5：玩家犯规后电脑获得「自由摆球」（ball in hand）。
+   * 不再只放到默认开球线位置，而是在整张球桌上搜索一个「合法（不与任何球重叠）且
+   * 能对准目标球」的最佳点：优先选一条能直球命中目标球、距离适中（约 0.5m）的落点，
+   * 让电脑像玩家一样自由摆球并争取好球型。
+   */
+  private chooseBallInHandPosition(): Vector3 {
+    const table = this.container.table
+    const cueball = table.cueball
+    const balls = table.balls.filter((b) => b !== cueball && b.onTable())
+    const targets = this.validTargetBalls()
+    const tx = TableGeometry.tableX - R * 1.2
+    const ty = TableGeometry.tableY - R * 1.2
+
+    const overlaps = (pos: Vector3): boolean => {
+      for (const b of balls) {
+        if (pos.distanceTo(b.pos) < 2 * R * 1.02) return true
+      }
+      return false
+    }
+    // 从 from 到 to 的线段是否被其它球阻挡（点到线段距离 < 2R 视为挡住）
+    const lineBlocked = (from: Vector3, to: Vector3): boolean => {
+      const dir = to.clone().sub(from)
+      const len = dir.length()
+      if (len < 1e-4) return false
+      dir.multiplyScalar(1 / len)
+      for (const b of balls) {
+        const w = b.pos.clone().sub(from)
+        const t = Math.max(0, Math.min(len, w.dot(dir)))
+        const proj = from.clone().add(dir.clone().multiplyScalar(t))
+        if (proj.distanceTo(b.pos) < 2 * R) return true
+      }
+      return false
+    }
+    const scorePos = (pos: Vector3): number => {
+      if (overlaps(pos)) return -1
+      if (targets.length === 0) return 0.5
+      let best = -1
+      for (const t of targets) {
+        const d = pos.distanceTo(t.pos)
+        if (d < 2 * R + 0.05) return -1 // 太近无法瞄准
+        if (lineBlocked(pos, t.pos)) continue // 视线被挡，跳过
+        // 距离约 0.5m 最舒适，越接近越好
+        const quality = 1 / (1 + Math.abs(d - 0.5))
+        best = Math.max(best, quality)
+      }
+      return best
+    }
+
+    let bestPos: Vector3 | null = null
+    let bestScore = -1
+    const N = 14
+    const stepX = (2 * tx) / N
+    const stepY = (2 * ty) / N
+    for (let i = 0; i <= N; i++) {
+      for (let j = 0; j <= N; j++) {
+        const pos = new Vector3(-tx + i * stepX, -ty + j * stepY, 0)
+        const s = scorePos(pos)
+        if (s > bestScore) {
+          bestScore = s
+          bestPos = pos
+        }
+      }
+    }
+    // 兜底：极端情况下退回到规则默认点
+    return bestPos ?? this.container.rules.placeBall()
   }
 
   private handlePot(pots: number, outcome: Outcome[]): void {

@@ -23,6 +23,7 @@ import { getUID } from "../utils/uid"
 import { applyPhysicsParams } from "../utils/physicsparams"
 import { Settings } from "../utils/settings"
 import { ruleName } from "../utils/i18n"
+import { readReplayFromStorage } from "../utils/replay-nav"
 import { TurnTimer } from "../utils/turntimer"
 
 /**
@@ -74,6 +75,16 @@ export class BrowserContainer {
     this.tableId = "local"
     this.clientId = `G_${getUID()}`
     this.replay = params.get("state")
+    // v1.2.5：优先读取 ?replayId= 对应的 sessionStorage 完整回放数据。
+    // 这样可以传输任意长度的完整对局，规避 Android WebView 对 URL 长度的限制
+    // （之前 ?state=<超长压缩串> 被截断，只回放出前几个球）。
+    const replayId = params.get("replayId")
+    if (replayId) {
+      const stored = readReplayFromStorage(replayId)
+      if (stored) {
+        this.replay = stored
+      }
+    }
     this.ruletype = params.get("ruletype") ?? "nineball"
     // 离线版永不建立网络连接
     this.lobbyUrl = null
@@ -116,9 +127,9 @@ export class BrowserContainer {
       this.speedrun
     )
     if (this.botMode) {
-      // 中文化电脑对手名称
+      // v1.1.31：稳健对手改名为「电脑」，与菜单按钮保持一致
       Session.getInstance().opponentName =
-        this.botName === "TheFarJaw" ? "电脑 · 激进" : "电脑 · 稳健"
+        this.botName === "TheFarJaw" ? "电脑 · 激进" : "电脑"
     }
     applyPhysicsParams(params)
   }
@@ -189,6 +200,12 @@ export class BrowserContainer {
 
   private initBotMode(scoreReporter: ScoreReporter) {
     this.container = this.createContainer(scoreReporter)
+    // v1.1.24：容器一建好就启动渲染循环，不再等 init/notify/scoreReporter 完成。
+    // 之前 animate() 在 onAssetsReady 末尾才调，若中间任意一行抛异常，
+    // 整个渲染循环就死掉，画面永远停在紫色兜底。提前启动可保证：
+    //   - 至少看到清屏色（绿）或后续加载的资源
+    //   - 异常被 catch 后会上报到诊断浮层，不会静默失败
+    this.container.animate(performance.now())
     this.container.init()
     const logs = new Logger()
     this.messageRelay = new BotRelay(logs, this.container)
@@ -209,6 +226,8 @@ export class BrowserContainer {
     // 单机练习：不创建任何网络中继
     this.messageRelay = null
     this.container = this.createContainer(scoreReporter)
+    // v1.1.24：同上，容器一建好立刻跑渲染循环
+    this.container.animate(performance.now())
     this.container.init()
     this.container.notify({
       type: "Info",
@@ -219,6 +238,10 @@ export class BrowserContainer {
   }
 
   onAssetsReady() {
+    // v1.1.58：3D 资源就绪，给 body 加 .game-ready，让 #panel 与 .view3d-loading
+    // 同步淡入/淡出，消除「带底部栏的中间页 → 跳转游戏界面」的两个页面错觉。
+    document.body.classList.add("game-ready")
+
     // v1.1.10：资源就绪，淡出 Loading 覆盖层（消除 GLTF 异步加载期间的黑屏窗口）
     const loading = document.getElementById("view3dLoading")
     if (loading) {
@@ -235,16 +258,22 @@ export class BrowserContainer {
       this.initLocalGame(scoreReporter)
     }
 
-    this.container.broadcast = (e) => {
-      this.broadcast(e)
+    // v1.1.24：animate() 已在 initLocalGame/initBotMode 内 createContainer 后立即启动，
+    // 此处删掉冗余调用，避免双 rAF 调度导致 loop 计数翻倍 / 场景双倍速前进。
+
+    // 余下 setup（broadcast/cushionModel/replayLink/initGameLoop）若抛异常，
+    // 不应再把渲染循环拖死——吃掉异常并打印到 console，画面照常刷新。
+    try {
+      this.container.broadcast = (e) => {
+        this.broadcast(e)
+      }
+      this.container.table.cushionModel = this.cushionModel
+      this.setReplayLink()
+      this.initGameLoop()
+    } catch (e) {
+      const msg = e instanceof Error ? `${e.message}\n${e.stack ?? ""}` : String(e)
+      console.error("[Billiards] onAssetsReady setup failed:", msg)
     }
-    this.container.table.cushionModel = this.cushionModel
-    this.setReplayLink()
-
-    this.initGameLoop()
-
-    // trigger animation loops
-    this.container.animate(performance.now())
 
     globalThis.container = this.container
   }

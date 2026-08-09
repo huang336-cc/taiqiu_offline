@@ -173,7 +173,10 @@
       if (rule === selectedRule) {
         card.classList.add("selected")
       }
-      card.addEventListener("click", function () {
+      // v1.2.11 #F4：外层改为 div，补 keydown 触发模式选择（可访问性）
+      card.addEventListener("click", function (e) {
+        // 若点击来自规则按钮，不触发模式选择
+        if (e.target && e.target.classList && e.target.classList.contains("mode-rule")) return
         Array.prototype.forEach.call(cards, function (c) {
           c.classList.remove("selected")
         })
@@ -184,7 +187,63 @@
         updateOpponentAvailability()
         buzz(10)
       })
+      card.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
+          e.preventDefault()
+          card.click()
+        }
+      })
     })
+
+    // v1.2.11 #F4：绑定「规则」按钮点击 → 弹出对应玩法规则
+    var ruleBtns = document.querySelectorAll(".mode-rule")
+    Array.prototype.forEach.call(ruleBtns, function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation()
+        e.preventDefault()
+        var rule = btn.getAttribute("data-rule")
+        showModeRules(rule)
+        buzz(10)
+      })
+    })
+  }
+
+  /** v1.2.11 #F4：各玩法规则文本（含犯规规则），填充到 #screen-rules */
+  var MODE_RULES = {
+    nineball: {
+      title: "九球规则",
+      body:
+        '<div class="guide-block"><h3>九球</h3><p>台面上有 1~9 号球。每次击球必须先碰到台面上号码最小的球，任何球落袋都算得分并可继续击球。谁先合法打进 9 号球即获胜。</p></div>' +
+        '<div class="guide-block"><h3>犯规</h3><ul class="guide-list"><li>母球落袋</li><li>空杆（未击中任何球）</li><li>首个击中的球不是台面号码最小的球</li><li>击球后无任何球碰库且无球落袋</li></ul><p class="about-text dim">犯规后对手获得自由球，可任意摆放母球。</p></div>',
+    },
+    eightball: {
+      title: "八球规则",
+      body:
+        '<div class="guide-block"><h3>八球</h3><p>开球后由第一颗合法落袋的球确定己方球组（全色 1~7 或花色 9~15）。清完己方球组后，最后打进黑 8 者获胜。黑 8 提前落袋判负。</p></div>' +
+        '<div class="guide-block"><h3>犯规</h3><ul class="guide-list"><li>母球落袋</li><li>空杆（未击中任何球）</li><li>开局先碰黑八，犯规</li><li>先碰到了对方的球</li><li>本方球已清台，必须先碰黑八（否则犯规）</li><li>击球后无任何球碰库且无球落袋</li></ul><p class="about-text dim">犯规后对手获得自由球，可任意摆放母球。</p></div>',
+    },
+    snooker: {
+      title: "斯诺克规则",
+      body:
+        '<div class="guide-block"><h3>斯诺克</h3><p>先打红球（1 分），进袋后再打一颗彩球，交替进行。彩球分值：黄 2、绿 3、棕 4、蓝 5、粉 6、黑 7。红球阶段彩球进袋后需重新摆回原位；红球清完后，按分值从低到高依次清彩球，总分高者获胜。</p></div>' +
+        '<div class="guide-block"><h3>犯规</h3><ul class="guide-list"><li>母球落袋</li><li>空杆（未击中任何球）</li><li>首个击中的球不符合当前阶段（红球阶段碰彩球，或彩球阶段碰红球）</li><li>击球后无任何球碰库且无球落袋</li></ul><p class="about-text dim">犯规后对手获得自由球，可任意摆放母球。</p></div>',
+    },
+    threecushion: {
+      title: "三库开伦规则",
+      body:
+        '<div class="guide-block"><h3>三库开伦</h3><p>无袋球台。母球需先碰到库边至少三次，再撞到另外两颗球，即得 1 分。得分后可继续击球，未得分则换手。</p></div>' +
+        '<div class="guide-block"><h3>犯规</h3><ul class="guide-list"><li>未先碰库边三次即撞到第二颗球</li><li>空杆（未击中任何球）</li></ul><p class="about-text dim">犯规后换手，由对手击球。</p></div>',
+    },
+  }
+
+  function showModeRules(rule) {
+    var info = MODE_RULES[rule]
+    if (!info) return
+    var titleEl = $("rulesTitle")
+    var bodyEl = $("rulesBody")
+    if (titleEl) titleEl.textContent = info.title
+    if (bodyEl) bodyEl.innerHTML = info.body
+    showScreen("rules")
   }
 
   /**
@@ -869,14 +928,44 @@
     location.href = "index.html?" + params.join("&")
   }
 
-  /** 从设置页「重新打开新手引导」：直接进入一次练习并强制显示引导 */
+  /** 轻量 toast 提示（不依赖外部库） */
+  function showToast(msg) {
+    try {
+      var el = document.createElement("div")
+      el.textContent = msg
+      el.style.cssText =
+        "position:fixed;left:50%;bottom:18%;transform:translateX(-50%);" +
+        "max-width:80vw;padding:10px 16px;background:rgba(20,28,40,.92);" +
+        "color:#f3d79a;font-size:14px;font-weight:700;line-height:1.4;" +
+        "border:1.5px solid #c89534;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.4);" +
+        "z-index:99999;text-align:center;pointer-events:none;" +
+        "transition:opacity .25s ease;opacity:1;"
+      document.body.appendChild(el)
+      setTimeout(function () {
+        el.style.opacity = "0"
+        setTimeout(function () {
+          if (el.parentNode) el.parentNode.removeChild(el)
+        }, 280)
+      }, 1800)
+    } catch (e) {}
+  }
+
+  /** 从设置页「重新打开新手引导」：v1.2.9 #F4 / v1.2.11 #F6
+   *  不再直接进入游戏——只把「已看过新手引导」复位，
+   *  下次用户自行进入对局（任意玩法）时即会显示引导；由用户自行操作，不自动开局。
+   *  v1.2.11 #F6：原实现只改 localStorage + globalThis，未更新内存 settings.seenGuide，
+   *  导致 startGame() 里 !settings.seenGuide 判定仍为 false（不传 tutorial=1）→ 引导永不显示。
+   *  现在同步复位内存 settings.seenGuide，确保下次进对局 forceTutorial=true。 */
   function replayTutorial() {
-    var params = [
-      "ruletype=" + encodeURIComponent(selectedRule),
-      "practice=true",
-      "tutorial=1",
-    ]
-    location.href = "index.html?" + params.join("&")
+    settings.seenGuide = false
+    saveSettings(settings)
+    try {
+      localStorage.removeItem("billiards_cn_seenGuide_v1")
+    } catch (e) {}
+    try {
+      globalThis.__billiardsSeenGuide = false
+    } catch (e) {}
+    showToast("已开启新手引导，进入对局即可看到")
   }
 
   /* ---------------- 初始化 ---------------- */
@@ -888,6 +977,7 @@
     initSkins()
     initCueThemes()
     initScenes()
+    initMyReplays()
 
     // 首页「外观定制」二级菜单入口（item 4）
     Array.prototype.forEach.call(
@@ -1000,13 +1090,7 @@
       })
     }
 
-    var copyBtn = $("btnCopyGithub")
-    if (copyBtn) {
-      copyBtn.addEventListener("click", function () {
-        buzz(15)
-        flashLabel(copyBtn, copyText(GITHUB_URL) ? "已复制" : "复制失败")
-      })
-    }
+    // v1.2.11 #F5：删除「复制链接」按钮的绑定（按钮已从 HTML 移除）。
 
     // 关于 / 许可页里的 <a> 外链，统一走系统浏览器
     var extLinks = document.querySelectorAll("a.ext-link")
@@ -1129,6 +1213,205 @@
       })
     })
     syncActive()
+  }
+
+  /* ---------------- v1.2.4：我的回放（离线本地保存列表） ----------------
+     与游戏内 src/utils/replay-store.ts 共用同一 IndexedDB（库名 / 表名 / keyPath），
+     因此「游戏内保存」与「主菜单我的回放」共享同一数据源。 */
+  var REPLAY_DB = "billiards_replays"
+  var REPLAY_STORE = "replays"
+
+  function replayOpenDB() {
+    return new Promise(function (resolve, reject) {
+      if (!window.indexedDB) {
+        reject(new Error("no idb"))
+        return
+      }
+      var req = window.indexedDB.open(REPLAY_DB, 1)
+      req.onupgradeneeded = function () {
+        var db = req.result
+        if (!db.objectStoreNames.contains(REPLAY_STORE)) {
+          db.createObjectStore(REPLAY_STORE, { keyPath: "id" })
+        }
+      }
+      req.onsuccess = function () {
+        resolve(req.result)
+      }
+      req.onerror = function () {
+        reject(req.error)
+      }
+    })
+  }
+
+  function replayList() {
+    return replayOpenDB().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(REPLAY_STORE, "readonly")
+        var req = tx.objectStore(REPLAY_STORE).getAll()
+        req.onsuccess = function () {
+          db.close()
+          var arr = req.result || []
+          arr.sort(function (a, b) {
+            return b.createdAt - a.createdAt
+          })
+          resolve(arr)
+        }
+        req.onerror = function () {
+          db.close()
+          reject(req.error)
+        }
+      })
+    })
+  }
+
+  function replayDelete(id) {
+    return replayOpenDB().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(REPLAY_STORE, "readwrite")
+        tx.objectStore(REPLAY_STORE).delete(id)
+        tx.oncomplete = function () {
+          db.close()
+          resolve()
+        }
+        tx.onerror = function () {
+          db.close()
+          reject(tx.error)
+        }
+      })
+    })
+  }
+
+  function replayEscape(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      }[c]
+    })
+  }
+
+  function replayFmtDate(ts) {
+    var d = new Date(ts)
+    function p(n) {
+      return (n < 10 ? "0" : "") + n
+    }
+    return (
+      d.getFullYear() +
+      "-" +
+      p(d.getMonth() + 1) +
+      "-" +
+      p(d.getDate()) +
+      " " +
+      p(d.getHours()) +
+      ":" +
+      p(d.getMinutes())
+    )
+  }
+
+  // v1.2.5：经 sessionStorage 传递完整回放数据，再跳转回放页。
+  // 规避 Android WebView 对 URL 长度的限制（之前 ?state= 超长被截断，
+  // 只回放出前几个球）。与游戏内 src/utils/replay-nav.ts 同方案。
+  function navigateToReplay(compressed, rule) {
+    var id = "bcr_" + Date.now() + "_" + Math.floor(Math.random() * 1e9)
+    try {
+      sessionStorage.setItem("bcr:" + id, compressed)
+    } catch (e) {
+      console.error("replay sessionStorage 写入失败", e)
+    }
+    location.href =
+      "index.html?replayId=" +
+      encodeURIComponent(id) +
+      "&ruletype=" +
+      encodeURIComponent(rule || "nineball")
+  }
+
+  function initMyReplays() {
+    var btn = $("btnMyReplays")
+    var homeBtn = $("btnReplays")
+    var overlay = $("replayListOverlay")
+    if (!overlay) return
+    var listEl = $("replayList")
+    var emptyEl = $("replayEmpty")
+
+    Array.prototype.forEach.call(
+      overlay.querySelectorAll("[data-close-replay]"),
+      function (el) {
+        el.addEventListener("click", function () {
+          overlay.hidden = true
+        })
+      }
+    )
+
+    function renderList() {
+      listEl.innerHTML = ""
+      replayList()
+        .then(function (items) {
+          if (!items.length) {
+            emptyEl.hidden = false
+            return
+          }
+          emptyEl.hidden = true
+          items.forEach(function (r) {
+            var row = document.createElement("div")
+            row.className = "replay-item"
+
+            var info = document.createElement("button")
+            info.type = "button"
+            info.className = "replay-info"
+            info.innerHTML =
+              '<span class="replay-label">' +
+              replayEscape(r.label || r.rule) +
+              "</span>" +
+              '<span class="replay-date">' +
+              replayFmtDate(r.createdAt) +
+              "</span>"
+            info.addEventListener("click", function () {
+              overlay.hidden = true
+              // v1.2.5：改用 sessionStorage 传递完整回放，避免 URL 截断
+              navigateToReplay(r.compressed, r.rule)
+            })
+
+            var del = document.createElement("button")
+            del.type = "button"
+            del.className = "replay-del"
+            del.textContent = "删除"
+            del.addEventListener("click", function (e) {
+              e.stopPropagation()
+              replayDelete(r.id)
+                .then(function () {
+                  renderList()
+                })
+                .catch(function (err) {
+                  console.error("delete replay failed", err)
+                })
+            })
+
+            row.appendChild(info)
+            row.appendChild(del)
+            listEl.appendChild(row)
+          })
+        })
+        .catch(function () {
+          emptyEl.hidden = false
+          emptyEl.textContent =
+            "读取回放失败（当前环境可能不支持本地存储）。"
+        })
+    }
+
+    btn.addEventListener("click", function () {
+      overlay.hidden = false
+      renderList()
+    })
+    // v1.2.5：首页「查看回放」按钮同样打开回放列表
+    if (homeBtn) {
+      homeBtn.addEventListener("click", function () {
+        overlay.hidden = false
+        renderList()
+      })
+    }
   }
 
   if (document.readyState === "loading") {

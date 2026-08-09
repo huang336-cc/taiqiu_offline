@@ -227,7 +227,7 @@ export class Cue {
     this.setSpin(newOffset, table)
   }
 
-  setSpin(offset: Vector3, table: Table) {
+  setSpin(offset: Vector3, table: Table, avoid = true) {
     if (!this.aimInputs || this.aimInputs.isDisabled()) {
       return
     }
@@ -235,7 +235,7 @@ export class Cue {
       offset.normalize().multiplyScalar(offCenterLimit)
     }
     this.aim.offset.copy(roundVec(offset))
-    this.avoidCueTouchingOtherBall(table)
+    if (avoid) this.avoidCueTouchingOtherBall(table)
     this.updateAimInput()
     // 高低杆 / 加塞打点变化时同步重绘辅助线
     this.updateTargetLine(table)
@@ -257,11 +257,24 @@ export class Cue {
   }
 
   avoidCueTouchingOtherBall(table: Table) {
+    // v1.2.5：原逻辑无条件 `offset.y += 0.1`，会把击球点强行上移。
+    // 当白球贴着别的球、低杆（下半部分）打点会让球杆与邻球相交时，
+    // 用户选中的下半部分会被持续上推而无法保留，表现为「击球点选不中白球下半部分」。
+    // 改为沿当前打点方向「朝球心收半径」：保持上下/左右象限不变，仅在不相交的前提下
+    // 尽量靠近用户所选方向，从而既能避免球杆穿过邻球，又不锁死任何一侧打点。
     let n = 0
     while (n++ < 20 && this.intersectsAnything(table)) {
-      this.aim.offset.y += 0.1
-      if (this.aim.offset.length() > offCenterLimit) {
-        this.aim.offset.normalize().multiplyScalar(offCenterLimit)
+      const o = this.aim.offset
+      const len = o.length()
+      if (len < 1e-4) {
+        // 球心仍相交（极罕见，白球与邻球几乎重叠）：轻微上移兜底，避免死循环
+        o.y += 0.05
+      } else {
+        const newLen = Math.max(0, len - 0.1)
+        o.multiplyScalar(newLen / len)
+      }
+      if (o.length() > offCenterLimit) {
+        o.normalize().multiplyScalar(offCenterLimit)
       }
     }
 

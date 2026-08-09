@@ -38,7 +38,33 @@ mkdir -p compiled obj assets
 
 # ---------- 1. 把网页产物塞进 assets ----------
 echo "[1/6] 打包网页资源到 assets/dist"
-cp -r "$WEB_DIST" assets/dist
+mkdir -p assets/dist
+cp -r "$WEB_DIST"/. assets/dist/
+
+# 兜底：overlayfs 下新建/截断大文件偶发读到 0 字节或截断（导致装到真机黑屏）。
+# 关键 JS 用 cp -f 覆盖（复用已有 inode，比 rm+cat 新建更稳），
+# 并以字节数校验 + 重试，确保落盘完整。
+for f in index.js three_module.js three_core.js three_examples.js; do
+  src="$WEB_DIST/$f"
+  dst="assets/dist/$f"
+  want=$(stat -c %s "$src" 2>/dev/null || echo 0)
+  for attempt in 1 2 3 4 5 6; do
+    cp -f "$src" "$dst"
+    sync
+    got=$(stat -c %s "$dst" 2>/dev/null || echo -1)
+    if [ "$got" = "$want" ] && [ "$want" -gt 0 ]; then
+      break
+    fi
+    echo "  重拷 $f 校验不符 ($got/$want) 重试[$attempt]"
+    sleep 0.3
+  done
+  got=$(stat -c %s "$dst" 2>/dev/null || echo -1)
+  if [ "$got" != "$want" ] || [ "$want" -le 0 ]; then
+    echo "!! 关键 JS 复制失败：$f ($got/$want)"
+    exit 1
+  fi
+done
+sync
 
 # ---------- 2. 编译资源 ----------
 echo "[2/6] aapt2 compile"
@@ -61,9 +87,17 @@ aapt2 link -o base.apk \
 
 # ---------- 4. 编译 Java 并转 dex ----------
 echo "[4/6] javac + d8"
+
+# 编译期 stub：本机 android-34.jar 缺 RenderProcessGoneDetail 类定义，
+# 但设备运行时（Android 16）框架自带。这里临时造一个只占位的 .jar 供 javac 解析符号，
+# 它不传给 d8，因此不会进最终 dex，运行时由设备框架的真实类接管，零冲突。
+if [ ! -f renderstub.jar ]; then
+  ( cd renderstub && jar cf ../renderstub.jar android ) 2>/dev/null \
+    || jar cf renderstub.jar -C renderstub android
+fi
 mkdir -p obj/dex            # d8 要求输出目录必须已存在
 javac -source 1.8 -target 1.8 -nowarn \
-  -cp "$PLATFORM" -d obj \
+  -cp "$PLATFORM:renderstub.jar" -d obj \
   src/$PKG_PATH/*.java
 d8 --release --lib "$PLATFORM" --output obj/dex obj/$PKG_PATH/*.class
 

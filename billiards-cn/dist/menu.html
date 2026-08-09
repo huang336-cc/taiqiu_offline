@@ -16,26 +16,32 @@
       <main id="screen-home" class="screen active">
         <section class="section sec-mode">
           <div class="mode-grid" id="modeGrid">
-            <button class="mode-card" data-rule="nineball" data-tint="#ffb648">
+            <!-- v1.2.11 #F4：外层改为 div（button 内不能嵌套 button），
+                 每张卡内新增「规则」按钮，点击弹出对应玩法规则与犯规说明。 -->
+            <div class="mode-card" data-rule="nineball" data-tint="#ffb648" role="button" tabindex="0">
               <span class="mode-card-band"></span>
               <img src="assets/nineball.png" alt="" class="mode-icon" />
               <span class="mode-name">九球</span>
-            </button>
-            <button class="mode-card" data-rule="eightball" data-tint="#3aa3ff">
+              <button type="button" class="mode-rule" data-rule="nineball" aria-label="九球规则">规则</button>
+            </div>
+            <div class="mode-card" data-rule="eightball" data-tint="#3aa3ff" role="button" tabindex="0">
               <span class="mode-card-band"></span>
               <img src="assets/eightball.png" alt="" class="mode-icon" />
               <span class="mode-name">八球</span>
-            </button>
-            <button class="mode-card" data-rule="snooker" data-tint="#e85a5a">
+              <button type="button" class="mode-rule" data-rule="eightball" aria-label="八球规则">规则</button>
+            </div>
+            <div class="mode-card" data-rule="snooker" data-tint="#e85a5a" role="button" tabindex="0">
               <span class="mode-card-band"></span>
               <img src="assets/snooker.png" alt="" class="mode-icon" />
               <span class="mode-name">斯诺克</span>
-            </button>
-            <button class="mode-card" data-rule="threecushion" data-tint="#7e5ad6">
+              <button type="button" class="mode-rule" data-rule="snooker" aria-label="斯诺克规则">规则</button>
+            </div>
+            <div class="mode-card" data-rule="threecushion" data-tint="#7e5ad6" role="button" tabindex="0">
               <span class="mode-card-band"></span>
               <img src="assets/threecushion.png" alt="" class="mode-icon" />
               <span class="mode-name">三库开伦</span>
-            </button>
+              <button type="button" class="mode-rule" data-rule="threecushion" aria-label="三库开伦规则">规则</button>
+            </div>
           </div>
         </section>
 
@@ -87,6 +93,7 @@
           </button>
           <div class="actions-row">
             <button class="btn btn-ghost" id="btnGuide">操作介绍</button>
+            <button class="btn btn-ghost" id="btnReplays">查看回放</button>
             <button class="btn btn-ghost" id="btnSettings">游戏设置</button>
           </div>
         </div>
@@ -246,6 +253,14 @@
         <button class="btn btn-primary back-btn" data-back>返回</button>
         <button class="btn btn-primary guide-start-btn" id="btnGuideStart" style="display:none">看完，开始游戏</button>
       </section>
+
+      <!-- v1.2.11 #F4：模式规则弹窗（由首页模式卡片「规则」按钮触发） -->
+      <section id="screen-rules" class="screen">
+        <h2 class="screen-title" id="rulesTitle">规则</h2>
+        <div class="scroll" id="rulesBody"></div>
+        <button class="btn btn-primary back-btn" data-back="home">返回</button>
+      </section>
+
       <!-- 游戏设置 -->
       <section id="screen-settings" class="screen">
         <h2 class="screen-title">游戏设置</h2>
@@ -481,17 +496,31 @@
                 </svg>
                 打开 GitHub 项目页
               </button>
-              <button class="btn btn-mini" id="btnCopyGithub">复制链接</button>
+              <!-- v1.2.11 #F5：删除「复制链接」按钮（用户要求删除） -->
             </div>
-            <button class="btn btn-mini" id="btnChangelog">
-              变更履历
-            </button>
-            <button class="btn btn-mini" id="btnLicense">
-              开源许可与致谢
-            </button>
-            <button class="btn btn-mini danger" id="btnReset">
-              恢复默认设置
-            </button>
+            <!-- v1.2.10 #F10：4 个独立按钮（变更履历/开源许可/恢复默认/我的回放）
+                 各自包到 .link-actions，与上方 GitHub 按钮组间距完全统一：
+                 gap:8px + margin:10px 0 4px。 -->
+            <div class="link-actions">
+              <button class="btn btn-mini" id="btnChangelog">
+                变更履历
+              </button>
+            </div>
+            <div class="link-actions">
+              <button class="btn btn-mini" id="btnLicense">
+                开源许可与致谢
+              </button>
+            </div>
+            <div class="link-actions">
+              <button class="btn btn-mini danger" id="btnReset">
+                恢复默认设置
+              </button>
+            </div>
+            <div class="link-actions">
+              <button class="btn btn-mini" id="btnMyReplays">
+                我的回放
+              </button>
+            </div>
           </div>
         </div>
         <button class="btn btn-primary back-btn" data-back>返回</button>
@@ -597,7 +626,114 @@
           </p>
 
           <div class="setting-group">
-            <h3>v1.2.3 · 2026-08-09 16:52:00</h3>
+            <h3>v1.2.11 · 2026-08-10 04:04:00</h3>
+            <p class="about-text dim"><b>12 项用户反馈修复：声音去延迟/去丢失、复位按钮移到圆盘左上角、比分任一方≥3 颗换行、首页模式卡加规则入口、删除复制链接按钮、新手引导仅首启显示+重开一次、删除台面 LOGO、力度条击球后维持原百分比、删除游戏中规则 tab、删除横滑条设置默认存在、回放进度条为整局进度、变更履历时间再次校正。</b></p>
+            <ul class="changelog-list">
+              <li><b>声音去延迟/去丢失（#F1）</b>：同帧多 outcome 不再只播一个（去掉 processOutcomes 的 break），悬挂 AudioContext 恢复后继续出声，电脑回合不再静音。</li>
+              <li><b>复位按钮移到圆盘左上角（#F2）</b>：resetSpin 由垂直居中改为圆盘区左上角，⟲ 符号在圆内仍居中。</li>
+              <li><b>比分任一方≥3 颗换行（#F3）</b>：.sc-player-balls 容器宽度=2 颗（30px），任一方进球到 3 即换行。</li>
+              <li><b>首页模式卡加规则入口（#F4）</b>：每张模式卡片右上角新增「规则」按钮，点击弹出对应玩法规则与犯规说明（4 种模式各一份）。</li>
+              <li><b>删除复制链接按钮（#F5）</b>：关于页的「复制链接」按钮及 copyText/flashLabel 引用一并移除。</li>
+              <li><b>新手引导仅首启+重开一次（#F6）</b>：设置「重新打开新手引导」通过同步复位内存 settings.seenGuide（原实现漏改内存 cache 导致引导永不显示），下次进游戏显示 1 次后自动关闭。</li>
+              <li><b>删除台面 LOGO（#F7）</b>：view.ts 中 applyCushionLogos 调用移除，库边 6 枚奥特曼圆盘不再生成。</li>
+              <li><b>力度条击球后维持百分比（#F8）</b>：animateSliderHit() 改为 no-op，playshot.ts 不再调用，力度条击球后停在原设定值。</li>
+              <li><b>删除游戏中规则 tab（#F9）</b>：help.html 的「规则」tab 按钮 + 规则 pane 整段删除（规则入口已迁至首页 #F4）。</li>
+              <li><b>删除横滑条设置默认存在（#F10）</b>：help.html 横滑条 row + help-cn.js 监听移除；settings.ts aimSlider 强制 true（旧存档 false 被纠正）；aimslider.ts 改为始终显示。</li>
+              <li><b>回放进度条为整局进度（#F11）</b>：进度条、吸附点、拖动均按全局累加位置展示（total = Σ shotMeta durations，elapsed = Σ 已播杆 + 当前杆时间）。</li>
+              <li><b>变更履历时间再次校正（#F12）</b>：v1.2.10 时间用真实 APK mtime 校正为 03:08（晚于 v1.2.9 的 02:47），新增 v1.2.11 置顶条目。</li>
+              <li>版本号由 1.2.10 升到 1.2.11；各按钮位置/配色不变。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.10 · 2026-08-10 03:08:00</h3>
+            <p class="about-text dim"><b>3 项用户反馈修复：力度条回退到 v1.2.8 状态（恢复橙→红渐变填充）、关于页 4 个独立按钮上下间距统一（与 GitHub 按钮组一致）、变更履历 v1.2.x 时间戳全部校正并去除重复 v1.2.6 条目。</b></p>
+            <ul class="changelog-list">
+              <li><b>力度条回退 v1.2.8（#F9）</b>：v1.2.9 #F7 把 <code>.power-track { min-width:260px }</code> 改成 <code>min-width:0</code>，本意是让 100% 时黑 8 球贴满右端；但实际在窄屏 / 部分 Android WebView 下，<code>flex:1 1 0%</code> 把 <code>.power-track</code> 收缩压扁 → <code>.power-fill { width:var(--p) }</code> 计算宽度 ≈ 0 → 橙→红渐变填充完全看不见，只剩黑 8 球露出来。v1.2.10 恢复 v1.2.8 的 <code>min-width:260px</code> 保证 track 有稳定宽度，填充必现；极窄屏 100% 时 8 球可能略越右缘，但用户原话"恢复上一版"明确认可此取舍。</li>
+              <li><b>关于按钮上下间距统一（#F10）</b>：关于页 4 个独立按钮（变更履历 / 开源许可与致谢 / 恢复默认设置 / 我的回放）原先直接散落在 <code>setting-group</code> 里，与上方 GitHub 按钮组（被 <code>&lt;div class="link-actions"&gt;</code> 包着）间距规则不同，导致上下间距不一致（且 #btnReset 还有个 <code>margin-top:10px</code> 单独加成进一步破坏一致）。v1.2.10 把 4 个独立按钮各自包到 <code>&lt;div class="link-actions"&gt;</code>，间距全部交给 <code>gap:8px; margin:10px 0 4px</code>，与 GitHub 按钮组完全统一；同时移除 <code>.btn-mini.danger</code> 的特殊 <code>margin-top:10px</code>。</li>
+              <li><b>变更履历 v1.2.x 时间戳校正（#F11）</b>：v1.2.x 时间戳原写有错——v1.2.7 标 20:52 但晚于 v1.2.9（18:30）、v1.2.6 标 20:41 但同样晚于 v1.2.9、v1.2.5 标 19:00 同样晚于 v1.2.9；v1.2.6 还重复一次；v1.2.2 写到 <code>00:59</code> 与 v1.2.0 的 <code>04:45</code> 倒挂。v1.2.10 改用 <code>repo/apk-publish/</code> 真实文件 mtime 校正全部 v1.2.x（共 9 个时间戳），并删除重复的 v1.2.6 块（保留内容更完整的"9 项用户反馈"版本）。修正后时间顺序：v1.2.0(04:42) → v1.2.1(05:36) → v1.2.2(15:25) → v1.2.3(17:04) → v1.2.5(19:39) → v1.2.6(21:11) → v1.2.7(22:46) → v1.2.8(次日 01:57) → v1.2.9(次日 02:47)，严格单调递减。</li>
+              <li>版本号由 1.2.9 升到 1.2.10；底部栏木纹金边背景、边框、整体色调、各按钮位置不变。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.9 · 2026-08-10 02:47:00</h3>
+            <p class="about-text dim"><b>8 项用户反馈修复：进袋音效去重（力度100%不重播）、微调按钮可滑动拉杆、回放倍速规则（最后碰撞/进袋后倍速）、重新开启新手引导不进游戏、回放进度条可滑动+进球吸附点、新手引导示意框缩小上移、力度条100%黑8占满、比分栏大球数字缩小居中。</b></p>
+            <ul class="changelog-list">
+              <li><b>进袋音效去重（#F1）</b>：力度 100% 进袋时，因物理步进 / 回放重模拟，同一颗球可能多次触发 Pot 音效。改为按「球 id」去重——同一颗球在一杆内只播一次进袋音效，彻底消除重复播放。</li>
+              <li><b>微调按钮可滑动拉杆（#F2）</b>：左右微调按钮（‹ ›）原为原生 <code>&lt;button&gt;</code>，触摸拖动会被浏览器当作手势立即触发 <code>pointercancel</code> 而中断滑动。改为 <code>div[role=button]</code> 并显式绑定 <code>pointerdown</code> + <code>preventDefault()</code>，整条（含 ‹ ›）都能按下拖动微调瞄准；轻点仍保留单步微调。</li>
+              <li><b>回放倍速规则（#F3）</b>：回放倍速起点按用户规则精确化——① 最后一颗球发生碰撞之后开始倍速，直到所有球停止；② 若有球进袋且此后无碰撞，则从进袋之后开始倍速，直到所有球停止。实现上每杆头less 预演算出「最后碰撞/进袋时间戳 + 提前量」作为触发点，物理越过该点才进入 3 倍速，此前保持常速看动作。</li>
+              <li><b>重新开启新手引导不进游戏（#F4）</b>：设置里「重新开启新手引导」不再立即跳转对局，仅复位 seenGuide 标记并弹轻提示「已开启新手引导，进入对局即可看到」，由用户自行进入对局后查看引导。</li>
+              <li><b>回放进度条可滑动 + 进球吸附点（#F5）</b>：回放新增底部进度条，可拖动到本杆任意时间点（确定性重跑物理还原画面）。进度条带「进球前时间点」红色吸附点，拖动到附近自动吸附，直觉察觉该处有进球发生。</li>
+              <li><b>新手引导示意框缩小上移（#F6）</b>：引导横幅整体缩小（最大宽度 560px→420px、内边距与字号收紧、圆角减小），并在 v1.2.8 的 40% 基础上再上移到 28%，进一步让出白球 / 被击球前景视野。</li>
+              <li><b>力度条100%黑8占满（#F7）</b>：力度条黄色轨道原 <code>min-width:260px</code> 在窄屏把轨道撑得比容器可见宽度还宽，导致 100% 时填充/黑8球被推到可见右缘外、看似未占满；改为 <code>min-width:0</code>，100% 时黑8球真正贴满右端。</li>
+              <li><b>比分栏大球数字缩小居中（#F8）</b>：比分栏「已进球」整颗球上的编号数字字号由 8px 减到 7px，并改为 flex 横竖居中，编号稳定落在球体正中。</li>
+              <li>版本号由 1.2.8 升到 1.2.9；底部栏木纹金边背景、边框、整体色调、各按钮位置不变。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.8 · 2026-08-10 01:57:00</h3>
+            <p class="about-text dim"><b>8 项用户反馈修复：加载页纯色背景、复位按钮重设计且左移、力度条 8 球不越框、新手引导再上移、台面 LOGO 平铺、比分球图标精修、已进球 3 个换行、进洞球不再残留袋口。</b></p>
+            <ul class="changelog-list">
+              <li><b>加载页纯色背景（#E1）</b>：进入对局时的 Loading 覆盖层由 position:absolute（仅覆盖 3D 区域）改为 position:fixed + 超高层级（z-index:100000）+ 纯色背景，整屏统一纯色，彻底盖住左上角比分栏，不再出现「加载页与比分栏重合」。</li>
+              <li><b>复位按钮重设计且左移（#E2）</b>：白球击球点复位按钮（⟲）推翻 v1.2.7 的右上角深色方案，改为金色渐变底 + 深棕符号 + 金边，与金色弹窗主题协调；位置从右上角移到圆盘区左侧、垂直居中，与白球分居左右、不遮挡击球点。</li>
+              <li><b>力度条 8 球不越框（#E3）</b>：黑 8 球滑块定位改用 <code>clamp(19px, var(--p), calc(100% - 19px))</code>，把球心限制在轨道内（半宽 19px），力度 0%/100% 两端球也完整落在凹轨内，不再超出黄色边框。</li>
+              <li><b>新手引导再上移（#E4）</b>：在 v1.2.7「屏幕中央」基础上，横幅 top 由 50% 上移到 40%，进一步让出下方白球 / 被击球前景视野。</li>
+              <li><b>台面 LOGO 平铺（#E5）</b>：库边奥特曼 LOGO 圆盘原先 <code>rotation.x = -π/2</code> 使法线拧到水平方向、竖立在台面上像立牌；本作为 Z-up，CircleGeometry 默认法线 +Z 即朝上，改为 <code>rotation.x = 0</code> 后圆盘平躺于台呢，俯视 / 斜俯视下即「水平平铺」效果。</li>
+              <li><b>比分球图标精修（#E6）</b>：比分栏已进球小图标加 <code>overflow:hidden</code>，把花球的白色横条裁切回圆内，解决「水平白条超出球体」；并加左上角柔光高光，质感更精致。</li>
+              <li><b>已进球 3 个换行（#E7）</b>：比分栏「已进球」容器限定最大宽度 = 3 颗球 + 2 个间距（46px），每满 3 个球自动换行，不再随比分栏宽度无限横排。</li>
+              <li><b>进洞球不再残留袋口（#E8）</b>：球进洞（State.InPocket）后立刻隐藏其 3D mesh 与接触阴影，彻底消失在袋内，不再残留在袋口可见；重新摆回台面时自动恢复可见。斯诺克多红球预置袋内的逻辑不受影响。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.7 · 2026-08-09 22:46:00</h3>
+            <p class="about-text dim"><b>4 项用户反馈修复：新手引导后无法继续击球（严重）、新手引导挪到屏幕中央、白球复位按钮不再遮挡、整个微调条可触摸滑动。</b></p>
+            <ul class="changelog-list">
+              <li><b>新手引导后无法继续击球（严重，任务1）</b>：force 教程模式（练习模式 / 带 <code>?tutorial=1</code> / 「重新打开新手引导」）下，<code>Aim.onFirst</code> 每次进入瞄准都无条件 <code>setDisabled(true)</code>，而首杆后 <code>Tutorial.finish()</code> 已写入 seenGuide 使引导不再重显，导致控件被永久锁死、画面静止、无法继续击球。v1.2.7 改为「仅当尚未看过引导时」才预先禁用，看过之后由下一杆 <code>Aim.onFirst</code> 正确重新启用；同时移除 <code>finish()</code> 里出杆期的强行 <code>setDisabled(false)</code>，保证击球动画期间控件保持禁用、不乱触发。</li>
+              <li><b>新手引导挪到屏幕中央（任务2）</b>：引导横幅从「底部栏上方」改到「屏幕正中」水平居中悬浮。3D 瞄准视角下白球与被击球位于画面下方前景、正中为远处台呢，放中央既不挡白球 / 被击球视野，也不挡底部栏。</li>
+              <li><b>白球复位按钮不再遮挡（任务3）</b>：复位按钮（⟲）从「盖在白球正中央」改到击球点圆盘区的右上角（圆盘标题左对齐的空白区），不再遮挡白球中心的击球点（cueTip）与被击球重叠提示。</li>
+              <li><b>整个微调条可触摸滑动（任务4）</b>：移除横向瞄准条「落在左右微调按钮（‹ ›）上不触发拖动」的守卫，整条（含 ‹ › 按钮）都可按下并滑动微调瞄准；轻点微调按钮（无移动）仍保留「单步微调」。</li>
+              <li>版本号由 1.2.6 升到 1.2.7；底部栏木纹金边背景、边框、整体色调、各按钮位置不变。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.6 · 2026-08-09 21:11:00</h3>
+            <p class="about-text dim"><b>9 项用户反馈修复：回放提速并框定白球/被击球/对应球袋、回放强制从开球开始、细微瞄准栏滑动失效、电脑比分栏分列展示、设置齿轮与底部栏同步、新手引导避让被击球且不自动开局、新手引导指导摆白球、复位按钮居中。</b></p>
+            <ul class="changelog-list">
+              <li><b>回放提速 + 三目标框定（任务1）</b>：回放每杆击球后到球静止之间（无论进洞与否）把物理时间倍率调高 3 倍加快观看，下一次击球前恢复常速；同时每杆由相机自动框定「白球 + 被击球 + 对应进球的球袋」三点（沿白球→球袋方向后上方约 41° 俯瞰，按包围圆自适应拉远），保证每次击球视野都能看见这三者。三库/图解模式沿用俯视。</li>
+              <li><b>回放强制从开球开始（任务2）</b>：<code>wholeGame()</code> 原以录制首条事件为起点，偶发首个事件是开球前的摆白球/记分引导事件，导致回放不从开球开始；改为以「第一条 HIT 事件」为真正起点，用其记录时的桌面状态作初始化、从该事件起切片，正常情况（首条即开球）行为不变。</li>
+              <li><b>细微瞄准栏滑动失效（任务4）</b>：v1.2.5 仅靠元素级 pointer 监听 + setPointerCapture，部分 WebView 不派发 move 或把横拖当滚动触发 pointercancel，导致「滑动无反应」。v1.2.6 改为按下后在 <code>window</code> 捕获阶段挂 <code>pointermove/pointerup/pointercancel</code>（早于 bar 的冒泡 stopPropagation），绕开捕获与手势吞事件问题；setPointerCapture 仅作 best-effort 增强。</li>
+              <li><b>电脑比分栏分列展示（任务5）</b>：比分栏改为两列分列——左列「玩家」显示玩家进球数与进球球色，右列「电脑/对手」显示对方进球数与进球球色；对局时间单独置底居中，玩家名仅显示「玩家」。</li>
+              <li><b>设置齿轮与底部栏同步（任务6）</b>：右上角设置齿轮图标改为与底部栏一致的木纹金边配色（径向渐变 + 金边 + 内高光 + 投影），SVG 描边统一为奶金色。</li>
+              <li><b>重新打开新手引导不自动开局（任务7）</b>：点开「重新打开新手引导」后不再立即自行开启游戏，仅展示引导横幅，由用户自行操作。</li>
+              <li><b>新手引导第一步指导摆白球（任务8）</b>：新手引导第一步改为指导用户摆放白球，期间锁定瞄准控件，确认后进入瞄准/击球引导步骤。</li>
+              <li><b>新手引导避让被击球（任务9）</b>：新手引导横幅从顶部移到底部栏上方，避免遮挡被击球与瞄准区，并使「知道了」按钮可点击。</li>
+              <li><b>白球击球点位复位按钮居中（任务3）</b>：复位按钮（⟲）改为在选点框内绝对居中（50%/50% + translate(-50%,-50%)），圆形木纹金边，与选点框对齐。</li>
+              <li>版本号由 1.2.5 升到 1.2.6；底部栏木纹金边背景、边框、整体色调、各按钮位置不变。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.5 · 2026-08-09 19:39:00</h3>
+            <p class="about-text dim"><b>8 项用户反馈修复：白球弹窗小米13不出屏、点击球桌摆白球、细微瞄准恢复、辅助线默认最长、下半击球点可选、回放改名+完整回放+首页入口、犯规电脑自由摆球、电脑进球有声音。</b></p>
+            <ul class="changelog-list">
+              <li><b>白球弹窗不出屏（小米13 等 WebView）</b>：v1.2.4 的 <code>position:fixed</code> + <code>env()/calc()</code> 视口假设在小米13（2400×1080）WebView 下仍会漂移、弹窗反而更超出边界。v1.2.5 改为：① 把弹窗移到 <code>&lt;body&gt;</code> 直接子级，脱离底部栏的层叠/变形上下文；② 展开时由 JS 依据触发按钮真实 <code>getBoundingClientRect()</code> 计算内联 <code>left/bottom</code> 像素值并夹紧到视口内，旋转/软键盘弹出时自动重定位。彻底规避溢出。</li>
+              <li><b>点击球桌摆白球（任务7）</b>：犯规后「手中球」摆位，新增可直接点击/拖拽球桌任意位置把白球移过去（沿用现有 <code>placeBall</code> 合法点校验），确认仍走「放置」按钮 / 空格。</li>
+              <li><b>细微瞄准栏恢复（任务3）</b>：⑤ 细微瞄准条把同一组 pointer 监听同时挂到轨道与外层条，并补齐 nudge 守卫与指针捕获，触碰滑动恢复可用。</li>
+              <li><b>辅助线默认最长（任务4）</b>：辅助线长度默认档位改为「最长」（白球→被击球→袋口，虚线延伸至袋口）。</li>
+              <li><b>下半击球点可选（任务5）</b>：白球贴球时，原 <code>avoidCueTouchingOtherBall</code> 会无条件把打点上移 0.1 导致下半部分选不中；改为沿打点方向径向收半径保留象限，且面板内选点传入 <code>avoid=false</code> 不再强制上移，低杆/下半部分可自由选。</li>
+              <li><b>回放改名 + 完整回放 + 首页入口（任务6）</b>：结算面板的 "uploade"（实为回放）改名「查看回放」；原回放经 <code>?state=</code> URL 传参被长度截断只回放前 6 球，改为走 sessionStorage 完整传输，可回放整局；首页新增「查看回放」按钮，复用同一回放列表。</li>
+              <li><b>犯规后电脑自由摆球（任务8b）</b>：玩家犯规后电脑不再卡住，会自动在整桌扫描「无重叠 + 视线通目标 + 距目标约 0.5m」的最佳摆放点自由摆白球。</li>
+              <li><b>电脑进球有声音（任务8a）</b>：修复每杆模拟时钟归零导致跨杆 <code>lastOutcomeTime</code> 不重置、新杆（含电脑回合首帧进球）声音被跳过的问题，电脑进球音效恢复。</li>
+              <li>版本号由 1.2.4 升到 1.2.5；底部栏木纹金边背景、边框、整体色调、各按钮位置不变。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.3 · 2026-08-09 17:04:00</h3>
             <p class="about-text dim"><b>修复启动闪退：部分机型点击图标即闪退、进不了首页。</b></p>
             <ul class="changelog-list">
               <li><b>根因</b>：主菜单在启动阶段调用 detectGpu() 用裸 <code>canvas.getContext("webgl")</code> 读取 GPU 型号；部分机型 GPU 驱动在创建该探测用 WebGL 上下文时会直接令渲染进程崩溃，表现为「点图标即闪退，进不了首页」。</li>
@@ -607,7 +743,7 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.2.2 · 2026-08-09 00:59:00</h3>
+            <h3>v1.2.2 · 2026-08-09 15:25:00</h3>
             <p class="about-text dim"><b>辅助线长度改 4 档 + 积分牌下方「已进球」整颗球 + 操作说明补全 + 白球弹窗不出屏 + 复位按钮放大 + 细微瞄准可无限滑动。</b></p>
             <ul class="changelog-list">
               <li><b>辅助线长度 4 档</b>：原 6 档（0~5）精简为「关闭 / 短 / 中 / 最长」4 档；最长档 = 白球→被击球→袋口，虚线不再截断、一直延伸到袋口。</li>
@@ -621,7 +757,7 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.2.1 · 2026-08-09 05:10:00</h3>
+            <h3>v1.2.1 · 2026-08-09 05:36:00</h3>
             <p class="about-text dim"><b>品牌全面改名「奥特曼的台球」+ 变更履历日期补齐时分秒。</b></p>
             <ul class="changelog-list">
               <li><b>品牌改名</b>：应用页标题、隐藏 H1、系统分享标题、README 与 GitHub 项目介绍，全部由「台球大师 / 中式台球」统一改为「奥特曼的台球 · 离线版」。安卓启动器显示名此前已是「奥特曼的台球」，本次补齐网页端与文档侧品牌，三端一致。</li>
@@ -631,7 +767,7 @@
           </div>
 
           <div class="setting-group">
-            <h3>v1.2.0 · 2026-08-09 04:45:45</h3>
+            <h3>v1.2.0 · 2026-08-09 04:42:00</h3>
             <p class="about-text dim"><b>底部栏视觉统一里程碑 —— 力度条改为与按钮一致的「木纹金边」风格，并让金色边框上下与按钮对齐。</b></p>
             <ul class="changelog-list">
               <li><b>力度条木纹金边（v1.1.60）</b>：④ 力度条外壳由原先的白胶囊改为与 ①②③⑤ 按钮一致的木纹棕渐变（#6b4a22→#4a3014）+ 金边 #c89534 + 圆角 12px + 暖色投影；百分比数字改为奶白 #fff5d8（棕底高对比，与图标同色）。橙红填充 / 浅黄凹陷轨道 / 黑色 8 球滑块等功能性元素全部保留。整条底部栏视觉统一。</li>
@@ -1417,8 +1553,23 @@
       </section>
     </div>
 
+    <!-- v1.2.4：我的回放（离线本地保存的回放列表） -->
+    <div id="replayListOverlay" class="replay-overlay" hidden>
+      <div class="replay-backdrop" data-close-replay></div>
+      <div class="replay-modal" role="dialog" aria-label="我的回放">
+        <div class="replay-modal-head">
+          <h3>我的回放</h3>
+          <button class="replay-close" type="button" data-close-replay aria-label="关闭">×</button>
+        </div>
+        <div class="replay-list" id="replayList"></div>
+        <div class="replay-empty" id="replayEmpty" hidden>
+          还没有保存的回放。<br />在每局结束后点击「保存回放」即可在此回看。
+        </div>
+      </div>
+    </div>
+
     <script>
-      window.__BILLIARDS_VERSION__ = "1.2.3-26080917";
+      window.__BILLIARDS_VERSION__ = "1.2.11-26081011";
     </script>
     <script src="menu-cn.js"></script>
   </body>
