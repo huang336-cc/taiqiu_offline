@@ -363,6 +363,9 @@ input[type="range"].aim-angle-slider {
   position: relative;
   z-index: 2;
   touch-action: none;
+  /* v1.2.2：拖动改由轨道（#aim-angle-track）接管控件，input 仅作静态居中手柄，
+     不再拦截指针（避免原生 range 在两端夹住、无法继续滑动瞄准） */
+  pointer-events: none;
 }
 
 input[type="range"].aim-angle-slider::-webkit-slider-runnable-track {
