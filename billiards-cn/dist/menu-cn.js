@@ -128,16 +128,13 @@
   }
 
   function detectGpu() {
-    try {
-      var c = document.createElement("canvas")
-      var gl = c.getContext("webgl") || c.getContext("experimental-webgl")
-      if (!gl) return ""
-      var dbg = gl.getExtension("WEBGL_debug_renderer_info")
-      if (!dbg) return ""
-      return String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || "")
-    } catch (e) {
-      return ""
-    }
+    // 关键修复：菜单启动阶段【不再】创建 WebGL 上下文。
+    // 原实现用裸 canvas.getContext("webgl") 读取 GPU 型号，但部分机型 GPU 驱动
+    // 在创建这个上下文时会直接令渲染进程崩溃（表现即"点图标即闪退，进不了首页"）。
+    // 画质自动分级改为仅依据 deviceMemory / 核数 / DPR，已知低端 GPU 的额外扣分在此跳过；
+    // 用户仍可在设置中手动调低画质。游戏页（index.html）真正的 WebGL 由 three.js 负责，
+    // 那里有 onRenderProcessGone 兜底，与菜单解耦。
+    return ""
   }
 
   var settings = loadSettings()
