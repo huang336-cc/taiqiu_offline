@@ -7,8 +7,9 @@ import type { Container } from "../../container/container"
  * 横向瞄准角度滑动条（悬浮 2D UI，不参与 3D 场景渲染）。
  *
  * 数值映射：
- * - 滑动条总长度 = 瞄准的完整左右转动范围（普通对局 ±180°，
- *   分析模式收窄到 aimLimits 给出的窗口）。
+* - 滑动条总长度 = 瞄准的完整左右转动范围（普通对局 ±1°，v1.1.31 由 ±2° 收紧，
+   *   比屏幕拖动瞄准的角分辨率更细微，专用于「差一点点」时的极精细修正，
+   *   分析模式收窄到 aimLimits 给出的窗口）。
  * - 滑块居中 = 进入瞄准时的初始正向瞄准方向（cue.aimBase）。
  * - 向左拖 → 角度向左转；向右拖 → 角度向右转；位置与角度线性一一对应。
  * - 触达两端后 input[type=range] 自身即会夹住，滑块拖不出去。
@@ -27,12 +28,16 @@ import type { Container } from "../../container/container"
 export class AimSlider {
   private readonly container: Container
   private readonly bar: HTMLElement | null
+  private readonly track: HTMLElement | null
   private readonly slider: HTMLInputElement | null
   private readonly nudgeLeft: HTMLElement | null
   private readonly nudgeRight: HTMLElement | null
 
   /** 用户正在拖滑块：此时不要用程序值回写，否则会和手指打架 */
   private dragging = false
+  /** 拖动起点：屏幕 X 与当时的瞄准角，用于相对增量（不截断、可继续滑动） */
+  private dragStartX = 0
+  private dragStartAngle = 0
   /** 长按微调按钮的连发定时器 */
   private repeatTimer: ReturnType<typeof setInterval> | null = null
   private repeatDelay: ReturnType<typeof setTimeout> | null = null
@@ -43,6 +48,7 @@ export class AimSlider {
   constructor(container: Container) {
     this.container = container
     this.bar = id("aimAngleBar")
+    this.track = id("aim-angle-track")
     this.slider = id("aimAngle") as HTMLInputElement | null
     this.nudgeLeft = id("aimNudgeL")
     this.nudgeRight = id("aimNudgeR")
@@ -65,13 +71,14 @@ export class AimSlider {
       this.bar?.addEventListener(type, swallow)
     }
 
-    if (this.slider) {
-      this.slider.addEventListener("pointerdown", this.onDragStart)
-      this.slider.addEventListener("pointerup", this.onDragEnd)
-      this.slider.addEventListener("pointercancel", this.onDragEnd)
-      this.slider.addEventListener("input", this.onSliderInput)
-      // 键盘操作（部分设备外接手柄/键盘）同样要收尾
-      this.slider.addEventListener("change", this.onDragEnd)
+    if (this.track) {
+      // v1.2.2：改为在轨道（#aim-angle-track）上做相对拖动，
+      // 不再依赖 input[type=range] 的 value（原生 range 到两端会夹住，无法继续滑动瞄准）。
+      // 指针捕获保证手指滑出轨道范围也继续收到 move 事件。
+      this.track.addEventListener("pointerdown", this.onDragStart)
+      this.track.addEventListener("pointermove", this.onDragMove)
+      this.track.addEventListener("pointerup", this.onDragEnd)
+      this.track.addEventListener("pointercancel", this.onDragEnd)
     }
     this.bindNudge(this.nudgeLeft, -1)
     this.bindNudge(this.nudgeRight, 1)
@@ -144,15 +151,49 @@ export class AimSlider {
     return !inputs || inputs.isDisabled()
   }
 
-  private onDragStart = () => {
+  private onDragStart = (e: PointerEvent) => {
     if (this.isDisabled()) return
     this.dragging = true
+    // 记录起点：屏幕 X 与当时的真实瞄准角，后续用相对增量（不截断）
+    this.dragStartX = e.clientX
+    this.dragStartAngle = this.cue.aim.angle
     this.cue.beginAimInteraction()
+    // 捕获指针：手指滑出轨道范围也继续收到 move 事件，可一直滑下去
+    try {
+      this.track?.setPointerCapture(e.pointerId)
+    } catch {
+      /* 某些 WebView 在非 primary pointer 上会抛错，忽略 */
+    }
   }
 
-  private onDragEnd = () => {
+  private onDragMove = (e: PointerEvent) => {
+    if (!this.dragging || this.isDisabled()) return
+    const track = this.track
+    if (!track) return
+    const rect = track.getBoundingClientRect()
+    if (rect.width <= 0) return
+    const dx = e.clientX - this.dragStartX
+    // 一条满轨宽 = ±AIM_FINE_HALF_RANGE（与旧 range 灵敏度一致，但不再夹住两端）
+    const HALF = Math.PI / 180
+    const delta = (dx / rect.width) * 2 * HALF * this.viewSign()
+    const target = this.dragStartAngle + delta
+    this.cue.setAimAngle(target, this.container.table)
+    this.container.lastEventTime = performance.now()
+    // 视觉填充仅作方向提示（轨道中心=本杆初始方向），角度本身不截断
+    const pct = Math.max(0, Math.min(100, 50 + (dx / rect.width) * 50))
+    if (this.slider) {
+      this.slider.style.setProperty("--v", pct.toFixed(2) + "%")
+    }
+  }
+
+  private onDragEnd = (e: PointerEvent) => {
     if (!this.dragging) return
     this.dragging = false
+    try {
+      this.track?.releasePointerCapture(e.pointerId)
+    } catch {
+      /* 无捕获时忽略 */
+    }
     this.cue.endAimInteraction()
     this.cue.flashAimInteraction()
     // 松手归中：滑块回 0，基准锁定为当前瞄准角，下次拖动重新相对当前方向微调
@@ -161,24 +202,6 @@ export class AimSlider {
       this.slider.style.setProperty("--v", "50%")
     }
     this.cue.setAimBase(this.cue.aim.angle)
-  }
-
-  private onSliderInput = () => {
-    if (!this.slider) return
-    if (this.isDisabled()) {
-      // 控件被禁用时把滑块拉回当前真实角度，避免出现「假位置」
-      this.sync()
-      return
-    }
-    const value = Number(this.slider.value)
-    const target = this.cue.aimAngleFromSlider(value * this.viewSign())
-    this.cue.setAimAngle(target, this.container.table)
-    this.container.lastEventTime = performance.now()
-    // 拖动中实时更新轨道填充（滑块静止时由 sync 锁定在 50% 居中）
-    this.slider.style.setProperty(
-      "--v",
-      (value * 50 + 50).toFixed(3) + "%"
-    )
   }
 
   /**
