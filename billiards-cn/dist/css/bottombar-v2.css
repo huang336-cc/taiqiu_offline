@@ -1,0 +1,790 @@
+/* ==========================================================================
+   v1.1.18 底部栏：铺满底栏 / 5 段自适应 / ② 仅图标 / 图形化抬杆
+   - 5 段固定顺序：① 摆球/击球 · ② 白球击球点 · ③ 视角 · ④ 力度 · ⑤ 细微瞄准
+   - ①②③ 统一木纹金边按钮：等长、等高、同色同样式；② 仅图标（去掉"白球击球点"文字）
+   - ② 点开后悬浮紧凑面板：击球点圆盘（点击设点）+ 图形化抬杆（拖动球杆）
+   - ④⑤ 在剩余空间内 flex 自适应，避免最右 aim 段被截断
+   - 设置按钮（id="menu"）屏幕右上角金色齿轮，无文字
+   - 所有原 id 保留，TS 接线不变
+   ========================================================================== */
+
+/* ---------- 0. 击球点圆盘尺寸（popup 内稍大，方便选点） ---------- */
+:root {
+  --ball-size-base: 132px;
+  --ball-size-small: 64px;
+}
+
+/* ---------- 0.5 v1.1.58 loading 阶段隐藏底部栏 ----------
+   之前：index.html 加载时 3D 场景异步初始化，#viewP1 内的 .view3d-loading
+   覆盖层显示"加载中…"，但底部栏 #panel 同步渲染，造成"两个页面"的错觉
+   （用户看到「带底部栏的中间页」→ 跳转到「真游戏页」）。
+   现在：body 默认无 .game-ready 类，CSS 隐藏 #panel；3D 资源就绪后，
+   browsercontainer.ts 的 onAssetsReady() 给 body 加 .game-ready，
+   #panel 淡入，与 .view3d-loading 淡出同步，整体观感是「加载中…→ 出现 3D 场景 + 底部栏」。 */
+html body:not(.game-ready) #panel {
+  opacity: 0;
+  pointer-events: none;
+}
+html body.game-ready #panel {
+  opacity: 1;
+  transition: opacity 0.4s ease;
+}
+
+/* ---------- 1. .panel / .bottom-bar：底部栏容器，铺满、不留左侧缝隙 ---------- */
+.panel {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  /* v1.1.19：右侧留出 R 角安全区（约 26px），避免屏幕圆角遮住最右边的瞄准按钮
+     v1.1.23：增加左侧 50px 内边距，将整个底部栏左移，让右侧按钮离 R 角更远
+     v1.1.37：左侧内边距从 8px → 2px，让 ①②③ 三颗按钮左移吃回空白带；右侧安全区保持 */
+  padding: 0
+    max(26px, env(safe-area-inset-right, 16px))
+    var(--cn-safe-bottom, 0px)
+    max(2px, env(safe-area-inset-left, 2px));
+  height: calc(70px + var(--cn-safe-bottom, 0px));
+  width: 100%;
+  box-sizing: border-box;
+  position: relative;
+  background: linear-gradient(
+    180deg,
+    var(--cn-panel-top, #0a3a4a),
+    var(--cn-panel-bottom, #000214)
+  );
+  border-top: 1px solid #2d1e16;
+  border-radius: 0;
+  flex: 0 0 auto;
+}
+
+/* v1.1.37：gap 从 4px → 3px，进一步给 ④ 让出横向空间 */
+.bottom-bar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+  width: 100%;
+  height: 70px;
+  flex: 1 1 auto;
+  box-sizing: border-box;
+}
+
+.bb-seg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 70px;
+  box-sizing: border-box;
+  border-radius: 12px;
+  position: relative;
+  flex: 0 0 auto;
+}
+
+/* ---------- 2. ①②③ 统一木纹金边触发按钮：响应式等宽 ---------- */
+/* v1.1.37：width 从 clamp(78px,11vw,100px) → clamp(56px,7.5vw,74px)
+   - 缩小 ①②③ 三段宽度，把水平空间让给 ④ 力度胶囊（让胶囊能展示完整药丸轨道 + 橙红填充 + 8 球）
+   - 配合 .panel padding-left 8→2 和 .bottom-bar gap 4→3，整体让出 ~70-90px 给 ④ */
+.bb-seg-cuehit,
+.bb-seg-cueball,
+.bb-seg-camera {
+  width: clamp(56px, 7.5vw, 74px);
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.seg-trigger,
+#camera {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 4px 6px;
+  background: linear-gradient(180deg, #6b4a22 0%, #4a3014 100%);
+  border: 2px solid #c89534;
+  border-radius: 12px;
+  color: #f3d79a;
+  font-family: var(--font-family-primary, sans-serif);
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.18),
+    0 2px 6px rgba(0, 0, 0, 0.4);
+  -webkit-tap-highlight-color: transparent;
+}
+.seg-trigger:active,
+#camera:active {
+  transform: scale(0.96);
+  filter: brightness(0.94);
+}
+.seg-trigger:disabled,
+#camera:disabled {
+  filter: grayscale(0.6) brightness(0.6);
+  cursor: not-allowed;
+}
+
+/* v1.1.18：② 去掉"白球击球点"文字，仅图标 */
+.bb-seg-cueball .seg-label {
+  display: none;
+}
+
+/* v1.1.19：③ 也去掉"视角"文字，与 ② 一致仅留图标 */
+.bb-seg-camera .seg-label {
+  display: none;
+}
+
+/* v1.1.37：高对比度配色 + 稍大尺寸
+   - 颜色从 #f3d79a（暗黄米）→ #fff5d8（亮奶白），与木纹金边底色对比度从 ~1.6 提到 ~6+
+   - SVG 描边 2 → 2.4，更清晰
+   v1.1.39：尺寸 36×36 → 40×40（时间按钮与白球操作按钮图形同步增大，二者共用 .seg-icon 故大小/颜色天然一致）
+   - 注：相机按钮的 .cam-icon 单独用 34×26，不受影响 */
+.seg-icon {
+  width: 40px;
+  height: 40px;
+  display: block;
+  color: #fff5d8;
+  pointer-events: none;
+}
+.seg-icon svg {
+  width: 100%;
+  height: 100%;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2.4;
+}
+.seg-label {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* ③ 视角：相机图标
+   v1.1.57：相机 SVG 子元素颜色**直接写死** #fff5d8（亮奶白），不再依赖 currentColor。
+   ① 任何 WebView 对 currentColor/继承解析差异都不会让图标偏金；
+   ② 顶部凸起 path 的 fill 不再被 .seg-icon svg { fill:none } 的继承覆盖 → 凸起可见；
+   ③ 与白球操作按钮图标色完全一致（#fff5d8 亮奶白）。
+   v1.1.56 仅在 .cam-icon 上 color:#fff5d8，部分 WebView 仍受 .menuButton 的
+   --cn-gold（#e8c37a）通过继承影响，且 path 的 fill 被 .seg-icon svg fill:none
+   继承吃掉不可见。本版直接给 SVG rect/circle/path 写死 #fff5d8，彻底消除不确定性。
+   底部栏木纹金边背景、边框、整体色调保持不变。 */
+#camera .cam-icon {
+  width: 34px;
+  height: 26px;
+  color: #fff5d8;
+}
+#camera .cam-icon svg {
+  width: 100%;
+  height: 100%;
+  stroke-width: 2.5;
+}
+#camera .cam-icon svg rect,
+#camera .cam-icon svg circle {
+  fill: none !important;
+  stroke: #fff5d8 !important;
+}
+#camera .cam-icon svg path {
+  fill: #fff5d8 !important;
+  stroke: none !important;
+}
+
+/* v1.1.59：相机模式指示（ᶻ/ᵀ）布局与配色
+   - 之前用 emoji（🎥ᶻ / 🎥ᵀ）整体替换按钮内容，会把奶白 SVG 抹掉，
+     Android WebView 又把 emoji 渲染成系统黄/金色 → 图标变金。
+   - 现在改为：保留 SVG，仅用 .cam-mode 文本显示 ᶻ（aimz 拉远）/ ᵀ（顶视）模式字母，
+     颜色强制写死 #fff5d8（亮奶白），与图标完全一致。
+   - .cam-row 让图标与模式字母横向排列；aim 默认模式不显示字母以保持简洁。 */
+#camera .cam-row {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 1px;
+}
+#camera .cam-mode {
+  color: #fff5d8 !important;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  margin-top: -2px;
+  pointer-events: none;
+}
+#camera:not(.topview):not(.aimz) .cam-mode {
+  display: none;
+}
+
+/* ① 击球按钮：保留 TimeoutButton 倒计时扫光环 */
+#cueHit.timeout-btn {
+  background:
+    linear-gradient(180deg, #6b4a22 0%, #4a3014 100%) padding-box,
+    conic-gradient(
+        var(--timer-color, #10b981) var(--sweep, 360deg),
+        #c89534 0deg
+      )
+      border-box;
+  border: 3px solid transparent;
+  color: #f3d79a;
+}
+#cueHit:disabled {
+  visibility: hidden;
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ---------- 3. ② 白球击球点 popup：圆盘 + 图形化抬杆 ---------- */
+.cueball-popup {
+  position: absolute;
+  /* v1.2.2：原 left:50% + translateX(-50%) 会把 256px 弹窗以最左侧的 ② 按钮为中心，
+     导致弹窗左半边溢出屏幕左缘。改为锚定到按钮左缘（贴近屏幕左安全区），不再居中溢出。 */
+  left: max(8px, env(safe-area-inset-left, 8px));
+  right: auto;
+  transform: none;
+  bottom: calc(100% + 12px);
+  width: 256px;
+  /* 极窄屏兜底：弹窗宽度不超过视口，避免右缘溢出 */
+  max-width: calc(100vw - 16px);
+  /* v1.1.33：限制最大高度并允许内部滚动，确保两块区域都不超出屏幕范围 */
+  max-height: calc(100vh - 84px);
+  max-height: calc(100dvh - 84px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: linear-gradient(180deg, #3a2818 0%, #241608 100%);
+  border: 2px solid #c89534;
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.62);
+  /* v1.1.31：展开选项 = 最高层，盖在比分栏（z-index 1）之上 */
+  z-index: 2000;
+}
+.cueball-popup[hidden] {
+  display: none !important;
+}
+.cueball-popup-body {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+/* 向下小箭头，指向 ② 按钮（弹窗左锚后，箭头改指到 ② 按钮中心） */
+.cueball-popup-arrow {
+  position: absolute;
+  left: 34px;
+  bottom: -11px;
+  transform: none;
+  width: 0;
+  height: 0;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-top: 10px solid #c89534;
+}
+
+/* v1.1.32：上下两块等宽区域，各自上方印操作指引 */
+.cueball-popup .cb-area {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 6px;
+  border: 1px solid rgba(200, 149, 52, 0.45);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.18);
+  box-sizing: border-box;
+}
+/* 区域上方标题 + 简洁操作指引 */
+.cueball-popup .cb-area-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  margin-bottom: 2px;
+}
+.cueball-popup .cb-area-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #f3d79a;
+  font-family: var(--font-family-primary, sans-serif);
+  letter-spacing: 0.04em;
+}
+.cueball-popup .cb-area-desc {
+  font-size: 10px;
+  color: rgba(243, 215, 154, 0.6);
+  font-family: var(--font-family-primary, sans-serif);
+  text-align: center;
+}
+
+/* 击球点圆盘区域（保留相对定位，供复位按钮绝对定位） */
+.cueball-popup .cb-disc-area {
+  position: relative;
+}
+.cueball-popup .ballContainerWrapper {
+  height: auto;
+  width: 112px;
+  flex: 0 0 auto;
+}
+.cueball-popup .ballContainer {
+  position: relative;
+  left: auto;
+  bottom: auto;
+  top: auto;
+  width: 112px;
+  height: 112px;
+  border-radius: 12px;
+  border: 2px solid #c89534;
+}
+
+/* v1.1.18：图形化抬杆（拖动球杆调角度）；标题已上移到区域头，无需绝对定位 */
+.cb-tilt-area {
+  width: 100%;
+}
+.cueball-popup angle-input {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 1;           /* v1.1.34：进一步压低「抬杆高度」区块高度，避免其底部被弹窗裁切 */
+  border: 1.5px solid #8a6428;
+  border-radius: 10px;
+  background:
+    radial-gradient(ellipse at 50% 80%, rgba(232,195,122,0.10), transparent 70%),
+    linear-gradient(180deg, #5a3d1c 0%, #3a2814 100%);
+  touch-action: none;
+  cursor: grab;
+}
+/* v1.1.32：完整白球（去掉半白裁切） */
+.cueball-popup angle-input .ball {
+  aspect-ratio: 1;
+  height: auto;
+}
+.cueball-popup angle-input:active {
+  cursor: grabbing;
+}
+
+/* ---------- 4. ④ 力度段：v1.1.35 完全按图 2 重做
+   - 去掉木纹金边外壳，作为透明容器让内部白胶囊成为视觉
+   - 白胶囊外壳（圆角药丸）= 大号「65%」深蓝字 + 凹陷药丸轨道（橙→红渐变填充 + 黑色 8 球滑块）
+   - 透明 input[type=range] 覆盖在最上层接收点击/拖动手势
+   - 进度变量 --p 设在容器上（aiminputs.ts 已写入），填充宽度与 8 球位置共用同一值
+*/
+/* ④-0 外层段：透明容器，让内部白胶囊成为视觉
+   v1.1.38：min-width 380 → 440，让胶囊内能完整展示「65% + 长凹轨 + 橙红填充 + 8 球」
+   关键：上一版 .power-track 没有 min-width，且子元素全是 position:absolute（内容尺寸=0），
+        flex:1 1 auto 在窄渲染下会被吃掉，导致胶囊看似「65% + 8 球」挤在一起、凹轨消失 */
+.bb-seg-power {
+  flex: 1 1 auto;
+  min-width: 440px;
+  max-width: none;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0 2px;
+}
+/* 隐藏 v1.1.29/v1.1.31 的旧元素（HTML 已移除，这里兜底防止旧版本残留） */
+.bb-seg-power .power-wedge,
+.bb-seg-power .power-marker,
+.bb-seg-power .power-ball-thumb {
+  display: none !important;
+}
+/* ④-1 白胶囊外壳 —— 单组件UI，单一外胶囊框
+   v1.1.38：按用户最新规范完全重做
+   - 苹果扁平化轻拟物：白→极淡冷灰，顶部细高光，外框 1px 极浅冷调
+   - 柔和极淡投影：rgba(70,90,130,0.12) 极低不透明度冷调阴影
+   - gap 12 → 6，让 65% 与凹轨视觉贴合（不留大片空白）
+   v1.1.39：右边距 10 → 4，凹轨（滑动区域）填满右侧空白区，整体更一体 */
+.bb-seg-power .powerSliderContainer {
+  flex: 1 1 auto;
+  /* v1.1.61：高度 56px → 70px，与底部栏按钮（.seg-trigger/#camera，填满 70px 段高）
+     的金色边框上下边对齐。powerSliderContainer 默认 content-box，2px 金边使 border-box=74px，
+     在 70px 段内居中 → 上下各溢出 2px，与按钮（同样是 content-box + 2px 边、居中溢出 2px）
+     的金色边框范围完全一致，不再上下内缩 ~7px。 */
+  height: 70px;
+  margin: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* v1.1.50：去掉右内边距 2px → 0，让黄色 track 能撑到容器最右缘，
+     彻底消除右侧的白色空白带。左侧 14px 保留，让百分比文字与左壁有呼吸空间。 */
+  padding: 0 0 0 14px;
+  /* v1.1.60：力度条外壳改为与底部栏按钮一致的「木纹金边」风格
+     （v1.1.35 起是白胶囊，与底部栏 ①②③⑤ 的木纹金边按钮脱节）。
+     背景用按钮同款木纹棕渐变、金边 2px #c89534、圆角 12px、暖色内高光+投影，
+     与 .seg-trigger / #camera 完全一致，整条底部栏视觉统一。 */
+  background: linear-gradient(180deg, #6b4a22 0%, #4a3014 100%);
+  border: 2px solid #c89534;
+  border-radius: 12px;
+  overflow: visible;
+  align-self: center;
+  touch-action: none;   /* v1.1.41：禁止浏览器把容器内的触摸当作滚动/缩放手势 */
+  /* v1.1.55：禁止触摸高亮 + 禁止文本选择 → 消除 Android WebView 在拖动
+     力度条时闪现的原生高亮 / 文本选择框造成的「闪烁」。
+     （input range 透明且 pointer-events:none，但 focus 状态仍可能透出。） */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.18),
+    0 2px 6px rgba(0, 0, 0, 0.4);
+}
+/* ④-2 左侧大号百分比文字 —— 紧贴左侧胶囊内壁
+   v1.1.38：字号 26 → 28，更深更利落；颜色维持 #1a2547 深色无衬线（系统字体栈） */
+.bb-seg-power .powerPercent {
+  position: static;
+  flex: 0 0 auto;
+  /* v1.1.55：**固定宽度**（78px 容纳「100%」28px 粗体）。
+     之前 flex:0 0 auto + 内容决定宽度 → 个位/两位/三位百分比时文字宽度
+     在 ~36/56/~78px 间跳变，作为 flex 兄弟挤压/释放 .power-track，
+     导致 fill/ball 的 var(--p) 像素基准反复跳变 → 调节时「抽动」。
+     固定宽度后 track 宽度恒定 → var(--p) 像素稳定 → 不再抽动。 */
+  width: 78px;
+  min-width: 78px;
+  max-width: 78px;
+  text-align: left;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
+    system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  /* v1.1.60：外壳改为木纹棕后，深蓝 #1a2547 在棕底上对比度太低 → 改用奶白 #fff5d8，
+     与底部栏图标同色，且在棕底上高对比清晰可读。 */
+  color: #fff5d8;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  z-index: 4;
+}
+/* ④-3 凹陷药丸轨道 —— 终极回归：flex 布局 + 撑满容器右缘
+   v1.1.49（flex:1 1 0% + width:100%）→ 某些 WebView track 被吃掉一截
+   v1.1.50（去右内边距）→ 仍有白边
+   v1.1.51（颜色升级）→ 仍有白边
+   v1.1.52（absolute + left:0 + right:0）→ 撑满了，但左端超出百分比数字
+   v1.1.53（absolute + right:35%）→ 右端又留白了，改回去
+   v1.1.54（终极回归）：**flex 布局** + flex:1 1 0% + width:100%
+   - 关键：track 是 percentage 文字之后的 flex 子项，**左端天然从百分比数字右侧开始**
+     （左端不会超出百分比数字，符合图2红色标注的左端约束）
+   - 关键：flex:1 1 0% + width:100% → track 撑满到容器最右缘
+     （右端不会超出白色容器，符合图2红色标注的右端约束）
+   - fill / ball 仍在 track 内部，var(--p) 以 track 宽度为基准
+   - 颜色维持 v1.1.52 的浅暖黄 #ffe6c2→#f3cb88 */
+.bb-seg-power .power-track {
+  position: relative;
+  flex: 1 1 0%;
+  width: 100%;
+  min-width: 260px;
+  height: 32px;
+  background: linear-gradient(180deg, #ffe6c2 0%, #f3cb88 100%);
+  border-radius: 999px;
+  border: 1px solid rgba(175, 130, 70, 0.35);
+  box-shadow:
+    inset 0 2px 4px rgba(170, 110, 50, 0.3),
+    inset 0 -1px 1px rgba(255, 250, 230, 0.7);
+  overflow: visible;
+  clip-path: none;
+  pointer-events: none;
+}
+/* ④-4 橙 → 红 渐变填充
+   v1.1.43：width 从 var(--p) 改为 100% ——「橙色力度调节条的可调节范围」
+   必须拉到整个凹轨右端，红圈区域内不能留空白。
+   v1.1.48：fill 和 ball 都挂到 .powerSliderContainer 下（容器级），
+   共用同一坐标系——都把 var(--p) 视作**容器宽度**的百分比：
+   ① fill width: var(--p) → 100% 时铺到容器右缘（红圈段填满），
+      65% 时停在视觉的 65% 处，力度进展一眼可读；
+   ② ball left: var(--p) → 100% 时精准卡在右端，65% 时在视觉的 65% 处；
+   ③ ball 在 fill 之上（z2 > z1），深色径向渐变 + 高对比度外阴影
+      + 新增白色外环，在橙红底色上**清晰可见**。
+   v1.1.49：fill / ball 重新挂回 .power-track 内（track 已被强制 width:100%
+   真正撑满容器右缘），var(--p) 现在以**轨道宽度**为基准。这样橙条天然不
+   会超出黄色 track，track 也彻底吃回之前右侧的白色空白带。
+   （v1.1.47 满铺 → 球埋没；v1.1.48 容器级 → 橙条越界；
+   v1.1.49 回到 track 内 + 强制 track 满宽 = 既填满又不越界。） */
+.bb-seg-power .power-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--p, 65%);
+  z-index: 1;
+  background: linear-gradient(
+    to right,
+    #ffb84a 0%,
+    #ff8a3a 35%,
+    #ff5a3a 65%,
+    #ec2a2a 100%
+  );
+  border-radius: 999px;
+  box-shadow: 0 0 10px rgba(255, 90, 50, 0.45);
+  pointer-events: none;
+}
+/* ④-5 写实黑 8 球滑块
+   v1.1.38：更写实 — 36→38，加深径向阴影层次，添加更高对比度的外阴影
+   v1.1.48：球移到容器级（与 fill 共用 var(--p) 坐标系），
+   新增 2px 白色外环 + 加强外阴影，确保在橙红 fill 上**清晰可辨**
+   v1.1.49：球重新挂回 .power-track 内（track 已强制 width:100% 撑满容器右缘），
+   球的 left:var(--p) 以**轨道宽度**为基准，与 fill 同步停在 track 内同一位置，
+   100% 时精准卡在 track 右缘圆角内侧，不会再越出黄色 track。 */
+.bb-seg-power .power-ball {
+  position: absolute;
+  left: var(--p, 65%);
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 30%, #6a6a6a 0%, #2a2a2a 40%, #000 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
+    sans-serif;
+  font-weight: 900;
+  font-size: 18px;
+  line-height: 1;
+  box-shadow:
+    0 0 0 2px #ffffff,
+    0 4px 12px rgba(0, 0, 0, 0.55),
+    inset 0 -3px 5px rgba(255, 255, 255, 0.18),
+    inset 0 3px 4px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+  z-index: 2;
+}
+/* ④-6 透明 input —— 仅作为「力度值容器」使用
+   v1.1.41：pointer-events:none，禁用 WebKit 原生 range 的窄 hit-region
+   （Android WebView 上只在 thumb 附近 ±22px 响应触摸，触摸橙色填充区无反应）。
+   真正的触摸由外层 .powerSliderContainer 上的 pointerdown/move/up 处理（aiminputs.ts），
+   把 touchX → ratio → 写回 input.value，再走原 powerChanged 链路。 */
+.bb-seg-power .powerSlider {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: transparent;
+  z-index: 5;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 999px;
+  opacity: 0;        /* 视觉上完全透明（hit 由容器接管） */
+  pointer-events: none;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* v1.1.55：抑制 input range 在拖动时被聚焦时闪现的原生焦点环 / 高亮框（=「闪烁」的第二根因）。
+   即使 opacity:0 + pointer-events:none，某些 Android WebView 仍会在 focus/active
+   状态透出一圈高亮。强制 outline/box-shadow 归零 + tap-highlight 透明。 */
+.bb-seg-power .powerSlider:focus,
+.bb-seg-power .powerSlider:focus-visible,
+.bb-seg-power .powerSlider:focus-within,
+.bb-seg-power .powerSlider:active {
+  outline: none !important;
+  outline-color: transparent !important;
+  box-shadow: none !important;
+  -webkit-tap-highlight-color: transparent;
+}
+.bb-seg-power .powerSlider::-moz-focus-inner { border: 0; padding: 0; }
+.bb-seg-power .powerSlider::-moz-focus-outer { color: transparent; }
+.bb-seg-power .powerSlider::-webkit-slider-runnable-track {
+  height: 100%;
+  background: transparent;
+}
+.bb-seg-power .powerSlider::-moz-range-track {
+  height: 100%;
+  background: transparent;
+}
+.bb-seg-power .powerSlider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 1px;
+  height: 1px;
+  background: transparent;
+  border: none;
+}
+.bb-seg-power .powerSlider::-moz-range-thumb {
+  width: 1px;
+  height: 1px;
+  background: transparent;
+  border: none;
+}
+/* 禁用态：填充与 8 球半透 */
+.bb-seg-power .powerSliderContainer.is-disabled .power-fill,
+.bb-seg-power .powerSliderContainer.is-disabled .power-ball {
+  filter: brightness(0.55);
+  opacity: 0.7;
+}
+
+/* ---------- 5. ⑤ 细微瞄准段：统一样式 = 木纹金边（与 ④ 视觉一致） ---------- */
+/* v1.1.37：min-width 130→110, max-width 220→190, 让出水平空间给 ④ 力度胶囊 */
+.bb-seg-aim {
+  flex: 0 1 auto;
+  min-width: 110px;
+  max-width: 190px;
+  background: #3a2818;
+  border: 1.5px solid #8a6428;
+  border-radius: 12px;
+  padding: 0 10px;
+}
+.bb-seg-aim .aim-angle-bar {
+  width: 100%;
+  height: 54px;
+  margin: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0 4px;
+  gap: 4px;
+}
+.bb-seg-aim .aim-nudge {
+  width: 24px;
+  height: 30px;
+  font-size: 16px;
+  color: #e8c37a;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(232, 195, 122, 0.35);
+  border-radius: 6px;
+}
+.bb-seg-aim .aim-angle-track::before {
+  height: 3px;
+  background: linear-gradient(
+    to right,
+    rgba(232, 195, 122, 0.25) 0%,
+    rgba(232, 195, 122, 0.55) 50%,
+    rgba(232, 195, 122, 0.25) 100%
+  );
+}
+
+/* ---------- 6. 设置按钮（id="menu"）：屏幕右上角金色齿轮，无文字 ---------- */
+#menu {
+  position: fixed;
+  top: max(14px, env(safe-area-inset-top, 14px));
+  right: max(14px, env(safe-area-inset-right, 14px));
+  z-index: 1500;
+  width: auto;
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  color: var(--cn-gold, #e8c37a);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+#menu:active {
+  transform: scale(0.94);
+  filter: brightness(0.92);
+}
+#menu .gear {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #f4cc6a 0%, #c89838 55%, #a87828 100%);
+  border: 2.5px solid #6a4818;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.55),
+    inset 0 2px 3px rgba(255, 255, 255, 0.35);
+}
+#menu .gear svg {
+  width: 32px;
+  height: 32px;
+  fill: #2a1a08;
+}
+/* 隐藏原 .menuButton svg 里的汉堡图标（被齿轮 SVG 取代） */
+#menu > svg {
+  display: none !important;
+}
+
+/* ---------- 7. 旧布局兜底隐藏 ---------- */
+.outerMenu,
+.aimControlColumn,
+.powerAimRow {
+  display: none !important;
+}
+
+/* ---------- 8. 小屏 / 横屏微调 ---------- */
+@media (orientation: landscape) and (max-height: 500px) {
+  .panel {
+    height: calc(58px + var(--cn-safe-bottom, 0px));
+  }
+  .bottom-bar {
+    height: 58px;
+  }
+  .bb-seg {
+    height: 58px;
+  }
+  /* v1.1.37：横屏矮屏也同步缩小 123 按钮，从 clamp(72px,11vw,92px) → clamp(52px,7.5vw,68px) */
+  .bb-seg-cuehit,
+  .bb-seg-cueball,
+  .bb-seg-camera {
+    width: clamp(52px, 7.5vw, 68px);
+  }
+  /* v1.1.37：横屏图标同步稍大，从 26×26 → 30×30，保持高对比度但不挤
+     v1.1.39：横屏同步到 34×34，与竖屏 40×40 同比例缩放 */
+  .seg-icon {
+    width: 34px;
+    height: 34px;
+  }
+  /* v1.1.38：横屏力度段 min-width 280 → 320，让凹轨不塌陷 */
+  .bb-seg-power {
+    min-width: 320px;
+  }
+  .bb-seg-aim {
+    min-width: 110px;
+  }
+  /* v1.1.38：横屏力度胶囊同步紧凑：height 44→48, gap 8→4, padding 收紧
+   v1.1.43：右内边距 8→4，橙红渐变 fill 拉满到右边缘
+   v1.1.50：右内边距 4→0，黄色 track 彻底撑到容器最右缘，消除右侧白色空白带 */
+  .bb-seg-power .powerSliderContainer {
+    /* v1.1.61：横屏矮屏段 .bb-seg 高为 58px（见上方 .bb-seg 规则），
+       力度条同步 48px → 58px，保证金色边框上下与按钮对齐（逻辑同默认段）。 */
+    height: 58px;
+    padding: 0 0 0 12px;
+    gap: 4px;
+  }
+  /* v1.1.38：横屏百分比 22→24，跟上稍大字号 */
+  .bb-seg-power .powerPercent {
+    font-size: 24px;
+    /* v1.1.55：横屏同步固定宽度（24px 字号「100%」约需 ~58px，取 64px 兜底，
+       防止文字宽度变化挤压 .power-track → fill/ball 像素抖动） */
+    width: 64px;
+    min-width: 64px;
+    max-width: 64px;
+    text-align: left;
+  }
+  /* v1.1.52：横屏凹轨也跟随 absolute 定位，高度保持
+   注意：min-width 已移除（absolute 不需要 min-width 兜底） */
+  .bb-seg-power .power-track {
+    height: 26px;
+  }
+  /* v1.1.38：横屏 8 球 30→32，14→15 */
+  .bb-seg-power .power-ball {
+    width: 32px;
+    height: 32px;
+    font-size: 15px;
+  }
+  .bb-seg-aim .aim-angle-bar {
+    height: 44px;
+  }
+  #menu .gear {
+    width: 46px;
+    height: 46px;
+  }
+  .cueball-popup {
+    width: 240px;
+  }
+  .cueball-popup angle-input {
+    aspect-ratio: 2.6 / 1;       /* v1.1.34：横屏矮屏同步压低高度 */
+  }
+}
