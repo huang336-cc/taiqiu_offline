@@ -325,22 +325,23 @@ angle-input .butt {
 
 .resetSpin {
   position: absolute;
-  top: 5px;
-  left: 5px;
-  width: 20px;
-  height: 20px;
+  top: 6px;
+  left: 6px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   margin: 0;
-  border: 1px solid #2d1e16;
+  border: 1.5px solid #2d1e16;
   background: var(--wood-dark);
   color: #fff;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
-  border-radius: 4px;
+  font-size: 22px;
+  border-radius: 6px;
   z-index: 21;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
 }
 
 .ballContainerWrapper.is-disabled .resetSpin {
