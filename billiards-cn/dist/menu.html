@@ -597,6 +597,16 @@
           </p>
 
           <div class="setting-group">
+            <h3>v1.2.3 · 2026-08-09 16:52:00</h3>
+            <p class="about-text dim"><b>修复启动闪退：部分机型点击图标即闪退、进不了首页。</b></p>
+            <ul class="changelog-list">
+              <li><b>根因</b>：主菜单在启动阶段调用 detectGpu() 用裸 <code>canvas.getContext("webgl")</code> 读取 GPU 型号；部分机型 GPU 驱动在创建该探测用 WebGL 上下文时会直接令渲染进程崩溃，表现为「点图标即闪退，进不了首页」。</li>
+              <li><b>修复</b>：菜单与游戏初始化均不再创建该探测用 WebGL 上下文，画质自动分级改为仅依据内存 / 核数 / DPR；游戏真正的 WebGL 由 three.js 创建并由 <code>onRenderProcessGone</code> 兜底。首页现可稳定进入。</li>
+              <li>版本号由 1.2.2 升到 1.2.3；底部栏木纹金边背景、边框、整体色调、各按钮位置不变。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
             <h3>v1.2.2 · 2026-08-09 00:59:00</h3>
             <p class="about-text dim"><b>辅助线长度改 4 档 + 积分牌下方「已进球」整颗球 + 操作说明补全 + 白球弹窗不出屏 + 复位按钮放大 + 细微瞄准可无限滑动。</b></p>
             <ul class="changelog-list">
@@ -1408,7 +1418,7 @@
     </div>
 
     <script>
-      window.__BILLIARDS_VERSION__ = "1.2.2-26080916";
+      window.__BILLIARDS_VERSION__ = "1.2.3-26080917";
     </script>
     <script src="menu-cn.js"></script>
   </body>
