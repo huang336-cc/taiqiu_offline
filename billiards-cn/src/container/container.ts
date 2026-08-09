@@ -123,6 +123,11 @@ export class Container {
     this.rules = RuleFactory.create(ruletype, this)
     this.table = this.rules.table()
     this.view = new View(element, this.table, assets)
+    // v1.1.25：View 已建（renderer 已 OK），后续 setup（Hud/Notification/Menu/
+// LobbyIndicator 等 DOM 依赖 + 资源相关）任一行抛异常都会让 createContainer()
+// throw、this.container 没赋值、animate() 永远跑不到。整块包 try/catch，
+// 错误上报诊断浮层，构造器总能返回，至少能跑渲染循环看到画面。
+try {
     this.table.cue.aimInputs = new AimInputs(this)
     if (keyboard) {
       this.keyboard = keyboard
@@ -180,6 +185,11 @@ export class Container {
     )
     this.updateController(new Init(this))
     //  this.updateController(new End(this))
+} catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    const stack = e instanceof Error ? e.stack : ""
+    console.error("[Container] post-view setup failed:", msg, stack)
+}
   }
 
   init() {
@@ -327,6 +337,8 @@ export class Container {
     }
     this.table.updateBallMesh(computedElapsed)
     this.view.update(computedElapsed, this.table.cue.aim)
+    // v1.2.2：刷新积分牌下方的「已进球」整颗球（仅在落袋集合变化时重建 DOM）
+    this.hud.updatePocketedBalls(this.table)
     this.table.cue.update(computedElapsed)
     this.particles.update(computedElapsed)
     if (!stateBefore && this.table.allStationary()) {
@@ -400,13 +412,9 @@ export class Container {
       }
     } catch (e) {
       // 单帧异常不应中断循环（否则会表现为「永久黑屏」）。
-      // 把错误信息显示到诊断浮层，便于在真机上定位根因。
+      // 错误仅打印到 console（v1.1.28 已移除诊断浮层）。
       const msg = e instanceof Error ? e.message : String(e)
-      if (typeof (globalThis as any).reportWebGLError === "function") {
-        ;(globalThis as any).reportWebGLError("帧循环异常: " + msg)
-      } else {
-        console.error("animate loop error:", e)
-      }
+      console.error("animate loop error:", msg, e)
     }
   }
 
