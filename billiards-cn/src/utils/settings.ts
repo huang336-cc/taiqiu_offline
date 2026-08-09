@@ -292,17 +292,11 @@ export function detectRecommendedLod(): QualityLevel {
 }
 
 function detectGpu(): string {
-  try {
-    const canvas = document.createElement("canvas")
-    const gl = (canvas.getContext("webgl") ||
-      canvas.getContext("experimental-webgl")) as WebGLRenderingContext | null
-    if (!gl) return ""
-    const dbg = gl.getExtension("WEBGL_debug_renderer_info")
-    if (!dbg) return ""
-    return String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) ?? "")
-  } catch {
-    return ""
-  }
+  // 关键修复：不再创建 WebGL 上下文读取 GPU 型号。
+  // 裸 canvas.getContext("webgl") 在部分机型 GPU 驱动上会直接令渲染进程崩溃，
+  // 表现为启动即闪退。画质自动分级退化为仅依据内存/核数/DPR，用户可手动调低画质。
+  // 游戏真正的 WebGL 由 three.js 创建，那里有 onRenderProcessGone 兜底。
+  return ""
 }
 
 export class Settings {
