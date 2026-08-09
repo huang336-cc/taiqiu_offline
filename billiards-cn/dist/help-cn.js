@@ -25,8 +25,8 @@
     "最高渲染精度，仅建议旗舰机型开启，耗电较高。",
   ]
 
-  // 被击打球瞄准线滑动条档位文案（0=关，1~5=短到长）
-  var TLINE_LABELS = ["关闭", "短", "中短", "中", "中长", "长"]
+  // 辅助线长度滑动条档位文案（0=关，1=短，2=中，3=最长），与游戏内保持一致
+  var TLINE_LABELS = ["关闭", "短", "中", "最长"]
 
   var DEFAULTS = {
     lod: 3,
@@ -37,7 +37,7 @@
     lastRule: "nineball",
     vsBot: false,
     fpsCap: 0,
-    targetLineLength: 3,
+    targetLineLength: 2,
     aimLine: true,
     aimSlider: true,
     keepAllViews: true,
