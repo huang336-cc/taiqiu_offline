@@ -24,7 +24,7 @@ export interface GameSettings {
   vsBot: boolean
   /** 帧率上限：0 表示不限制 */
   fpsCap: number
-  /** 被击打球瞄准线长度（0=关闭，1~5=短到长） */
+  /** 辅助线长度档位：0=关闭，1=短，2=中，3=最长（最长=白球→被击球→袋口，不截断） */
   targetLineLength: number
   /** 进球辅助线总开关：实线（母球→碰撞点）+ 虚线（碰撞点→袋口） */
   aimLine: boolean
@@ -53,7 +53,7 @@ const DEFAULTS: GameSettings = {
   lastRule: "nineball",
   vsBot: false,
   fpsCap: 0,
-  targetLineLength: 3,
+  targetLineLength: 2,
   aimLine: true,
   aimSlider: true,
   skin: "classic",
