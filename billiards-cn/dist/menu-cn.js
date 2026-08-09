@@ -26,8 +26,8 @@
     "最高渲染精度，仅建议旗舰机型开启，耗电较高。",
   ]
 
-  // 辅助线长度滑动条档位文案（0=关，1~5=短到长），与游戏内保持一致
-  var TLINE_LABELS = ["关闭", "短", "中短", "中", "中长", "长"]
+  // 辅助线长度滑动条档位文案（0=关，1=短，2=中，3=最长），与游戏内保持一致
+  var TLINE_LABELS = ["关闭", "短", "中", "最长"]
 
   var DEFAULTS = {
     lod: 3,
@@ -41,7 +41,7 @@
     lastOpponent: "solo",
     vsBot: false,
     fpsCap: 0,
-    targetLineLength: 3,
+    targetLineLength: 2,
     aimLine: true,
     aimSlider: true,
     keepAllViews: true,
@@ -297,11 +297,6 @@
       saveSettings(settings)
     })
 
-    $("setAimSlider").addEventListener("change", function (e) {
-      settings.aimSlider = e.target.checked
-      saveSettings(settings)
-    })
-
     $("setKeepViews").addEventListener("change", function (e) {
       settings.keepAllViews = e.target.checked
       saveSettings(settings)
@@ -353,7 +348,6 @@
     $("setAimLine").checked = settings.aimLine !== false
     $("setTLine").value = String(settings.targetLineLength || 3)
     $("setTLineVal").textContent = TLINE_LABELS[settings.targetLineLength || 3] || "中"
-    $("setAimSlider").checked = settings.aimSlider !== false
     $("setKeepViews").checked = settings.keepAllViews !== false
     $("setSkin").value = settings.skin || "classic"
     $("setCueTheme").value = settings.cueTheme || "auto"
