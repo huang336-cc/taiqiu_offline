@@ -3,6 +3,16 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* v1.2.2：操作说明里代表「视角」按钮的相机图标（与游戏内底部栏一致，
+   替换原先的 🎥 emoji），继承正文颜色，与文字基线对齐 */
+.cam-ico {
+  width: 1.15em;
+  height: 1.15em;
+  vertical-align: -0.22em;
+  color: inherit;
+  margin: 0 1px;
+}
+
 body {
   margin: 0;
   padding: 0;
