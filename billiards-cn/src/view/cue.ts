@@ -78,11 +78,12 @@ export class Cue {
 
   /**
    * 横向微调滑动条的角度半幅（弧度）。
-   * 滑块拉到两端 = 当前瞄准角 ±2°，仅用于极精细的微调，不再覆盖整圈 ±180°。
+   * v1.1.31：从 ±2° 收紧到 ±1°，比屏幕拖动瞄准的角分辨率更细微，
+   * 专门用于「差一点点」时的极精细修正。
    * 滑块静止时永远居中（基准锁定为当前瞄准角），因此每次拖动的修正量都
-   * 相对「当前方向」的 ±2°，松手即归中。
+   * 相对「当前方向」的 ±1°，松手即归中。
    */
-  private static readonly AIM_FINE_HALF_RANGE = (2 * Math.PI) / 180
+  private static readonly AIM_FINE_HALF_RANGE = (1 * Math.PI) / 180
 
   constructor() {
     if (typeof document !== "undefined") {
@@ -482,8 +483,10 @@ export class Cue {
       this.aimLine.hide()
       return
     }
-    // 档位 1~5 → 无袋口可指时线条最长 0.4~2.0 米
-    const maxLen = settings.targetLineLength * 0.4
+    // 档位 0=关闭，1=短，2=中，3=最长（最长=白球→被击球→袋口，不截断）
+    // 各档对应「无袋口可指时」虚线延伸的最大长度（米）；最长档用 Infinity 表示延伸到袋口。
+    const TARGET_LINE_MAX: number[] = [0, 0.5, 1.4, Infinity]
+    const maxLen = TARGET_LINE_MAX[settings.targetLineLength] ?? 0
     this.aimLine.update(table, this.aim.angle, maxLen)
   }
 
