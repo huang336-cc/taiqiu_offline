@@ -5,8 +5,12 @@ import { End } from "../../controller/end"
 import { Session } from "./session"
 import { gameOverButtons } from "../../utils/gameover"
 import { VERSION } from "../../utils/version"
-import { NotificationHighBreak } from "../../view/notification"
+import { NotificationHighBreak, NotificationActionHandlers } from "../../view/notification"
 import { T } from "../../utils/i18n"
+import { downloadText } from "../../utils/download"
+import { saveReplayToDB } from "../../utils/replay-store"
+import { getUID } from "../../utils/uid"
+import { storeReplayAndNavigate } from "../../utils/replay-nav"
 
 export interface MatchResult {
   winner: string
@@ -100,29 +104,106 @@ export class MatchResultHelper {
   }
 
   private static notifyWin(container: Container, subtext: string) {
-    container.notifyLocal({
-      type: "GameOver",
-      title: T.youWon,
-      subtext: subtext,
-      highBreaks: this.getHighBreaks(container),
-      icon: "🏆",
-      extraClass: "is-winner",
-      extra: this.getGameOverButtons(),
-      duration: 0,
-    })
+    container.notifyLocal(
+      {
+        type: "GameOver",
+        title: T.youWon,
+        subtext: subtext,
+        highBreaks: this.getHighBreaks(container),
+        icon: "🏆",
+        extraClass: "is-winner",
+        extra: this.getGameOverButtons(),
+        duration: 0,
+      },
+      0,
+      this.buildSaveReplayHandler(container)
+    )
   }
 
   private static notifyLoss(container: Container, subtext: string) {
-    container.notifyLocal({
-      type: "GameOver",
-      title: T.youLost,
-      subtext: subtext,
-      highBreaks: this.getHighBreaks(container),
-      icon: "🥈",
-      extraClass: "is-loser",
-      extra: this.getGameOverButtons(),
-      duration: 0,
-    })
+    container.notifyLocal(
+      {
+        type: "GameOver",
+        title: T.youLost,
+        subtext: subtext,
+        highBreaks: this.getHighBreaks(container),
+        icon: "🥈",
+        extraClass: "is-loser",
+        extra: this.getGameOverButtons(),
+        duration: 0,
+      },
+      0,
+      this.buildSaveReplayHandler(container)
+    )
+  }
+
+  /** v1.2.4：构建「保存回放」按钮的动作处理器。
+   *  编码本局录制数据 → Blob 下载 + 写入本地 IndexedDB（「我的回放」），
+   *  并在原结算面板的按钮上就地反馈，不替换结算面板。 */
+  private static buildSaveReplayHandler(
+    container: Container
+  ): NotificationActionHandlers {
+    return {
+      viewReplay: () => {
+        try {
+          const compressed = container.recorder.getWholeGameCompressed()
+          // 经 sessionStorage 传递完整回放数据，避开 WebView URL 长度上限
+          // （之前 ?state= 超长被截断，只回放前几个球）。
+          storeReplayAndNavigate(compressed, container.rules.rulename)
+        } catch (e) {
+          console.error("view replay failed", e)
+        }
+      },
+      saveReplay: () => {
+        try {
+          const compressed = container.recorder.getWholeGameCompressed()
+          const rule = container.rules.rulename
+          const score = Session.getInstance().myScore()
+          const ts = new Date()
+            .toISOString()
+            .replace(/[:.]/g, "-")
+            .slice(0, 19)
+          const filename = `奥特曼的台球_${rule}_${ts}.bcr`
+          const ok = downloadText(filename, compressed, "application/octet-stream")
+          saveReplayToDB({
+            id: getUID() + "_" + Date.now(),
+            rule,
+            compressed,
+            createdAt: Date.now(),
+            score,
+            label: `${this.ruleLabel(rule)} · ${score} 分`,
+          }).catch((e) => console.error("saveReplayToDB failed", e))
+          const btn = document.querySelector(
+            '[data-notification-action="saveReplay"]'
+          ) as HTMLButtonElement | null
+          if (btn) {
+            btn.textContent = ok ? "已保存 ✓" : "已存入回放 ✓"
+            btn.disabled = true
+            btn.classList.add("is-saved")
+          }
+        } catch (e) {
+          console.error("save replay failed", e)
+          const btn = document.querySelector(
+            '[data-notification-action="saveReplay"]'
+          ) as HTMLButtonElement | null
+          if (btn) {
+            btn.textContent = "保存失败"
+            btn.disabled = true
+          }
+        }
+      },
+    }
+  }
+
+  private static ruleLabel(rule: string): string {
+    const m: Record<string, string> = {
+      nineball: "九球",
+      eightball: "八球",
+      snooker: "斯诺克",
+      threecushion: "三颗星",
+      sagu: "沙古",
+    }
+    return m[rule] || rule
   }
 
   private static notifySpectator(container: Container, subtext: string) {

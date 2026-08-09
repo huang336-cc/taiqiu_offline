@@ -324,23 +324,33 @@ angle-input .butt {
 }
 
 .resetSpin {
+  /* v1.2.8 #E2：重新设计 + 移到左侧。
+     ① 配色改与金色弹窗主题协调：金色渐变底 + 深棕符号 + 金边，不再是孤立的深色木纹块；
+     ② 位置从「右上角」改到「圆盘区左侧、垂直居中」，与白球（居中圆）分居左右、
+        不遮挡击球点 cueTip，也更贴合用户「调整至左边」的要求。
+     v1.2.11 #F2：从圆盘区左侧垂直居中，改到击球点外框的左上角。
+     用户要求「循环图标在圆形中居中，并将图标放在白球击球点外框的左上角」。 */
   position: absolute;
-  top: 5px;
-  left: 5px;
-  width: 20px;
-  height: 20px;
+  top: 4px;
+  left: 4px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   margin: 0;
-  border: 1px solid #2d1e16;
-  background: var(--wood-dark);
-  color: #fff;
+  border: 1.5px solid #c89534;
+  background: linear-gradient(180deg, #f3cb88 0%, #c89534 100%);
+  color: #3a2814;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
-  border-radius: 4px;
+  font-size: 18px;
+  font-weight: 700;
+  border-radius: 50%;
   z-index: 21;
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.45),
+    0 0 0 2px rgba(255, 245, 216, 0.18);
 }
 
 .ballContainerWrapper.is-disabled .resetSpin {

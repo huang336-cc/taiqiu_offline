@@ -87,6 +87,19 @@ export class Container {
    * simulation accuracy. */
   timeScale = 1
 
+  /**
+   * v1.2.9 #F3 / #F5：回放模式专用状态。
+   * - replayPaused：用户正在拖动进度条（seek）时为 true，强制 timeScale=0
+   *   冻结物理，避免与拖动冲突；松手后复位由 Replay 控制器恢复。
+   * - replayTimeScaleHook：每帧由 Replay 控制器回调，返回本帧应使用的 timeScale
+   *   （#F3 依据本杆「最后碰撞/进袋 + 提前量」动态决定 1 或 REPLAY_FAST）。
+   * - replayFrameHook：每帧由 Replay 控制器回调，用于刷新进度条 UI（#F5）。
+   * 三者均由 Replay 在 onFirst 内挂载、退出回放时清空。
+   */
+  replayPaused = false
+  replayTimeScaleHook: (() => number) | null = null
+  replayFrameHook: (() => void) | null = null
+
   private hudScores = {
     p1: 0,
     p2: 0,
@@ -123,6 +136,11 @@ export class Container {
     this.rules = RuleFactory.create(ruletype, this)
     this.table = this.rules.table()
     this.view = new View(element, this.table, assets)
+    // v1.1.25：View 已建（renderer 已 OK），后续 setup（Hud/Notification/Menu/
+// LobbyIndicator 等 DOM 依赖 + 资源相关）任一行抛异常都会让 createContainer()
+// throw、this.container 没赋值、animate() 永远跑不到。整块包 try/catch，
+// 错误上报诊断浮层，构造器总能返回，至少能跑渲染循环看到画面。
+try {
     this.table.cue.aimInputs = new AimInputs(this)
     if (keyboard) {
       this.keyboard = keyboard
@@ -180,6 +198,11 @@ export class Container {
     )
     this.updateController(new Init(this))
     //  this.updateController(new End(this))
+} catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    const stack = e instanceof Error ? e.stack : ""
+    console.error("[Container] post-view setup failed:", msg, stack)
+}
   }
 
   init() {
@@ -319,6 +342,20 @@ export class Container {
   advance(elapsed) {
     this.frame?.(elapsed)
 
+    // v1.2.9 #F3 / #F5：回放模式下每帧决定 timeScale。
+    // - 用户拖动进度条（seek）时冻结物理（timeScale=0）；
+    // - 否则由 Replay 控制器回调给出本杆的动态倍速（常速 → 最后碰撞/进袋后倍速）；
+    // - 非回放时保持 timeScale 原值（实时对局恒为 1）。
+    if (this.replayMode) {
+      if (this.replayPaused) {
+        this.timeScale = 0
+      } else if (this.replayTimeScaleHook) {
+        this.timeScale = this.replayTimeScaleHook()
+      } else {
+        this.timeScale = 1
+      }
+    }
+
     const steps = Math.floor((elapsed * this.timeScale) / this.step)
     const computedElapsed = steps * this.step
     const stateBefore = this.table.allStationary()
@@ -327,6 +364,8 @@ export class Container {
     }
     this.table.updateBallMesh(computedElapsed)
     this.view.update(computedElapsed, this.table.cue.aim)
+    // v1.2.2：刷新积分牌下方的「已进球」整颗球（仅在落袋集合变化时重建 DOM）
+    this.hud.updatePocketedBalls(this.table)
     this.table.cue.update(computedElapsed)
     this.particles.update(computedElapsed)
     if (!stateBefore && this.table.allStationary()) {
@@ -334,6 +373,11 @@ export class Container {
       this.table.cue.hittingAnimation = false
     }
     this.sound.processOutcomes(this.table.outcome)
+
+    // v1.2.9 #F5：回放每帧刷新进度条 UI（仅回放模式、由 Replay 控制器提供回调）
+    if (this.replayMode) {
+      this.replayFrameHook?.()
+    }
   }
 
   processEvents() {
@@ -400,13 +444,9 @@ export class Container {
       }
     } catch (e) {
       // 单帧异常不应中断循环（否则会表现为「永久黑屏」）。
-      // 把错误信息显示到诊断浮层，便于在真机上定位根因。
+      // 错误仅打印到 console（v1.1.28 已移除诊断浮层）。
       const msg = e instanceof Error ? e.message : String(e)
-      if (typeof (globalThis as any).reportWebGLError === "function") {
-        ;(globalThis as any).reportWebGLError("帧循环异常: " + msg)
-      } else {
-        console.error("animate loop error:", e)
-      }
+      console.error("animate loop error:", msg, e)
     }
   }
 

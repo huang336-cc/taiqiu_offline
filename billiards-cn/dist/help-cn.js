@@ -25,8 +25,8 @@
     "最高渲染精度，仅建议旗舰机型开启，耗电较高。",
   ]
 
-  // 被击打球瞄准线滑动条档位文案（0=关，1~5=短到长）
-  var TLINE_LABELS = ["关闭", "短", "中短", "中", "中长", "长"]
+  // 辅助线长度滑动条档位文案（0=关，1=短，2=中，3=最长），与游戏内保持一致
+  var TLINE_LABELS = ["关闭", "短", "中", "最长"]
 
   var DEFAULTS = {
     lod: 3,
@@ -37,7 +37,7 @@
     lastRule: "nineball",
     vsBot: false,
     fpsCap: 0,
-    targetLineLength: 3,
+    targetLineLength: 2,
     aimLine: true,
     aimSlider: true,
     keepAllViews: true,
@@ -113,7 +113,7 @@
     $("volv").textContent = Math.round(st.volume * 100) + "%"
     $("aim").checked = !!st.aimAssist
     $("aimline").checked = st.aimLine !== false
-    $("aimslider").checked = st.aimSlider !== false
+    // v1.2.11 #F10：删除 aimslider 同步（设置项已移除，控件默认存在）
     $("tline").value = String(st.targetLineLength || 3)
     $("tlinev").textContent = TLINE_LABELS[st.targetLineLength || 3]
     $("keepviews").checked = st.keepAllViews !== false
@@ -142,10 +142,7 @@
     st.aimLine = e.target.checked
     save(st)
   })
-  $("aimslider").addEventListener("change", function (e) {
-    st.aimSlider = e.target.checked
-    save(st)
-  })
+  // v1.2.11 #F10：删除 aimslider change 监听（设置项已移除）
   $("tline").addEventListener("input", function (e) {
     st.targetLineLength = parseInt(e.target.value, 10)
     $("tlinev").textContent = TLINE_LABELS[st.targetLineLength] || "中"

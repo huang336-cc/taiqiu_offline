@@ -82,9 +82,21 @@ export class Recorder {
   }
 
   wholeGame() {
+    // v1.2.6 #233：回放必须「从开球开始」。
+    // 偶发情况下 entries[0] 并非开球那一杆，而是开球前的引导事件
+    // （如开球摆白球的 PLACEBALL、或上一局残留的 SCORE/RERACK），
+    // 若直接以 entries[0] 为起点，回放会先从「摆球 / 记分」开始，
+    // 而非真正的第一杆开球。这里以「第一条 HIT 事件」作为真正的起点：
+    //   - init 用该 HIT 记录时桌子序列化的状态（即开球前的正确球局）；
+    //   - events 从该 HIT 起向后切片（丢弃开球前的引导事件）。
+    // 正常情况（entries[0] 就是开球 HIT）下 startIndex=0，行为与之前完全一致。
+    const startIndex = this.entries.findIndex(
+      (e) => e.event.type === EventType.HIT
+    )
+    const start = startIndex >= 0 ? startIndex : 0
     return ReplayEncoder.createState(
-      this.entries[0]?.state,
-      this.entries.map((e) => e.event),
+      this.entries[start]?.state,
+      this.entries.slice(start).map((e) => e.event),
       this.start,
       Session.getInstance().myScore(),
       true,

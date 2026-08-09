@@ -62,11 +62,20 @@ export class Aim extends ControllerBase {
   override onFirst() {
     this.container.table.showTraces(false)
     this.container.view.clearLines()
-    this.container.table.cue.aimInputs.setDisabled(false)
     this.container.table.cue.aimInputs.setButtonText(T.hitButton)
     // 分步实操新手引导：仅首次安装自动显示，或带 tutorial=1 强制显示
     const forceTutorial =
       new URLSearchParams(globalThis.location?.search).get("tutorial") === "1"
+    // v1.2.6：把 aimInputs 暴露给 Tutorial，用于步骤 1 期间锁定控件。
+    // 仅在有 cue 引用时注册，避免教程与对局耦合。
+    ;(globalThis as any).__AimInputs = this.container.table.cue.aimInputs
+    // v1.2.7 #D1：force 教程模式下，仅在「尚未看过引导」时预先禁用控件。
+    // 看过之后（首杆结束、Tutorial.finish 已 markSeenGuide），重新进入 Aim 不应
+    // 再禁用——否则控件被永久锁死、游戏画面静止、无法继续击球。
+    // 引导步骤 1 的 lockControls(true) 仍会负责在「重新打开新手引导」重新显示时锁定控件。
+    this.container.table.cue.aimInputs.setDisabled(
+      forceTutorial && !Settings.hasSeenGuide()
+    )
     // v1.1.11：与 Tutorial.start 内部判断保持一致，用 hasSeenGuide()（含独立 key 兜底）。
     // 避免真机主 key 写入失败时，seenGuide 内存判定与 start 内部不一致导致每杆重显。
     if (!Settings.hasSeenGuide() || forceTutorial) {

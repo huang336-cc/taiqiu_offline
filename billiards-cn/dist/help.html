@@ -13,7 +13,7 @@
     <div class="tabs">
       <button class="tab active" data-tab="guide">操作说明</button>
       <button class="tab" data-tab="settings">设置</button>
-      <button class="tab" data-tab="rules">规则</button>
+      <!-- v1.2.11 #F9：删除「规则」tab（规则入口已迁至首页模式卡片） -->
     </div>
 
     <!-- 操作说明 -->
@@ -33,12 +33,20 @@
           <li><b>力度条</b>：拖动调整，百分比实时显示</li>
           <li><b>母球图示</b>：点选击球点，上=高杆，下=低杆，左右=加塞</li>
           <li><b>「+」按钮</b>：调整球杆抬起角度</li>
+          <li><b>复位按钮</b>（圆盘左上角 ⟲）：一键把击球点恢复到正中心；双击母球图示也可复位</li>
+          <li><b>细微瞄准条</b>：底部悬浮滑动条，左右拖动极精细修正瞄准角；滑块居中=本杆初始方向，松手自动归中，可一直拖动持续微调瞄准</li>
         </ul>
       </div>
       <div class="block">
         <h3>视角</h3>
         <ul>
-          <li>点击 🎥 循环切换：跟随 → 俯视 → 母球视角</li>
+          <li>点击
+            <svg class="cam-ico" viewBox="0 0 36 28" aria-hidden="true">
+              <rect x="2" y="6" width="32" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/>
+              <path d="M12 6 L14 2 H22 L24 6 Z" fill="currentColor" stroke="none"/>
+              <circle cx="18" cy="15" r="6" fill="none" stroke="currentColor" stroke-width="2.5"/>
+            </svg>
+            循环切换：跟随 → 俯视 → 母球视角</li>
           <li>俯视视角适合观察全局与规划走位</li>
         </ul>
       </div>
@@ -90,20 +98,11 @@
         </p>
         <div class="row">
           <label for="tline">辅助线长度</label>
-          <input type="range" id="tline" min="0" max="5" step="1" value="3" />
+          <input type="range" id="tline" min="0" max="3" step="1" value="2" />
           <span class="val" id="tlinev">中</span>
         </div>
         <p class="hint">没有正对袋口时线条的延伸长度。拖到最左同样可关闭辅助线。</p>
-        <div class="row">
-          <label for="aimslider">横向瞄准滑动条</label>
-          <label class="sw"
-            ><input type="checkbox" id="aimslider" /><span></span
-          ></label>
-        </div>
-        <p class="hint">
-          画面底部的悬浮滑动条，无极调整左右瞄准角度。滑块居中 =
-          本杆初始瞄准方向，两端 = 左右各转到底，与手指拖拽、左右微调按钮完全同步。
-        </p>
+        <!-- v1.2.11 #F10：删除「横向瞄准滑动条」设置项，该控件默认始终存在 -->
         <div class="row">
           <label for="keepviews">保留三个视角</label>
           <label class="sw"
@@ -111,54 +110,18 @@
           ></label>
         </div>
         <p class="hint">
-          关闭后，🎥 仅在「跟随 / 俯视」两视角间切换，不再拉远到母球视角。
+          关闭后，
+          <svg class="cam-ico" viewBox="0 0 36 28" aria-hidden="true">
+            <rect x="2" y="6" width="32" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/>
+            <path d="M12 6 L14 2 H22 L24 6 Z" fill="currentColor" stroke="none"/>
+            <circle cx="18" cy="15" r="6" fill="none" stroke="currentColor" stroke-width="2.5"/>
+          </svg>
+          仅在「跟随 / 俯视」两视角间切换，不再拉远到母球视角。
         </p>
       </div>
     </div>
 
-    <!-- 规则 -->
-    <div class="pane" id="pane-rules">
-      <div class="block">
-        <h3>九球</h3>
-        <p>
-          台面上有 1~9
-          号球。每次击球必须先碰到台面上号码最小的球，任何球落袋都算得分并可继续击球。谁先合法打进
-          9 号球即获胜。
-        </p>
-      </div>
-      <div class="block">
-        <h3>八球</h3>
-        <p>
-          开球后由第一颗合法落袋的球确定己方球组（全色 1~7 或花色
-          9~15）。清完己方球组后，最后打进黑 8 者获胜。黑 8 提前落袋判负。
-        </p>
-      </div>
-      <div class="block">
-        <h3>斯诺克</h3>
-        <p>
-          先打红球（1 分），进袋后再打一颗彩球，交替进行。彩球分值：黄 2、绿
-          3、棕 4、蓝 5、粉 6、黑
-          7。红球阶段彩球进袋后需重新摆回原位；红球清完后，按分值从低到高依次清彩球，总分高者获胜。
-        </p>
-      </div>
-      <div class="block">
-        <h3>三库开伦</h3>
-        <p>
-          无袋球台。母球需先碰到库边至少三次，再撞到另外两颗球，即得 1
-          分。得分后可继续击球，未得分则换手。
-        </p>
-      </div>
-      <div class="block">
-        <h3>常见犯规</h3>
-        <ul>
-          <li>母球落袋</li>
-          <li>空杆（未击中任何球）</li>
-          <li>首个击中的球不符合规则</li>
-          <li>击球后无任何球碰库且无球落袋</li>
-        </ul>
-        <p class="hint">犯规后对手将获得自由球，可任意摆放母球。</p>
-      </div>
-    </div>
+    <!-- v1.2.11 #F9：删除「规则」pane（规则入口已迁至首页模式卡片） -->
 
     <script src="help-cn.js"></script>
   </body>

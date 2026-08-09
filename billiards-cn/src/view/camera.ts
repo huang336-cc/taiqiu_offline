@@ -6,8 +6,11 @@ import { R } from "../model/physics/constants"
 import { Settings } from "../utils/settings"
 
 export class Camera {
-  static defaultHeight = R * 8
-  static defaultDistance = R * 18
+  // v1.1.42：第一人称（aimView）视野再次回调 —— v1.1.41 的 R*20/R*8 仍偏紧，
+  // 在很多球位下看不到前方袋口和被击球；拉到 R*24/R*9，注视点从 +1.5R 抬到 +2R，
+  // FOV 内能稳定框到「球杆前段 + 完整白球 + 被击球 + 前方袋口」四件套。
+  static defaultHeight = R * 9
+  static defaultDistance = R * 24
   static defaultFovOffset = 0
 
   // 横屏横向 FOV 上限（度）。超过该宽高比时收窄纵向 FOV，使横向 FOV 回到此值，
@@ -39,9 +42,18 @@ export class Camera {
   private readonly tempVec = new Vector3()
   private readonly tempVec2 = new Vector3()
 
-  private distance = Camera.defaultDistance
+  private   distance = Camera.defaultDistance
   private fovOffset = Camera.defaultFovOffset
   savedDistance?: number
+
+  /**
+   * v1.2.6 #232：回放专用框定焦点。
+   * 由 Replay 控制器在每一杆前写入 [白球, 被击球, 对应球袋] 三点，
+   * replayFrameView 据此把相机摆到一个能同时看见这三者的视角（俯角观察，
+   * 沿「白球→球袋」方向在后上方俯瞰），保证每次击球的视野都包含
+   * 白球、被击球与对应进球的球袋。为空时回退到 topView。
+   */
+  replayFocus: Vector3[] | null = null
 
   elapsed: number
   private t = 0
@@ -116,7 +128,10 @@ export class Camera {
     this.camera.position.lerp(this.target, fraction)
     this.camera.position.z = h
     this.camera.up = up
-    this.lookTarget.copy(aim.pos).addScaledVector(up, h / 2)
+    // v1.1.42：注视点从 +1.5R 抬到 +2R —— 让相机略抬头，更多地看「正前方」
+    // （被击球、袋口）而不是白球脚下。配合 defaultDistance R*24 / height R*9，
+    // FOV 锥在白球前方 5–20R 的高度稳定包住桌面。
+    this.lookTarget.copy(aim.pos).addScaledVector(up, R * 2)
     this.camera.lookAt(this.lookTarget)
   }
 
@@ -297,6 +312,83 @@ export class Camera {
     }
   }
 
+  /**
+   * v1.2.6 #232：设定回放框定三点（白球 / 被击球 / 对应球袋），
+   * 并把相机切到 replayFrameView 模式。每杆前由 Replay 调用。
+   */
+  setReplayFrame(points: Vector3[]) {
+    if (!points || points.length === 0) return
+    this.replayFocus = points
+    this.mode = this.replayFrameView
+    this.mainMode = this.replayFrameView
+    this.isZoomedOut = false
+    this.updateCameraButtonClass("topview")
+  }
+
+  /** v1.2.6 #232：清除回放框定，相机回到常规模式由调用方决定 */
+  clearReplayFrame() {
+    this.replayFocus = null
+  }
+
+  /**
+   * v1.2.6 #232：回放帧定相机。
+   * 以三点质心为注视中心，按「能框住三者包围圆」计算距离，沿
+   * 「白球→球袋」方向在后上方以约 40° 俯角俯瞰，保证白球、被击球、
+   * 对应球袋同时入镜。每帧 lerp 平滑过渡，避免镜头突跳。
+   */
+  replayFrameView(_aim: AimEvent) {
+    const pts = this.replayFocus
+    if (!pts || pts.length === 0) {
+      this.topView(_aim)
+      return
+    }
+    const n = pts.length
+    let cx = 0
+    let cy = 0
+    for (const p of pts) {
+      cx += p.x
+      cy += p.y
+    }
+    cx /= n
+    cy /= n
+    let radius = 0
+    for (const p of pts) {
+      radius = Math.max(radius, Math.hypot(p.x - cx, p.y - cy))
+    }
+    radius += R * 3 // 留白，确保三颗球不贴边
+
+    const fovV = (this.adaptiveFov(45) * Math.PI) / 180
+    const fovH = 2 * Math.atan(Math.tan(fovV / 2) * this.camera.aspect)
+    const fitV = radius / Math.tan(fovV / 2)
+    const fitH = radius / Math.tan(fovH / 2)
+    const dist = Math.max(fitV, fitH) * 1.12
+
+    // 观察方向：白球(pts[0]) → 球袋(pts[2])，相机置于其反方向后上方
+    let dirx = 0
+    let diry = 1
+    if (n >= 3) {
+      dirx = pts[2].x - pts[0].x
+      diry = pts[2].y - pts[0].y
+      const len = Math.hypot(dirx, diry) || 1
+      dirx /= len
+      diry /= len
+    }
+    const elevation = 0.72 // ≈41° 俯角
+    const horiz = dist * Math.cos(elevation)
+    const vert = dist * Math.sin(elevation) + R * 4
+
+    const target = this.tempVec.set(cx, cy, 0)
+    const camPos = this.tempVec2.set(
+      cx - dirx * horiz,
+      cy - diry * horiz,
+      vert
+    )
+    this.camera.position.lerp(camPos, 0.12)
+    this.camera.up.copy(up)
+    this.lookTarget.lerp(target, 0.12)
+    this.camera.lookAt(this.lookTarget)
+  }
+
   cycleModeToAimz(balls: any[], aim: AimEvent) {
     this.mode = this.aimView
     this.mainMode = this.aimView
@@ -361,8 +453,14 @@ export class Camera {
     if (btn) {
       btn.classList.remove("aim", "aimz", "topview")
       btn.classList.add(state)
-      btn.textContent =
-        state === "aimz" ? "🎥ᶻ" : state === "topview" ? "🎥ᵀ" : "🎥"
+      // v1.1.59：只更新模式指示子元素 .cam-mode，绝不整体替换 btn.textContent。
+      // 之前用 emoji（🎥ᶻ / 🎥ᵀ）整体覆盖按钮，会把精心做好的奶白 SVG 图标抹掉，
+      // 而 Android WebView 会把 emoji 渲染成系统默认黄/金色 → 相机图标变金。
+      // 现在保留 SVG，仅切换 class + 更新 ᶻ/ᵀ 文本，颜色完全交给 CSS 控制。
+      const mode = btn.querySelector(".cam-mode")
+      if (mode) {
+        mode.textContent = state === "aimz" ? "ᶻ" : state === "topview" ? "ᵀ" : ""
+      }
     }
   }
 

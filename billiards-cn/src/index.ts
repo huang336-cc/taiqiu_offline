@@ -10,7 +10,7 @@ customElements.define("angle-input", AngleInput)
 initialise()
 
 function initialise() {
-  console.log("台球大师 离线版", VERSION)
+  console.log("奥特曼的台球 离线版", VERSION)
 
   // 预读设置，确保渲染器创建前画质档位已就绪
   const settings = Settings.get()

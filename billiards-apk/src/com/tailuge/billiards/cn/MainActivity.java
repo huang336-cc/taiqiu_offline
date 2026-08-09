@@ -1,12 +1,14 @@
 package com.tailuge.billiards.cn;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.res.AssetManager;
 import android.content.res.Configuration;
 import android.os.Bundle;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
@@ -53,6 +55,7 @@ public class MainActivity extends Activity {
         );
         applyImmersive();
 
+        try {
         webView = new WebView(this);
         // 强制硬件加速，否则部分设备上 WebGL 上下文无法创建
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
@@ -109,6 +112,23 @@ public class MainActivity extends Activity {
                 }
                 return true;
             }
+
+            /**
+             * 渲染进程崩溃（通常是 GPU / WebGL 在该机型上不兼容）时，
+             * 默认行为是系统直接强杀进程（表现就是"点图标即闪退"）。
+             * 这里接管它：返回 true 阻止强杀，并弹出可读的错误信息，
+             * 让用户/开发者能看到真实原因，而不是无声闪退。
+             */
+            // 注意：本机 android-34.jar 的 WebViewClient stub 未声明 onRenderProcessGone，
+            // 故此处不加 @Override（否则 javac 报“未覆写”）。方法描述符与运行时框架一致，
+            // ART 仍会正确把它当作对 WebViewClient.onRenderProcessGone 的覆写来分派。
+            public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                String reason = (detail != null && detail.didCrash())
+                    ? "渲染进程已崩溃（多为 GPU / WebGL 在该机型上不兼容）"
+                    : "渲染进程被系统回收（可能内存不足）";
+                showFatal(reason + "\n\n建议：\n1. 把『Android System WebView』和『Chrome』都更新到最新\n2. 关闭该游戏的省电/性能限制与安全防护拦截\n3. 重启手机后重试");
+                return true;
+            }
         });
 
         webView.setWebChromeClient(new WebChromeClient() {
@@ -123,6 +143,10 @@ public class MainActivity extends Activity {
         });
 
         webView.loadUrl(VHOST + "menu.html");
+        } catch (Throwable t) {
+            showFatal("启动失败（" + t.getClass().getSimpleName() + "）：\n"
+                + (t.getMessage() == null ? "无错误信息" : t.getMessage()));
+        }
     }
 
     /** 用系统默认浏览器打开外部链接；没有可用浏览器时静默忽略 */
@@ -246,6 +270,9 @@ public class MainActivity extends Activity {
 
     /** 反射调用 WebView.evaluateJavascript(String, ValueCallback)，调不到就忽略 */
     private void softEvaluate(String script) {
+        if (webView == null) {
+            return;
+        }
         try {
             java.lang.reflect.Method m = webView.getClass().getMethod(
                 "evaluateJavascript", String.class, android.webkit.ValueCallback.class
@@ -272,6 +299,9 @@ public class MainActivity extends Activity {
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
+        if (webView == null) {
+            return;
+        }
         // 延迟 100ms 注入，等 WebView 完成自身布局尺寸更新
         webView.postDelayed(new Runnable() {
             @Override
@@ -280,6 +310,26 @@ public class MainActivity extends Activity {
                     "(function(){try{window.dispatchEvent(new Event('resize'))}catch(e){}})()"
                 );
             }
-        }, 100);
+                }, 100);
+        }
+
+        /** 把致命错误显示在屏幕上（而非静默闪退），方便用户/开发者看到真实原因 */
+        private void showFatal(String msg) {
+            try {
+                new AlertDialog.Builder(this)
+                    .setTitle("奥特曼的台球")
+                    .setMessage(msg)
+                    .setCancelable(false)
+                    .setPositiveButton("确定",
+                        new android.content.DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(android.content.DialogInterface d, int w) {
+                                d.dismiss();
+                            }
+                        })
+                    .show();
+            } catch (Throwable ignored) {
+                android.util.Log.e("BilliardsFatal", msg);
+            }
+        }
     }
-}

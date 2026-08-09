@@ -14,9 +14,16 @@ export class Sound {
   potHeavy
   success
 
-  lastOutcomeTime = 0
+  // v1.2.5：-1 表示「本杆尚未记录最大时间戳」，确保每杆第一帧（时间戳=0）也能出声。
+  lastOutcomeTime = -1
   lastOutcomeIndex = 0
   lastOutcomesRef: any[] | null = null
+  /**
+   * v1.2.9 #F1：本杆已播放过进袋音效的球 id 集合。
+   * 进袋音效按「球」去重——同一颗球在一杆内只播一次，避免高速（力度 100%）
+   * 入袋时因物理步进 / 回放重算而重复触发 pot 音效。每杆（outcome 引用变化）重置。
+   */
+  private pottedSoundBalls = new Set<number>()
   loadAssets
 
   /** 主增益节点：突破 three.js 单次 Audio 1.0 音量上限，整体提升听感 */
@@ -133,7 +140,10 @@ export class Sound {
         if (navigator?.userActivation?.hasBeenActive) {
           context.resume()
         }
-        return
+        // v1.2.11 #F1：resume 后不早退，仍尝试播放本事件。
+        // 原先 suspended 时直接 return 会丢弃本次声音——电脑回合无新手势时
+        // 尤为明显（AudioContext 在用户首次手势后已 running，但部分 WebView
+        // 会在后台/切换时重新 suspend），导致击球/进袋音效丢失。
       }
       const v = Math.min(1, volume * settings.volume)
       audio.setVolume(v)
@@ -247,6 +257,16 @@ export class Sound {
       )
     }
     if (outcome.type === "Pot") {
+      // v1.2.9 #F1：同一颗球在一杆内只播一次进袋音效（去重）。
+      // 高速入袋（力度 100%）时，物理步进 / 回放重算可能让同一颗球产生多次
+      // Pot 事件，这里按球 id 拦截重复播放，保留「每颗球一次」的自然听感。
+      const ballId = outcome.ballA?.id
+      if (ballId !== undefined && this.pottedSoundBalls.has(ballId)) {
+        return
+      }
+      if (ballId !== undefined) {
+        this.pottedSoundBalls.add(ballId)
+      }
       // 进袋改用真实录音素材（item 3：替换原先偏弱的合成音）。
       // 仍按入袋球速分轻/中/重三档，并加随机变调，避免重复感。
       const pick = this.pickPotBySpeed(outcome.incidentSpeed)
@@ -264,23 +284,35 @@ export class Sound {
   }
 
   processOutcomes(outcomes) {
-    // Optimize processOutcomes to avoid scanning from index 0 every frame.
-    // We cache the last checked outcomes array reference and track the next outcome index.
+    // 仅在「数组引用变化」（新对局）或「长度回缩」（异常）时从头扫描。
     if (
-      this.lastOutcomeTime === -1 ||
       outcomes !== this.lastOutcomesRef ||
       this.lastOutcomeIndex > outcomes.length
     ) {
       this.lastOutcomeIndex = 0
       this.lastOutcomesRef = outcomes
+      // 新的一杆：把时间戳上限复位为 -1（无上限），否则会沿用上一杆的最大值。
+      this.lastOutcomeTime = -1
+      // v1.2.9 #F1：新的一杆，重置进袋音效去重集合。
+      this.pottedSoundBalls.clear()
     }
     for (let i = this.lastOutcomeIndex; i < outcomes.length; i++) {
       const outcome = outcomes[i]
+      // v1.2.5：每杆开始时 table.hit() 会把模拟时钟 this.time 归零，
+      // 因此本杆 outcome 的时间戳会小于上一杆记录的最大时间戳。
+      // 检测到「时间戳回退」即视为新的一杆，重置上限，
+      // 否则本杆（尤其电脑回合首帧的进袋）的声音会被整体跳过。
+      if (outcome.timestamp < this.lastOutcomeTime) {
+        this.lastOutcomeTime = -1
+      }
       if (outcome.timestamp > this.lastOutcomeTime) {
         this.lastOutcomeTime = outcome.timestamp
         this.lastOutcomeIndex = i + 1
         this.outcomeToSound(outcome)
-        break
+        // v1.2.11 #F1：去掉 break，同帧多事件（碰撞+库边+进袋）一并播放。
+        // 原先每帧只播 1 个 outcome → 同帧多碰撞/进袋的音效被推迟到后续帧，
+        // 表现为「延迟」；电脑回合因物理步进快、多事件密集，延迟尤其明显。
+        // 去重仍由 pottedSoundBalls 保证同球不重复进袋音。
       }
     }
   }

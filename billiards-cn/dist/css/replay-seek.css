@@ -1,0 +1,123 @@
+/* v1.2.9 #F5：回放进度条（可滑动 + 进球吸附点） */
+
+.replay-seek-bar {
+  position: fixed;
+  left: 50%;
+  bottom: clamp(84px, 13vh, 116px);
+  transform: translateX(-50%);
+  width: min(560px, calc(100% - 32px));
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 16px;
+  background: rgba(18, 14, 9, 0.74);
+  border: 1px solid rgba(212, 175, 55, 0.5);
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.replay-seek-bar[hidden] {
+  display: none;
+}
+
+.replay-seek-label {
+  flex: 0 0 auto;
+  color: #d4af37;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.replay-seek-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  height: 24px;
+  display: flex;
+  align-items: center;
+}
+
+#replaySeek {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 24px;
+  margin: 0;
+  background: transparent;
+  accent-color: #d4af37;
+  cursor: pointer;
+  /* 让原生轨道在木纹胶囊内可见：用半透明金边轨道 */
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+#replaySeek::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    rgba(212, 175, 55, 0.85),
+    rgba(212, 175, 55, 0.25)
+  );
+}
+
+#replaySeek::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    rgba(212, 175, 55, 0.85),
+    rgba(212, 175, 55, 0.25)
+  );
+}
+
+#replaySeek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: #fff4d6;
+  border: 2px solid #d4af37;
+  box-shadow: 0 0 6px rgba(212, 175, 55, 0.8);
+  cursor: pointer;
+}
+
+#replaySeek::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff4d6;
+  border: 2px solid #d4af37;
+  box-shadow: 0 0 6px rgba(212, 175, 55, 0.8);
+  cursor: pointer;
+}
+
+/* 吸附点层：覆盖在轨道之上，指示「进球前时间点」 */
+.replay-seek-snaps {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 0;
+  transform: translateY(-50%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.replay-snap {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin-left: -4.5px;
+  margin-top: -4.5px;
+  border-radius: 50%;
+  background: #ff5a3c;
+  box-shadow: 0 0 7px rgba(255, 90, 60, 0.95);
+}

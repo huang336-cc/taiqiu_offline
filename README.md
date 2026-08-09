@@ -1,4 +1,4 @@
-# 台球大师 · 中文离线版
+# 奥特曼的台球 · 中文离线版
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Platform](https://img.shields.io/badge/platform-Android%205.0%2B-brightgreen.svg)](#下载)
@@ -11,7 +11,7 @@
   <img src="docs/screenshots/topview-eightball.jpg" alt="八球顶视" width="48%" />
 </p>
 <p align="center">
-  <img src="docs/screenshots/cueview-nineball.jpg" alt="九球击球视角" width="48%" />
+  <img src="docs/screenshots/cueview-nineball.jpg" alt="八球击球视角" width="48%" />
 </p>
 
 > **修改声明**

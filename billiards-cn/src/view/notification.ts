@@ -163,17 +163,14 @@ export class Notification {
     index: number
   ): string {
     const medals = "🎖️".repeat(Math.max(0, 3 - index))
+    // v1.2.5：原项目这里是一个「upload⇗」在线高分上传按钮（跳转外部 URL），
+    // 离线单机版无任何服务器，点了只会失效。改为纯信息徽章展示「高杆连击」战绩，
+    // 真正的回放功能由结算面板的「查看回放」按钮（经 sessionStorage 传完整数据）提供。
     return `
-      <button
-        type="button"
-        class="notification-high-break"
-        data-notification-upload-url="${highBreak.url}"
-        title="Open high break ${highBreak.score}"
-      >
-        <span class="notification-high-break-label">Break : ${highBreak.score}</span>
+      <div class="notification-high-break" title="高杆连击 ${highBreak.score}">
+        <span class="notification-high-break-label">高杆 ${highBreak.score} 连</span>
         <span class="notification-high-break-icon">${medals}</span>
-        <span class="notification-high-break-upload">upload⇗</span>
-      </button>
+      </div>
     `
   }
 
@@ -233,14 +230,6 @@ export class Notification {
     )
     this.element.addEventListener("click", (event) => {
       const target = event.target as HTMLElement | null
-      const uploadButton = target?.closest(
-        "[data-notification-upload-url]"
-      ) as HTMLElement | null
-      const uploadUrl = uploadButton?.dataset.notificationUploadUrl
-      if (uploadUrl) {
-        globalThis.location.replace(uploadUrl)
-        return
-      }
       const button = target?.closest(
         "[data-notification-action]"
       ) as HTMLElement | null

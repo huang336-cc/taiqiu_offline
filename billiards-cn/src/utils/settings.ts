@@ -24,7 +24,7 @@ export interface GameSettings {
   vsBot: boolean
   /** 帧率上限：0 表示不限制 */
   fpsCap: number
-  /** 被击打球瞄准线长度（0=关闭，1~5=短到长） */
+  /** 辅助线长度档位：0=关闭，1=短，2=中，3=最长（最长=白球→被击球→袋口，不截断） */
   targetLineLength: number
   /** 进球辅助线总开关：实线（母球→碰撞点）+ 虚线（碰撞点→袋口） */
   aimLine: boolean
@@ -53,6 +53,8 @@ const DEFAULTS: GameSettings = {
   lastRule: "nineball",
   vsBot: false,
   fpsCap: 0,
+  // v1.2.5：默认值改为最长（3）。用户反馈辅助线太短，默认给最长档，
+  // 完整显示「白球→被击球→袋口」走向；旧存档用户仍保留各自选择。
   targetLineLength: 3,
   aimLine: true,
   aimSlider: true,
@@ -292,17 +294,11 @@ export function detectRecommendedLod(): QualityLevel {
 }
 
 function detectGpu(): string {
-  try {
-    const canvas = document.createElement("canvas")
-    const gl = (canvas.getContext("webgl") ||
-      canvas.getContext("experimental-webgl")) as WebGLRenderingContext | null
-    if (!gl) return ""
-    const dbg = gl.getExtension("WEBGL_debug_renderer_info")
-    if (!dbg) return ""
-    return String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) ?? "")
-  } catch {
-    return ""
-  }
+  // 关键修复：不再创建 WebGL 上下文读取 GPU 型号。
+  // 裸 canvas.getContext("webgl") 在部分机型 GPU 驱动上会直接令渲染进程崩溃，
+  // 表现为启动即闪退。画质自动分级退化为仅依据内存/核数/DPR，用户可手动调低画质。
+  // 游戏真正的 WebGL 由 three.js 创建，那里有 onRenderProcessGone 兜底。
+  return ""
 }
 
 export class Settings {
@@ -324,6 +320,9 @@ export class Settings {
       merged.lod = detectRecommendedLod()
     }
     merged.lod = clampLod(merged.lod)
+    // v1.2.11 #F10：横向瞄准滑动条不再可关闭，强制恒 true。
+    // 旧存档可能存了 false，这里纠正；UI 开关已从 help.html 删除。
+    merged.aimSlider = true
     Settings.cache = merged
     return merged
   }
@@ -383,6 +382,34 @@ export class Settings {
       globalThis.localStorage?.setItem(SEEN_GUIDE_KEY, "1")
     } catch (e) {
       console.warn("[Settings] markSeenGuide 兜底 key 写入失败", e)
+    }
+  }
+
+  /**
+   * v1.2.11 #F6：复位 seenGuide（与 markSeenGuide 对称，四通道复位）。
+   *
+   * 用于设置页「重新打开新手引导」——原 replayTutorial() 只改 localStorage
+   * 两个 key 与 globalThis，未更新 Settings.cache.seenGuide，导致
+   * hasSeenGuide() 仍读 cache 返回 true → 引导永不显示。
+   * 现在四通道同步复位，下次进对局 hasSeenGuide()=false → 显示 1 次，
+   * finish()→markSeenGuide 置回 true → 之后再不自动弹。
+   */
+  static resetSeenGuide() {
+    const s = Settings.get();
+    s.seenGuide = false;
+    (globalThis as any).__billiardsSeenGuide = false;
+    try {
+      globalThis.localStorage?.setItem(
+        STORAGE_KEY,
+        JSON.stringify(Settings.get())
+      );
+    } catch (e) {
+      console.warn("[Settings] resetSeenGuide 主 key 写入失败", e);
+    }
+    try {
+      globalThis.localStorage?.removeItem(SEEN_GUIDE_KEY);
+    } catch (e) {
+      /* 忽略 */
     }
   }
 

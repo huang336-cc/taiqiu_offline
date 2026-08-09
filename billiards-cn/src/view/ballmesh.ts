@@ -88,6 +88,18 @@ export class BallMesh {
   }
 
   updateAll(ball, t) {
+    // v1.2.8 #E8：球进洞（State.InPocket）后立刻隐藏 mesh 与接触阴影，
+    // 不再残留在袋口可见。复位：若球被重新摆回台面，则恢复可见。
+    if (ball.state === State.InPocket) {
+      this.mesh.visible = false
+      this.shadow.visible = false
+      return
+    }
+    if (!this.mesh.visible) this.mesh.visible = true
+    if (!this.shadow.visible && Settings.get().scene !== "snow") {
+      this.shadow.visible = true
+    }
+
     const isStationary = ball.state === State.Stationary
     const positionChanged = !this.mesh.position.equals(ball.pos)
     if (isStationary && !positionChanged) {

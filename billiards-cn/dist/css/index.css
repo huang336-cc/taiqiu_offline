@@ -37,28 +37,8 @@ p {
   color: grey;
 }
 
-#snookerScore {
-  font-family: var(--font-family-primary);
-  font-size: 32px;
-  color: yellow;
-  text-align: center;
-  filter: drop-shadow(0.08em 0.08em black);
-  display: flex;
-  flex-flow: row wrap;
-  justify-content: center;
-  align-items: center;
-  gap: 12px;
-}
-
-#snookerScoreOverlay {
-  position: absolute;
-  bottom: 10px;
-  right: 80px;
-}
-
 .p1Score,
-.p2Score,
-.hudMiddle {
+.p2Score {
   font-size: 12px;
   display: flex;
   flex-direction: column;
@@ -72,14 +52,6 @@ p {
   filter: brightness(1.2);
 }
 
-.breakScore {
-  font-size: 32px;
-  font-style: italic;
-  color: yellow;
-  text-align: center;
-  margin-top: 0.2em;
-}
-
 .view3d {
   width: 100%;
   flex: 1;
@@ -89,9 +61,11 @@ p {
   -webkit-user-drag: none;
   user-select: none;
   position: relative;
-  /* v1.1.14：移除「折叠屏内屏展开 720px 居中限宽」，让 3D 画布铺满全屏
-     （折叠屏展开、宽屏、常规手机都铺满；canvas 尺寸由 view.ts 根据
-     element.offsetWidth/Height 计算并 setSize）。 */
+  /* v1.1.21：调试兜底色改为深紫（与 WebGL 清屏绿 #142a1f 明显区分），
+     用于判断“渲染器到底有没有在跑”：看到紫 = 渲染器没渲出（canvas 透明），
+     看到绿 = 渲染器在清屏但场景没内容。 */
+  background: #20143a;
+  padding-top: 0;
 }
 
 .view3d:focus {
@@ -104,6 +78,13 @@ canvas {
   border-radius: 5px;
   -webkit-user-drag: none;
   user-select: none;
+  /* v1.1.19 兜底：强制 canvas 铺满 .view3d 容器，
+     防止极少数 WebView 上 three.js setSize 后 CSS 尺寸仍为 0 导致画面空白 */
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
 }
 
 .panel {
