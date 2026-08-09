@@ -1,0 +1,344 @@
+/* ==========================================================================
+   v1.1.31 顶部计分板卡（紧凑、动态大小、不挡球桌、训练模式仅显示已进球+时间）
+   - 木色背景 + 金边：与 .bb-seg 按钮同一调色板
+   - 左：1 我方 / 2 对方 tabs（木纹按钮，当前回合高亮金边更亮）
+   - 中：我方 / 对方 大分数（金黄色）
+   - 右：用时 mm:ss（木纹小药丸）
+   - z-index 设为最低（1），展开选项（cueball-popup 等 z-index 2000）覆盖在它之上
+   - 训练模式（body.train-mode）：只显示「已进球」+ 时间，隐藏 tabs/双方分数
+   - max-width 动态、padding/gap/字体全部紧凑化，避免遮挡第一人称视野
+   - 现有 Hud.updateScores 继续向 #p1Score / #p2Score 写入
+     （hud-name + hud-value），本样式把名字当小标签、value 当大数字
+   ========================================================================== */
+
+/* 与底栏共用的木纹色变量（便于一处改、处处生效） */
+:root {
+  --sc-wood-1: #6b4a22;
+  --sc-wood-2: #4a3014;
+  --sc-gold: #c89534;
+  --sc-gold-2: #e7b14b;
+  --sc-cream: #f3d79a;
+  --sc-text: #f3d79a;
+  --sc-muted: rgba(243, 215, 154, 0.55);
+  --sc-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --sc-radius: 12px;
+}
+
+/* 隐藏旧 hudMiddle（Hud 会在 p1/p2 之间动态插入） */
+#hudMiddle {
+  display: none !important;
+}
+
+/* 旧 tray-score 容器彻底退场，避免双层 */
+.tray-score-container {
+  display: none !important;
+}
+
+/* v1.1.31：比分栏整体紧凑 + 动态大小 + 最低层（避免遮挡球桌/不挡展开选项） */
+/* v1.1.35：vs-bot 改为单行紧凑，高度收敛到 ~40px，整体落在球桌顶沿上方留白带，不再覆盖任何桌面 */
+.score-card {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  transform: none;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 7px;
+  /* 单行布局：tabs + 双方分数 + 时间并排；max-width 适度放宽 */
+  max-width: clamp(240px, 62vw, 340px);
+  /* 木纹渐变，与底部按钮同款 */
+  background: linear-gradient(180deg, var(--sc-wood-1) 0%, var(--sc-wood-2) 100%);
+  border: 1.5px solid var(--sc-gold);
+  border-radius: var(--sc-radius);
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.18),
+    var(--sc-shadow);
+  font-family: var(--font-family-primary, sans-serif);
+  color: var(--sc-text);
+  /* v1.1.31：z-index 最低，展开选项（cueball-popup z-index 2000）盖在它上面 */
+  z-index: 1;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ---- 左侧：玩家 tabs ---- */
+/* v1.1.35：改为横向并排，避免与右列堆叠后整卡过高盖到球桌 */
+.sc-tabs {
+  display: flex;
+  flex-direction: row;
+  gap: 3px;
+}
+.sc-tab {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 5px;
+  border: 1.5px solid rgba(200, 149, 52, 0.55);
+  background: rgba(0, 0, 0, 0.22);
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--sc-muted);
+  cursor: pointer;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  transition: filter 0.15s ease;
+  line-height: 1.1;
+}
+.sc-tab.is-active {
+  border-color: var(--sc-gold-2);
+  background: linear-gradient(180deg, #8a5e26 0%, #5a3a18 100%);
+  color: var(--sc-cream);
+  filter: brightness(1.15);
+}
+.sc-tab-no {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(243, 215, 154, 0.4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: inherit;
+  flex: 0 0 auto;
+}
+.sc-tab.is-active .sc-tab-no {
+  background: var(--sc-gold-2);
+  color: #2a1a08;
+  border-color: var(--sc-cream);
+}
+.sc-tab-name {
+  letter-spacing: 0.02em;
+}
+
+/* ---- 中间：双方大分数（紧凑）---- */
+.sc-main {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px;
+}
+.sc-score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 26px;
+}
+.p1Score,
+.p2Score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+  margin: 0;
+}
+.p1Score .hud-name,
+.p2Score .hud-name {
+  font-size: 9px;
+  color: var(--sc-muted);
+  margin-bottom: 1px;
+  max-width: 44px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+.p1Score .hud-value,
+.p2Score .hud-value {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--sc-cream);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  line-height: 1;
+}
+/* 当前回合：金边高亮 + 数字更亮 */
+.sc-score.is-active[data-player="1"] .p1Score,
+.sc-score.is-active[data-player="2"] .p2Score {
+  filter: brightness(1.15);
+}
+
+/* 兼容 Hud 的 is-active 类（Hud 直接给 p1/p2 加 is-active） */
+.p1Score.is-active,
+.p2Score.is-active {
+  filter: brightness(1.15);
+}
+
+/* ---- v1.1.31：训练模式专用「已进球」+ 时间  ---- */
+.sc-train {
+  display: none;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px;
+}
+.sc-train-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--sc-muted);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.sc-train-count {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--sc-cream);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  line-height: 1;
+}
+
+/* ---- 右侧：用时（mm:ss，木纹药丸，更紧凑）---- */
+.sc-meta {
+  display: flex;
+  align-items: center;
+}
+.sc-time {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 5px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1.5px solid rgba(200, 149, 52, 0.6);
+  border-radius: 7px;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--sc-cream);
+  font-family: var(--font-family-mono, monospace);
+  font-variant-numeric: tabular-nums;
+}
+.sc-time svg {
+  width: 10px;
+  height: 10px;
+  stroke: currentColor;
+  fill: none;
+}
+
+/* ---- v1.1.31：训练模式 = 隐藏 tabs + 双方分数，仅显示「已进球」+ 时间 ---- */
+body.train-mode .sc-tabs,
+body.train-mode .sc-main {
+  display: none !important;
+}
+body.train-mode .sc-train {
+  display: flex !important;
+}
+body.train-mode .score-card {
+  /* 训练模式卡更窄，只装得下「已进球 + 时间」，框体进一步收紧保持紧凑 */
+  gap: 4px;
+  padding: 2px 7px;
+  border-width: 1px;
+  border-radius: 9px;
+  /* 约束最大宽度并贴合安全区，确保比分栏始终在球桌/屏幕范围内、不超出 */
+  max-width: clamp(92px, 30vw, 150px);
+  top: max(6px, env(safe-area-inset-top, 6px));
+  left: max(6px, env(safe-area-inset-left, 6px));
+}
+
+/* ---- v1.2.2：积分牌下方「已进球」—— 整颗球 + 号码 ---- */
+.pocketed-balls {
+  position: absolute;
+  top: 54px;
+  left: max(8px, env(safe-area-inset-left, 8px));
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  max-width: calc(100vw - 16px);
+  flex-wrap: wrap;
+  background: linear-gradient(180deg, var(--sc-wood-1) 0%, var(--sc-wood-2) 100%);
+  border: 1.5px solid var(--sc-gold);
+  border-radius: var(--sc-radius);
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.18),
+    var(--sc-shadow);
+  font-family: var(--font-family-primary, sans-serif);
+  color: var(--sc-text);
+  z-index: 1;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+}
+.pocketed-balls[hidden] {
+  display: none !important;
+}
+.pocketed-balls .pb-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--sc-muted);
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+.pocketed-balls .pb-list {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+/* 单颗已进球：实心圆 + 号码；花球（>8）叠加白色横纹带，号码落在白带上显深色 */
+.pb-ball {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.35),
+    0 1px 2px rgba(0, 0, 0, 0.4);
+  flex: 0 0 auto;
+}
+.pb-ball.striped::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 44%;
+  transform: translateY(-50%);
+  background: #fff;
+  border-top: 1px solid rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.25);
+}
+.pb-ball .pb-num {
+  position: relative;
+  z-index: 1;
+}
+.pb-ball.striped .pb-num {
+  color: #111;
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
+}
+
+/* ---- 横屏紧凑 ---- */
+@media (orientation: landscape) and (max-height: 500px) {
+  .score-card {
+    top: 6px;
+    padding: 3px 8px;
+    gap: 5px;
+    max-width: clamp(220px, 50vw, 320px);
+  }
+  .p1Score .hud-value,
+  .p2Score .hud-value,
+  .sc-train-count {
+    font-size: 15px;
+  }
+  .sc-tab {
+    padding: 2px 5px;
+    font-size: 10px;
+  }
+  .sc-time {
+    font-size: 10px;
+  }
+}
