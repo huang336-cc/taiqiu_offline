@@ -222,7 +222,13 @@
             <h3>视角切换</h3>
             <ul class="guide-list">
               <li>
-                点击右下角 🎥 按钮循环切换：跟随视角 → 俯视全局 → 母球视角
+                点击右下角
+                <svg viewBox="0 0 36 28" style="width:1.05em;height:1.05em;vertical-align:-0.2em;color:inherit" aria-hidden="true">
+                  <rect x="2" y="6" width="32" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/>
+                  <path d="M12 6 L14 2 H22 L24 6 Z" fill="currentColor" stroke="none"/>
+                  <circle cx="18" cy="15" r="6" fill="none" stroke="currentColor" stroke-width="2.5"/>
+                </svg>
+                按钮循环切换：跟随视角 → 俯视全局 → 母球视角
               </li>
               <li>俯视视角便于观察整体球型和走位路线</li>
             </ul>
@@ -302,9 +308,9 @@
                 type="range"
                 id="setTLine"
                 min="0"
-                max="5"
+                max="3"
                 step="1"
-                value="3"
+                value="2"
                 class="range"
               />
               <span class="range-val" id="setTLineVal">中</span>
@@ -317,7 +323,13 @@
                 <span class="slider-ui"></span>
               </label>
             </div>
-            <p class="setting-hint">关闭后，🎥 仅在「跟随 / 俯视」两视角间切换，不再拉远到母球视角。</p>
+            <p class="setting-hint">关闭后，
+              <svg viewBox="0 0 36 28" style="width:1.05em;height:1.05em;vertical-align:-0.2em;color:inherit" aria-hidden="true">
+                <rect x="2" y="6" width="32" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/>
+                <path d="M12 6 L14 2 H22 L24 6 Z" fill="currentColor" stroke="none"/>
+                <circle cx="18" cy="15" r="6" fill="none" stroke="currentColor" stroke-width="2.5"/>
+              </svg>
+              仅在「跟随 / 俯视」两视角间切换，不再拉远到母球视角。</p>
           </div>
 
             <div class="setting-group">
@@ -583,6 +595,20 @@
           <p class="about-text dim">
             本应用自 v1.0.4（2026-08-03）起的全部版本变更记录，新版本置顶。详细条目可在每个版本下展开。
           </p>
+
+          <div class="setting-group">
+            <h3>v1.2.2 · 2026-08-09 00:59:00</h3>
+            <p class="about-text dim"><b>辅助线长度改 4 档 + 积分牌下方「已进球」整颗球 + 操作说明补全 + 白球弹窗不出屏 + 复位按钮放大 + 细微瞄准可无限滑动。</b></p>
+            <ul class="changelog-list">
+              <li><b>辅助线长度 4 档</b>：原 6 档（0~5）精简为「关闭 / 短 / 中 / 最长」4 档；最长档 = 白球→被击球→袋口，虚线不再截断、一直延伸到袋口。</li>
+              <li><b>积分牌下方「已进球」</b>：新增整颗球（实心圆 + 号码，花球带白色横纹带）实时展示已落袋的球，提醒当前球形；无进球时自动隐藏。</li>
+              <li><b>操作说明补全</b>：视角按钮图标由 🎥 emoji 换成与底部栏一致的相机 SVG；力度与杆法章节补充「复位按钮（⟲）」与「细微瞄准条」的操作说明。</li>
+              <li><b>白球弹窗不出屏</b>：② 白球击球点展开面板改为锚定到按钮左缘（贴近屏幕左安全区），不再以最左侧按钮为中心导致左半边溢出屏幕。</li>
+              <li><b>复位按钮放大</b>：白球击球点复位按钮（⟲）由 20×20 放大到 36×36，更易点按。</li>
+              <li><b>细微瞄准可无限滑动</b>：细微瞄准条改为在轨道上做相对拖动（指针捕获），去掉原生 range 两端夹住的限制，可一直拖动持续微调瞄准角。</li>
+              <li>版本号由 1.2.1 升到 1.2.2；底部栏木纹金边背景、边框、整体色调、各按钮位置不变。</li>
+            </ul>
+          </div>
 
           <div class="setting-group">
             <h3>v1.2.1 · 2026-08-09 05:10:00</h3>
@@ -1382,7 +1408,7 @@
     </div>
 
     <script>
-      window.__BILLIARDS_VERSION__ = "1.2.1-26080915";
+      window.__BILLIARDS_VERSION__ = "1.2.2-26080916";
     </script>
     <script src="menu-cn.js"></script>
   </body>
