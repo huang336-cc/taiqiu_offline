@@ -40,13 +40,14 @@ canvas {
 /* --------------------------------------------------------------------------
    2. 底部操作面板
    -------------------------------------------------------------------------- */
+/* v1.2.32：增加 --vv-bottom 以避让 iOS Safari / WebView 底部工具栏 overlay */
 .panel {
   background: linear-gradient(180deg, var(--cn-panel-top), var(--cn-panel-bottom));
   border-top: 1px solid rgb(232 195 122 / 25%);
   padding-left: 0;
   padding-right: 0;
-  padding-bottom: var(--cn-safe-bottom);
-  height: calc(70px + var(--cn-safe-bottom));
+  padding-bottom: calc(var(--cn-safe-bottom) + var(--vv-bottom, 0px));
+  height: calc(70px + var(--cn-safe-bottom) + var(--vv-bottom, 0px));
 }
 
 .hitButton {
@@ -166,7 +167,7 @@ canvas {
    -------------------------------------------------------------------------- */
 @media (orientation: landscape) and (max-height: 500px) {
   .panel {
-    height: calc(58px + var(--cn-safe-bottom));
+    height: calc(58px + var(--cn-safe-bottom) + var(--vv-bottom, 0px));
   }
 
   .hitButton {
@@ -295,14 +296,14 @@ body.lod-low .hitButton {
   position: relative;
   flex: 1 1 auto;
   width: auto;
-  min-width: 120px;
+  min-width: 80px;
   height: 60%;
   margin: 6px 0;
   align-self: center;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 8px;
+  gap: 0;
+  padding: 0 4px;
   box-sizing: border-box;
   border-radius: 14px;
   background: rgba(4, 12, 20, 0.5);
@@ -320,27 +321,6 @@ body.lod-low .hitButton {
 .aim-angle-bar.is-disabled {
   opacity: 0.35;
   pointer-events: none;
-}
-
-.aim-nudge {
-  flex: 0 0 auto;
-  width: 26px;
-  height: 24px;
-  padding: 0;
-  line-height: 1;
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--cn-gold, #e8c37a);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(232, 195, 122, 0.3);
-  border-radius: 7px;
-  cursor: pointer;
-  touch-action: none;
-}
-
-.aim-nudge:active {
-  background: rgba(232, 195, 122, 0.25);
-  transform: scale(0.94);
 }
 
 .aim-angle-track {
@@ -399,8 +379,10 @@ input[type="range"].aim-angle-slider {
   position: relative;
   z-index: 2;
   touch-action: none;
-  /* v1.2.2：拖动改由轨道（#aim-angle-track）接管控件，input 仅作静态居中手柄，
-     不再拦截指针（避免原生 range 在两端夹住、无法继续滑动瞄准） */
+  /* v1.2.19 #1：旋钮改为纯视觉，不再接收指针事件。
+     手指按在旋钮上时事件会穿透到下方的 .aim-angle-track，由 track 启动拖动，
+     避免 Android WebView 上 input[range] 的原生 thumb 拖动拦截 move 事件、
+     导致只有旋钮视觉移动而瞄准角度不更新。 */
   pointer-events: none;
 }
 
@@ -438,13 +420,8 @@ input[type="range"].aim-angle-slider::-moz-range-thumb {
 /* 手机横屏：条更窄一点，别压到球桌 */
 @media (orientation: landscape) and (max-height: 500px) {
   .aim-angle-bar {
-    min-width: 90px;
+    min-width: 70px;
     height: 60%;
-  }
-
-  .aim-nudge {
-    height: 20px;
-    font-size: 15px;
   }
 }
 

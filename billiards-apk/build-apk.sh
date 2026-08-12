@@ -40,6 +40,9 @@ mkdir -p compiled obj assets
 echo "[1/6] 打包网页资源到 assets/dist"
 mkdir -p assets/dist
 cp -r "$WEB_DIST"/. assets/dist/
+# 不要把下载用的 APK 安装包打进 app 的 assets（否则每次构建都会把 dist 里
+# 的历史 .apk 一起塞进安装包，体积翻倍且无意义）。
+rm -f assets/dist/*.apk
 
 # 兜底：overlayfs 下新建/截断大文件偶发读到 0 字节或截断（导致装到真机黑屏）。
 # 关键 JS 用 cp -f 覆盖（复用已有 inode，比 rm+cat 新建更稳），

@@ -17,10 +17,18 @@ import { unitAtAngle } from "../utils/three-utils"
 import { R } from "../model/physics/constants"
 import { PocketGeometry } from "../view/pocketgeometry"
 import { LOBBY_URL } from "../network/client/constants"
-import { gameOverButtons } from "../utils/gameover"
 import { Table } from "../model/table"
 import { OutcomeType } from "../model/outcome"
 import { State } from "../model/ball"
+
+interface PotInfo {
+  /** 相对本杆起点的进球时间戳（ms） */
+  t: number
+  /** 进袋球在 balls 数组中的下标 */
+  ballId: number
+  /** 对应袋口在 PocketGeometry.pocketCenters 中的下标 */
+  pocketIdx: number
+}
 
 interface ShotMeta {
   /** 本杆开始前的完整球局布局快照（位置 / 状态 / 所属球袋索引） */
@@ -36,8 +44,10 @@ interface ShotMeta {
    * 无碰撞且无进袋时为 Infinity（整杆常速，便于看清走位/失误）。
    */
   triggerT: number | null
-  /** 本杆各进袋事件的时间戳（ms，相对本杆起点），供进度条吸附点使用 */
-  pots: number[]
+  /** 本杆各进袋事件（含球与袋口索引），供进度条吸附点与每进球跟踪镜头使用 */
+  pots: PotInfo[]
+  /** 本杆默认三点框定（白球 / 被击球 / 对应球袋），无进球或跟踪窗口外时使用 */
+  defaultFocus: Vector3[]
 }
 
 export class Replay extends ControllerBase {
@@ -53,18 +63,25 @@ export class Replay extends ControllerBase {
   diagram?
 
   /**
-   * v1.2.6 #232：回放「运动中提速」倍率。
-   * 击球后到球静止之间（无论进洞与否）把物理时间倍率调高，加快看回放；
-   * 球静止、下一次击球前恢复 1（正常速度）。每帧物理步数随之增加，
-   * 但单步 dt 不变，故不影响碰撞稳定性。
+   * v1.2.6 #232：回放「运动中提速」倍率（已弃用）。
+   * 用户要求回放从击球到进球期间不倍速、不切换视角，故取消自动提速。
+   * 倍速改由用户通过底部「倍速」按钮手动选择（见 replaySpeed）。
    */
   private static readonly REPLAY_FAST = 3
 
   /**
    * v1.2.9 #F3：最后一颗球碰撞 / 最后一次进袋之后，再留出这段提前量（ms）才进入
    * 倍速，让玩家看清最后一次碰撞/进袋的收尾，再快进余下「滚定」过程。
+   * v1.2.17：仅用于进度条吸附点定位，不再驱动自动倍速。
    */
   private static readonly REPLAY_LEAD_MS = 80
+
+  /**
+   * v1.2.17：回放全局倍速档位（用户手动选择）。
+   * 取值为 1 表示常速；击球→进球的真实时间间隔不被压缩、也不被拉长。
+   */
+  private static readonly REPLAY_SPEEDS = [0.5, 1, 2, 4]
+  private replaySpeedIndex = 1 // 默认 1x
 
   // ---- v1.2.9 #F3 / #F5 状态 ----
   /** 每杆起始快照 + 预演结果（triggerT / duration / pots） */
@@ -78,32 +95,90 @@ export class Replay extends ControllerBase {
   /** 进度条与吸附点容器 */
   private seekEl: HTMLInputElement | null = null
   private snapsEl: HTMLElement | null = null
+  /** 「退出回放」按钮（回放结束常驻） */
+  private exitBtn: HTMLButtonElement | null = null
+  private exitHandler = () => {
+    document.body.classList.remove("replay-mode")
+    globalThis.location.href = LOBBY_URL
+  }
+  /** v1.2.17 #4：全局倍速按钮引用与点击处理（点击循环切换 0.5x/1x/2x/4x） */
+  private speedBtn: HTMLButtonElement | null = null
+  private onSpeedClick = () => {
+    if (this.speedBtn) {
+      this.speedBtn.textContent = this.cycleReplaySpeed()
+    }
+  }
+  /**
+   * v1.2.26：回放视角模式。
+   *  true  = 俯视（固定俯视全局视角，相机停在台面上方俯瞰整桌）；
+   *  false = 固定（固定侧后视角，相机停在击球点后上方，击球后不切俯视、不跟随）。
+   * 默认「固定」，避免回放中击球后被切到俯视；需要俯瞰全局时再切到「俯视」。
+   */
+  private camTopDown = false
+  /** v1.2.26：视角切换按钮（固定/俯视）引用与点击处理 */
+  private camBtn: HTMLButtonElement | null = null
+  private onCamClick = () => {
+    this.camTopDown = !this.camTopDown
+    const cam = this.container.view.camera
+    if (this.diagram || this.container.rules.rulename === "threecushion") {
+      cam.forceMode(cam.topView)
+    } else {
+      cam.forceMode(this.camTopDown ? cam.topView : cam.spectatorView)
+    }
+    if (this.camBtn) this.camBtn.textContent = this.currentCamLabel()
+  }
+  private currentCamLabel(): string {
+    return this.camTopDown ? "俯视" : "固定"
+  }
   /** 吸附点 DOM 缓存签名，避免每帧重建 */
   private lastSnapSig = ""
-
   constructor(container, init, shots, _retry = false, delay = 1500, diagram?) {
     super(container)
+    // v1.2.13 #replay：一进入回放立刻隐藏底部栏，避免预计算/异常导致 onFirst 未执行时
+    // 底部栏仍可见。后续 onFirst 会再次设置以作保险。
+    document.body.classList.add("replay-mode")
     this.init = init
     this.diagram = diagram
-    console.log(`init: ${JSON.stringify(init)}`)
-    this.shots = [...shots]
+    this.shots = Array.isArray(shots) ? [...shots] : []
     this.firstShot = this.shots[0]
+    console.log(`[replay] init received, shots=${this.shots.length}`)
+    console.log(`init: ${JSON.stringify(init)}`)
     this.delay = diagram ? 0 : delay
     // v1.2.6 #232：回放起步为正常速度（杆间停留/相机移动用正常速度）
     this.container.timeScale = 1
     this.container.table.showTraces(true)
-    this.container.table.updateFromShortSerialised(this.init)
+    try {
+      this.container.table.updateFromShortSerialised(this.init)
+    } catch (e) {
+      console.error("[replay] updateFromShortSerialised failed:", e)
+    }
     console.log(`shots: ${this.shots.length}`)
     console.log(`shots: ${JSON.stringify(this.shots)}`)
     const suggestCamera =
       this.diagram || this.container.rules.rulename == "threecushion"
         ? this.container.view.camera.topView
-        : this.container.view.camera.spectatorView
+        : (this.camTopDown ? this.container.view.camera.topView : this.container.view.camera.spectatorView)
     this.container.view.camera.forceMode(suggestCamera)
-    this.playNextShot(this.delay * 1.5)
+    // v1.2.11 #user：进入回放前预跑完整局，填满 shotMeta，
+    // 使整局进度条从开局即涵盖全部杆与进球（而非逐杆叠加）。
+    if (!this.diagram) {
+      try {
+        this.precomputeAllShots()
+      } catch (e) {
+        console.error("[replay] precomputeAllShots failed, fallback to incremental:", e)
+        this.shotMeta = []
+        this.simTable = null
+      }
+    }
+    try {
+      this.playNextShot(this.delay * 1.5)
+    } catch (e) {
+      console.error("[replay] playNextShot failed:", e)
+    }
   }
 
   override onFirst() {
+    console.log("[replay] onFirst fired")
     this.container.table.cue.aimInputs.setDisabled(true)
     const shareButton = this.container.menu.share
     if (shareButton) {
@@ -116,6 +191,9 @@ export class Replay extends ControllerBase {
     }
     // v1.2.9 #F5：挂载回放进度条（可滑动 + 进球吸附点）
     this.setupReplaySeek()
+    // v1.2.11 #user：进入回放即隐藏底部操作栏，保持全屏
+    document.body.classList.add("replay-mode")
+    console.log("[replay] replay-mode class present:", document.body.classList.contains("replay-mode"))
   }
 
   private rerackShot(shot: GameEvent, delay: number): boolean {
@@ -187,14 +265,16 @@ export class Replay extends ControllerBase {
     this.container.updateLastShot()
     this.container.table.cue.updateAimInput()
     this.container.table.cue.t = 1
-    // v1.2.6 #232：回放每杆框定「白球 + 被击球 + 对应球袋」三点。
-    // 三库/图解模式无明确「被击球→球袋」语义，沿用俯视。
+    // v1.2.17：回放全程使用进入时固定的视角（forceMode），不再每杆重新框定，
+    // 也不再在进球前后切换/跟踪镜头，保证「击球→进球」视角稳定、时间间隔不倍速。
     if (this.diagram || this.container.rules.rulename == "threecushion") {
       this.container.view.camera.suggestMode(
         this.container.view.camera.topView
       )
     } else {
-      this.container.view.camera.setReplayFrame(this.computeFocusPoints(aim))
+      this.container.view.camera.suggestMode(
+        this.camTopDown ? this.container.view.camera.topView : this.container.view.camera.spectatorView
+      )
     }
     clearTimeout(this.timer)
     this.timer = setTimeout(() => {
@@ -213,8 +293,7 @@ export class Replay extends ControllerBase {
    * - 对应球袋：被击球大致沿「白球→被击球」中心线方向被推出，
    *   取该方向上夹角最小的球袋作为目标袋（直球/近直球精确，加塞切球为近似）。
    */
-  private computeFocusPoints(aim: AimEvent): Vector3[] {
-    const table = this.container.table
+  private computeFocusPoints(aim: AimEvent, table: Table = this.container.table): Vector3[] {
     const cue = table.cueball
     const cuePos = cue.pos.clone()
     const dir = unitAtAngle(aim.angle) // XY 平面单位向量
@@ -272,9 +351,16 @@ export class Replay extends ControllerBase {
    * - 头less 预演本杆，算出 triggerT / duration / pots。
    */
   private beginShotBookkeeping() {
+    this.currentShotIndex++
     const t = this.container.table
     // 隔离本杆 outcome（每杆以干净数组开始）
     t.outcome.length = 0
+    // 若整局已预计算，直接复用对应杆的预计算 meta（duration / pots / defaultFocus / triggerT 已就绪）
+    const existing = this.shotMeta[this.currentShotIndex]
+    if (existing) {
+      return
+    }
+    // 兜底：未预计算时（如图解模式）现场计算并追加
     if (!this.simTable) {
       this.simTable = this.container.rules.table()
     }
@@ -289,10 +375,10 @@ export class Replay extends ControllerBase {
       duration: 0,
       triggerT: null,
       pots: [],
+      defaultFocus: this.computeFocusPoints(t.cue.aim),
     }
     this.precomputeShot(meta)
     this.shotMeta.push(meta)
-    this.currentShotIndex = this.shotMeta.length - 1
   }
 
   /**
@@ -323,17 +409,92 @@ export class Replay extends ControllerBase {
       sim.advance(step)
     }
     let maxTs = -1
-    const pots: number[] = []
+    const pots: PotInfo[] = []
     for (const o of sim.outcome) {
       if (o.type === OutcomeType.Collision || o.type === OutcomeType.Pot) {
         if (o.timestamp > maxTs) maxTs = o.timestamp
       }
-      if (o.type === OutcomeType.Pot) pots.push(o.timestamp)
+      if (o.type === OutcomeType.Pot) {
+        const ballId = o.ballA ? o.ballA.id : -1
+        const pocketIdx = o.ballA?.pocket
+          ? PocketGeometry.pocketCenters.indexOf(o.ballA.pocket)
+          : -1
+        pots.push({ t: o.timestamp, ballId, pocketIdx })
+      }
     }
     meta.duration = sim.time
     // 无碰撞且无进袋 → 整杆常速（便于看清走位/失误）；否则最后事件 + 提前量后倍速
     meta.triggerT = maxTs >= 0 ? maxTs + Replay.REPLAY_LEAD_MS : Infinity
     meta.pots = pots
+  }
+
+  /**
+   * v1.2.11 #user：进入回放前用独立 simTable 顺序执行全部杆，
+   * 预先生成每杆的 layout / aim / duration / triggerT / pots / defaultFocus，
+   * 使 gameTotals() 在回放一开始就能给出整局总时长，进度条从开局覆盖到结束，
+   * 而非原先「每杆播放后才追加一段」的逐杆叠加表现。
+   */
+  private precomputeAllShots() {
+    this.simTable = this.container.rules.table()
+    this.simTable.updateFromShortSerialised(this.init)
+    const shots = [...this.shots]
+    for (let i = 0; i < shots.length; i++) {
+      const shot = shots[i]
+      try {
+        if (shot?.type === EventType.RERACK) {
+          RerackEvent.applyBallinfoToTable(
+            this.simTable,
+            RerackEvent.fromJson((shot as RerackEvent).ballinfo).ballinfo
+          )
+          continue
+        }
+        if (shot?.type === EventType.PLACEBALL) {
+          const place = PlaceBallEvent.fromJson(shot)
+          this.simTable.cueball.pos.copy(place.pos)
+          this.simTable.cueball.setStationary()
+          if (place.respot) {
+            const b = this.simTable.balls[place.respot.id]
+            if (b) {
+              b.pos.copy(place.respot.pos)
+              b.setStationary()
+            }
+          }
+          continue
+        }
+        if (shot?.type === EventType.SCORE) {
+          // 计分事件不改变球位，预演布局无需处理
+          continue
+        }
+        // AimEvent：抓取起始布局并预演本杆
+        const aim = AimEvent.fromJson(shot)
+        this.simTable.cueball = this.simTable.balls[aim.i]
+        this.simTable.cueball.pos.copy(aim.pos)
+        this.simTable.cue.aim = aim
+        const meta: ShotMeta = {
+          layout: this.simTable.balls.map((b) => ({
+            pos: [b.pos.x, b.pos.y, b.pos.z] as [number, number, number],
+            state: b.state,
+            pocket: b.pocket ? PocketGeometry.pocketCenters.indexOf(b.pocket) : -1,
+          })),
+          cueballId: this.simTable.cueball.id,
+          aim: aim.copy(),
+          duration: 0,
+          triggerT: null,
+          pots: [],
+          defaultFocus: this.computeFocusPoints(aim, this.simTable),
+        }
+        this.precomputeShot(meta)
+        this.shotMeta.push(meta)
+      } catch (e) {
+        console.error(`[replay] precompute shot ${i} failed, abort incremental fallback:`, e)
+        // 任一杆预计算失败即放弃整局预计算，改为逐杆现场计算（进度条会回到逐杆叠加，
+        // 但回放本身仍可正常播放）。
+        this.shotMeta = []
+        this.simTable = null
+        break
+      }
+    }
+    console.log(`[replay] precomputeAllShots done, metaCount=${this.shotMeta.length}`)
   }
 
   /** 将实时 Table 还原到某杆起始布局（确定性重跑起点） */
@@ -409,17 +570,31 @@ export class Replay extends ControllerBase {
   }
 
   /**
-   * v1.2.9 #F3：每帧由 container.advance 回调，返回本帧回放倍速。
-   * 规则：物理时间尚未越过本杆「最后碰撞/进袋 + 提前量」→ 常速；
-   *       已越过 → 倍速（REPLAY_FAST）；球已静止（杆间停留）→ 常速。
+   * v1.2.17：每帧由 container.advance 回调，返回本帧回放倍速。
+   * 不再按「最后碰撞/进袋」自动提速——击球到进球的真实时间间隔
+   * 完全由用户选择的全局倍速决定。
+   * v1.2.27：移除 v1.2.22「击球过程中强制 1x」的限制。此前该限制使「倍速」按钮
+   * 仅在杆间短暂等待生效、球运动阶段恒为 1x，用户误以为倍速失效。现全程使用用户
+   * 选择的全局倍速：默认 1x（仍看清击球/碰撞/进球），选 2x/4x 即整段回放加速。
    */
   private replayTimeScale(): number {
-    if (this.container.table.allStationary()) return 1
-    const meta = this.shotMeta[this.currentShotIndex]
-    if (!meta || meta.triggerT == null) return 1
-    return this.container.table.time >= meta.triggerT
-      ? Replay.REPLAY_FAST
-      : 1
+    // v1.2.27：移除「击球过程中强制 1x」的限制。
+    // 此前该限制让用户的倍速选择只在杆间短暂等待里生效，球运动（回放最主要内容）
+    // 阶段恒为 1x，导致「倍速」按钮看起来完全无效。
+    // 现全程使用用户选择的全局倍速：默认 1x（仍看清击球/碰撞/进球），用户选 2x/4x 即整体加速。
+    return Replay.REPLAY_SPEEDS[this.replaySpeedIndex]
+  }
+
+  /** 用户点击底部「倍速」按钮：在 0.5x / 1x / 2x / 4x 之间循环切换 */
+  private cycleReplaySpeed(): string {
+    this.replaySpeedIndex =
+      (this.replaySpeedIndex + 1) % Replay.REPLAY_SPEEDS.length
+    return this.currentSpeedLabel()
+  }
+
+  private currentSpeedLabel(): string {
+    const s = Replay.REPLAY_SPEEDS[this.replaySpeedIndex]
+    return s === 0.5 ? "0.5x" : s + "x"
   }
 
   /** v1.2.11 #F11：每帧刷新进度条位置（整局进度）与全局进球吸附点 */
@@ -428,13 +603,52 @@ export class Replay extends ControllerBase {
     if (!this.userScrubbing) {
       const { cum, total } = this.gameTotals()
       if (total > 0) {
-        const idx = this.currentShotIndex
+        const idx = this.currentShotIndex < 0 ? 0 : this.currentShotIndex
         const cur = cum[idx] + this.container.table.time
         const frac = Math.min(cur / total, 1)
         this.seekEl.value = String(Math.round(frac * 1000))
       }
     }
     this.renderSnaps()
+  }
+
+  /**
+   * v1.2.11 #user：回放每帧按当前物理时刻动态切换框定焦点。
+   * 若当前处于某次进球的窗口内（球接近袋口），则框定「进球的球 → 对应袋口 → 白球」，
+   * 实现「跟随当前进球」的跟踪动态镜头；否则保持本杆默认三点框定。
+   */
+  private updateReplayCamera() {
+    if (this.diagram || this.container.rules.rulename === "threecushion") return
+    const meta = this.shotMeta[this.currentShotIndex]
+    if (!meta) return
+    if (!meta.pots || meta.pots.length === 0) {
+      if (meta.defaultFocus) {
+        this.container.view.camera.updateReplayFocus(meta.defaultFocus)
+      }
+      return
+    }
+    const t = this.container.table.time
+    const WINDOW_BEFORE = 220 // 进球前 220ms 开始跟踪
+    const WINDOW_AFTER = 480 // 进球后 480ms 结束跟踪
+    for (const pot of meta.pots) {
+      if (t >= pot.t - WINDOW_BEFORE && t <= pot.t + WINDOW_AFTER) {
+        if (pot.ballId >= 0 && pot.pocketIdx >= 0) {
+          const ball = this.container.table.balls[pot.ballId]
+          const pocket = PocketGeometry.pocketCenters[pot.pocketIdx]
+          if (ball && pocket) {
+            this.container.view.camera.updateReplayFocus([
+              ball.pos,
+              pocket.pos,
+              this.container.table.cueball.pos,
+            ])
+            return
+          }
+        }
+        this.container.view.camera.updateReplayFocus(meta.defaultFocus)
+        return
+      }
+    }
+    this.container.view.camera.updateReplayFocus(meta.defaultFocus)
   }
 
   /** v1.2.11 #F11：渲染全局进球吸附点（所有已记录杆的 pots 平移到全局位置） */
@@ -459,7 +673,7 @@ export class Replay extends ControllerBase {
       const meta = this.shotMeta[i]
       const segDur = Math.max(meta.duration, 1e-3)
       for (const p of meta.pots) {
-        const globalT = cum[i] + (p - Replay.REPLAY_LEAD_MS)
+        const globalT = cum[i] + (p.t - Replay.REPLAY_LEAD_MS)
         const f = Math.max(0, Math.min(1, globalT / total))
         html += `<span class="replay-snap" style="left:${(f * 100).toFixed(2)}%"></span>`
       }
@@ -488,7 +702,7 @@ export class Replay extends ControllerBase {
       for (let i = 0; i < this.shotMeta.length; i++) {
         const meta = this.shotMeta[i]
         for (const p of meta.pots) {
-          const globalT = cum[i] + (p - Replay.REPLAY_LEAD_MS)
+          const globalT = cum[i] + (p.t - Replay.REPLAY_LEAD_MS)
           const sf = Math.max(0, Math.min(1, globalT / total))
           const d = Math.abs(frac - sf)
           if (d < bestD) {
@@ -515,11 +729,41 @@ export class Replay extends ControllerBase {
     this.seekEl = document.getElementById("replaySeek") as HTMLInputElement | null
     this.snapsEl = document.getElementById("replaySeekSnaps")
     if (bar) bar.removeAttribute("hidden")
+    // v1.2.13 #replay：双重保险隐藏底部栏：CSS + 内联 !important
+    const panel = document.getElementById("panel")
+    if (panel) panel.style.setProperty("display", "none", "important")
+    // v1.2.19 #2：CSS + JS 双保险隐藏右上角设置齿轮。部分环境 CSS 规则被缓存或
+    // 未生效，导致回放时齿轮仍可见；这里直接用内联 style 强制隐藏。
+    const menu = document.getElementById("menu")
+    if (menu) menu.style.setProperty("display", "none", "important")
     this.container.replayPaused = false
     this.userScrubbing = false
     this.lastSnapSig = ""
     this.container.replayTimeScaleHook = () => this.replayTimeScale()
-    this.container.replayFrameHook = () => this.tickSeekUI()
+    this.container.replayFrameHook = () => {
+      this.tickSeekUI()
+    }
+    // 显示「退出回放」按钮并绑定（回放全程常驻，结束后供用户离开）
+    const exit = document.getElementById("replayExitBtn") as HTMLButtonElement | null
+    this.exitBtn = exit
+    if (exit) {
+      exit.removeAttribute("hidden")
+      exit.addEventListener("click", this.exitHandler)
+    }
+    // v1.2.17 #4：挂载全局倍速按钮，初始化为当前倍速标签并绑定循环切换
+    const speed = document.getElementById("replaySpeedBtn") as HTMLButtonElement | null
+    this.speedBtn = speed
+    if (speed) {
+      speed.textContent = this.currentSpeedLabel()
+      speed.addEventListener("click", this.onSpeedClick)
+    }
+    // v1.2.24：挂载视角切换按钮（固定/跟随），初始化为当前视角标签并绑定切换
+    const cam = document.getElementById("replayCamBtn") as HTMLButtonElement | null
+    this.camBtn = cam
+    if (cam) {
+      cam.textContent = this.currentCamLabel()
+      cam.addEventListener("click", this.onCamClick)
+    }
     if (this.seekEl) {
       this.seekEl.addEventListener("pointerdown", this.onSeekStart)
       this.seekEl.addEventListener("pointerup", this.onSeekEnd)
@@ -549,20 +793,59 @@ export class Replay extends ControllerBase {
     this.userScrubbing = false
     this.container.replayTimeScaleHook = null
     this.container.replayFrameHook = null
+    // 隐藏「退出回放」并解绑
+    if (this.exitBtn) {
+      this.exitBtn.removeEventListener("click", this.exitHandler)
+      this.exitBtn.setAttribute("hidden", "")
+      this.exitBtn = null
+    }
+    // v1.2.17 #4：解绑并复位倍速按钮
+    if (this.speedBtn) {
+      this.speedBtn.removeEventListener("click", this.onSpeedClick)
+      this.speedBtn = null
+    }
+    // v1.2.24：解绑并复位视角切换按钮
+    if (this.camBtn) {
+      this.camBtn.removeEventListener("click", this.onCamClick)
+      this.camBtn = null
+    }
+    // v1.2.13 #replay：恢复底部栏显示
+    const panel = document.getElementById("panel")
+    if (panel) panel.style.removeProperty("display")
+    // v1.2.19 #2：恢复设置齿轮显示，并用 opacity 做过渡避免突跳。
+    // 先把 display 清掉让元素回到 CSS 默认 flex，下一帧再恢复 opacity。
+    const menu = document.getElementById("menu")
+    if (menu) {
+      menu.style.removeProperty("display")
+      menu.style.opacity = "0"
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          menu.style.transition = "opacity 0.18s ease"
+          menu.style.opacity = "1"
+          // 动画结束后清理内联样式，避免后续 hover/active 被覆盖
+          setTimeout(() => {
+            menu.style.removeProperty("opacity")
+            menu.style.removeProperty("transition")
+          }, 200)
+        })
+      })
+    }
+    document.body.classList.remove("replay-mode")
   }
 
   override handleHit(_: HitEvent) {
     this.container.updateLastShot()
     // v1.2.9 #F3 / #F5：每杆起手记账（隔离 outcome + 起始快照 + 头less 预演）
     this.beginShotBookkeeping()
-    // v1.2.9 #F3：起步常速，倍速由 container.advance 每帧按本杆 triggerT 动态决定
+    // v1.2.27：起步不直接写 timeScale（advance 每帧由 replayTimeScaleHook 决定，
+    // 该钩子返回用户选择的全局倍速）。保留此赋值仅为兼容旧逻辑，会被每帧覆盖。
     this.container.timeScale = 1
     this.hit()
     return this
   }
 
   override handleStationary(_) {
-    // v1.2.6 #232：球已静止，恢复常速，等待下一次击球（杆间停留用正常速度）
+    // v1.2.6 #232：球已静止，等待下一次击球。
     this.container.timeScale = 1
     const outcome = this.container.table.outcome
     this.container.recorder.updateBreak(outcome, false, false)
@@ -570,28 +853,11 @@ export class Replay extends ControllerBase {
       this.playNextShot(this.delay)
     }
     if (this.shots.length === 0 && this.timer === undefined) {
-      const outcome = this.container.table.outcome
-      if (Array.isArray(outcome) && outcome.length) {
-        const first = outcome[0].timestamp
-        outcome.forEach((o) => {
-          const sec = ((o.timestamp - first) / 1000).toFixed(2)
-          console.log(`${o.type} ${sec} sec`)
-        })
-      }
-      this.container.notifyLocal(
-        {
-          type: "Info",
-          title: "回放结束",
-          extra: gameOverButtons.replay + " " + gameOverButtons.lobby,
-        },
-        0,
-        { lobby: () => (globalThis.location.href = LOBBY_URL) }
-      )
-      // v1.2.6 #232：回放结束，清除框定焦点，交还给 End 控制器管理相机
-      this.container.view.camera.clearReplayFrame()
-      // v1.2.9 #F5：隐藏回放进度条
-      this.hideReplaySeek()
-      return new End(this.container)
+      // v1.2.11 #user：回放结束后先暂停，不弹「回放结束」按钮，
+      // 保留进度条与「退出回放」按钮，让用户先自行拖动进度条回看本局。
+      this.container.timeScale = 1
+      this.container.replayPaused = true
+      return this
     }
     return this
   }

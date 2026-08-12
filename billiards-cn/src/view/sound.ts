@@ -24,6 +24,12 @@ export class Sound {
    * 入袋时因物理步进 / 回放重算而重复触发 pot 音效。每杆（outcome 引用变化）重置。
    */
   private pottedSoundBalls = new Set<number>()
+  /**
+   * v1.2.17：进袋音效的「同球最短间隔」兜底（毫秒）。
+   * 即便回放重算 / 重新模拟导致 outcome 数组被整体重建、pottedSoundBalls 被清空，
+   * 同一颗球在 120ms 内的重复进袋音仍会被拦截，彻底杜绝大力进袋时「响很多次」。
+   */
+  private pottedSoundAt = new Map<number, number>()
   loadAssets
 
   /** 主增益节点：突破 three.js 单次 Audio 1.0 音量上限，整体提升听感 */
@@ -261,11 +267,15 @@ export class Sound {
       // 高速入袋（力度 100%）时，物理步进 / 回放重算可能让同一颗球产生多次
       // Pot 事件，这里按球 id 拦截重复播放，保留「每颗球一次」的自然听感。
       const ballId = outcome.ballA?.id
-      if (ballId !== undefined && this.pottedSoundBalls.has(ballId)) {
-        return
-      }
+      const now = (typeof performance !== "undefined" ? performance.now() : Date.now())
       if (ballId !== undefined) {
+        // 双保险：本杆去重集合 + 短时间窗兜底，杜绝大力进袋时进袋音重复响。
+        const last = this.pottedSoundAt.get(ballId) ?? -1e9
+        if (this.pottedSoundBalls.has(ballId) || now - last < 120) {
+          return
+        }
         this.pottedSoundBalls.add(ballId)
+        this.pottedSoundAt.set(ballId, now)
       }
       // 进袋改用真实录音素材（item 3：替换原先偏弱的合成音）。
       // 仍按入袋球速分轻/中/重三档，并加随机变调，避免重复感。
@@ -295,6 +305,7 @@ export class Sound {
       this.lastOutcomeTime = -1
       // v1.2.9 #F1：新的一杆，重置进袋音效去重集合。
       this.pottedSoundBalls.clear()
+      this.pottedSoundAt.clear()
     }
     for (let i = this.lastOutcomeIndex; i < outcomes.length; i++) {
       const outcome = outcomes[i]

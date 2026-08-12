@@ -125,7 +125,10 @@ export class NineBall implements Rules {
 
     this.container.sound.playSuccess(table.inPockets())
     if (this.isEndOfGame(outcome)) {
-      return this.handleGameEnd(true)
+      const session = Session.getInstance()
+      const myCueBall = this.container.table.balls[session.playerIndex]
+      const amIWinner = this.container.table.cueball === myCueBall
+      return this.handleGameEnd(amIWinner)
     }
 
     this.container.sendEvent(new WatchEvent(table.serialise()))

@@ -26,7 +26,8 @@ html,
 body {
   margin: 0;
   padding: 0;
-  height: 100%;
+  height: 100dvh;
+  min-height: 100dvh;
   overflow: hidden;
 }
 
@@ -53,8 +54,9 @@ body {
   display: flex;
   overflow-x: hidden;
   flex-direction: column;
+  /* v1.2.34：底部额外叠加 --vv-bottom，避让 iOS Safari / WebView 底部工具栏 */
   padding: calc(var(--safe-top) + 8px) calc(var(--safe-right) + 14px)
-    calc(var(--safe-bottom) + 8px) calc(var(--safe-left) + 14px);
+    calc(var(--safe-bottom) + 8px + var(--vv-bottom, 0px)) calc(var(--safe-left) + 14px);
   /* v1.1.14：移除「720px 居中限宽」，让菜单页铺满全屏
      （折叠屏展开、宽屏、常规手机都铺满）。 */
 }
@@ -429,6 +431,17 @@ body {
 #screen-home {
   overflow: hidden;
   gap: 7px;
+}
+
+/* v1.2.34：当 iOS Safari / WebView 底部工具栏占用了空间（--vv-bottom > 0）时，
+   允许首页纵向滚动，确保“开始游戏”等底部按钮仍可被点选；同时隐藏滚动条保持美观。 */
+#screen-home.scrollable {
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+#screen-home.scrollable::-webkit-scrollbar {
+  display: none;
 }
 
 #screen-home .section {
@@ -892,7 +905,7 @@ kbd {
   .app {
     max-width: 100%;
     padding: calc(var(--safe-top) + 8px) calc(var(--safe-right) + 20px)
-      calc(var(--safe-bottom) + 8px) calc(var(--safe-left) + 20px);
+      calc(var(--safe-bottom) + 8px + var(--vv-bottom, 0px)) calc(var(--safe-left) + 20px);
   }
   .hero {
     margin-bottom: 8px;

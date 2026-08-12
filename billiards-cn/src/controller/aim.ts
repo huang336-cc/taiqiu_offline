@@ -53,6 +53,9 @@ export class Aim extends ControllerBase {
       table.cue.aim.elevation = 0
     }
     this.container.view.camera.suggestMode(this.container.view.camera.aimView)
+    // v1.2.33：进入瞄准视角后立即把相机摆到位，避免从俯视/摆球视角 lerp 期间
+    // 相机停留在白球附近、纵向 FOV 被白球/球杆占满，导致玩家看不到前方被击球。
+    this.container.view.camera.forceMove(table.cue.aim)
     // 横向滑动条的「居中 = 初始正向瞄准」基准：进入瞄准状态时锁定当前角度
     table.cue.setAimBase(table.cue.aim.angle)
     table.cue.updateAimInput()
