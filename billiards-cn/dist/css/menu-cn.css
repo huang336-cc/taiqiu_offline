@@ -57,6 +57,10 @@ body {
   /* v1.2.34：底部额外叠加 --vv-bottom，避让 iOS Safari / WebView 底部工具栏 */
   padding: calc(var(--safe-top) + 8px) calc(var(--safe-right) + 14px)
     calc(var(--safe-bottom) + 8px + var(--vv-bottom, 0px)) calc(var(--safe-left) + 14px);
+  /* v1.3.2：移动端浏览器（Android Chrome 等）的底部地址栏常以 overlay 形式压在页面上，
+     但 visualViewport 不会给出额外 bottom 偏移。这里用 max() 保证底部至少有 72px 留白，
+     让“开始游戏”等按钮不被地址栏压住；不支持 max() 的浏览器会自然回退到上一条 padding。 */
+  padding-bottom: calc(var(--safe-bottom) + max(8px + var(--vv-bottom, 0px), 72px));
   /* v1.1.14：移除「720px 居中限宽」，让菜单页铺满全屏
      （折叠屏展开、宽屏、常规手机都铺满）。 */
 }
@@ -427,14 +431,20 @@ body {
   flex-shrink: 0;
 }
 
-/* ---------- 首页：所有按钮平铺一屏，不再滚动 ---------- */
+/* ---------- 首页：所有按钮平铺一屏，小屏/底部工具栏时可滚动 ---------- */
 #screen-home {
-  overflow: hidden;
+  /* v1.3.2：默认即允许纵向滚动，避免 Android Chrome 底部地址栏 overlay 时“开始游戏”被压住；
+     隐藏滚动条保持一屏观感。 */
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   gap: 7px;
 }
+#screen-home::-webkit-scrollbar {
+  display: none;
+}
 
-/* v1.2.34：当 iOS Safari / WebView 底部工具栏占用了空间（--vv-bottom > 0）时，
-   允许首页纵向滚动，确保“开始游戏”等底部按钮仍可被点选；同时隐藏滚动条保持美观。 */
+/* v1.2.34 保留的增强类：无实际变化，仍允许滚动。 */
 #screen-home.scrollable {
   overflow-y: auto;
   scrollbar-width: none;

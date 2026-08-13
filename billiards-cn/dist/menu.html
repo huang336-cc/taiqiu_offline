@@ -637,6 +637,14 @@
           </p>
 
           <div class="setting-group">
+            <h3>v1.3.2 · 2026-08-13 10:37:00</h3>
+            <p class="about-text dim"><b>1 项修复（Android 浏览器菜单底部仍被遮挡）：</b></p>
+            <ul class="changelog-list">
+              <li><b>菜单页底部地址栏兜底避让</b>：v1.2.34 通过 <code>visualViewport</code> 计算底部遮挡高度，可解决 iOS Safari 底部工具栏问题；但 Android Chrome 的底部地址栏以 overlay 形式压在页面上时，<code>visualViewport.height</code> 与 <code>window.innerHeight</code> 差值为 0，导致“开始游戏”等底部按钮仍被地址栏压住。本次在 CSS 中用 <code>max()</code> 给 <code>.app</code> 底部增加至少 72px 的固定留白，并让首页默认允许纵向滚动；同时在 JS 中对 Android 设备给出 72px 兜底高度，双保险确保底部按钮始终可点。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
             <h3>v1.3.1 · 2026-08-13 09:53:00</h3>
             <p class="about-text dim"><b>1 项修复（iOS 浏览器游戏内底部操作栏仍被遮挡）：</b></p>
             <ul class="changelog-list">
@@ -1828,20 +1836,26 @@
     </div>
 
     <script>
-      window.__BILLIARDS_VERSION__ = "1.3.1-2608130953";
+      window.__BILLIARDS_VERSION__ = "1.3.2-2608131037";
     </script>
     <script src="menu-cn.js"></script>
     <script>
-      // v1.2.34：iOS Safari / WebView 底部工具栏常以 overlay 形式盖在页面内容之上，
-      // 菜单页底部“开始游戏”等按钮会被压住。这里通过 visualViewport 计算底部被遮挡
-      // 的高度并写入 --vv-bottom，CSS 用它给 .app 底部额外留白，并在需要时允许首页
-      // 滚动，确保底部按钮始终可点。
+      // v1.3.2：iOS Safari / WebView 与 Android Chrome 的底部工具栏/地址栏常以 overlay
+      // 形式盖在页面内容之上，导致菜单页底部“开始游戏”等按钮被压住。这里通过
+      // visualViewport 计算底部被遮挡的高度并写入 --vv-bottom；对 Android Chrome 等
+      // 不会通过 visualViewport 暴露地址栏高度的浏览器做兜底，保证底部始终有足够留白。
       (function () {
         function updateViewportFit() {
           var vv = window.visualViewport;
           var bottom = 0;
           if (vv) {
             bottom = Math.max(0, Math.round(window.innerHeight - vv.height));
+          }
+          // Android Chrome 底部地址栏不会反映在 visualViewport.height 差值里，
+          // 但会以 overlay 形式压住页面。若当前没检测到遮挡且 UA 为 Android，
+          // 给出一个保守的兜底高度，让 CSS 的 max() 兜底生效。
+          if (!bottom && /android/i.test(navigator.userAgent || "")) {
+            bottom = 72;
           }
           // 若外部已注入 --vv-bottom（如测试或某些 WebView 预置），取较大值作为最终避让高度
           var injected = parseInt(
