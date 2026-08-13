@@ -117,7 +117,11 @@ export class Camera {
   aimView(aim: AimEvent, fraction = 0.08) {
     const h = this.height
     const pf = this.camera.aspect < 0.8 ? 3 : 1
-    this.camera.fov = this.adaptiveFov(40)
+    // v1.2.33：瞄准视角放宽横向 FOV 上限到 80°。
+    // 原 60° 在 iPhone 横屏/超宽屏（可视高度被底部工具栏压缩）下会过度收窄
+    // 纵向 FOV，导致白球前方的被击球被切出画面上方。80° 在保留 16:9 观感
+    // 的同时，给超宽屏留出足够纵向视野。
+    this.camera.fov = this.adaptiveFov(40, 80)
     if (h < 10 * R) {
       const factor = 100 * (10 * R - h)
       this.camera.fov -= factor * pf
@@ -152,7 +156,8 @@ export class Camera {
 
   // 依据宽高比自适应纵向 FOV：竖屏（aspect<0.8）保持 60°；横屏在横向 FOV 超过
   // maxHorizontalFovDeg 时收窄纵向 FOV，使横向 FOV 回到上限，球台在超宽屏铺满宽度。
-  private adaptiveFov(baseLandscapeFov: number): number {
+  // v1.2.33：新增可选 maxH 参数，供 aimView 等需要更宽纵向视野的模式单独调用。
+  private adaptiveFov(baseLandscapeFov: number, maxH?: number): number {
     const aspect = this.camera.aspect
     if (aspect < 0.8) {
       // 竖屏：纵向取较宽值，保持原行为
@@ -161,10 +166,11 @@ export class Camera {
     const baseFov = baseLandscapeFov + this.fovOffset
     const hRad = 2 * Math.atan(Math.tan((baseFov * Math.PI) / 180 / 2) * aspect)
     const hDeg = (hRad * 180) / Math.PI
-    if (hDeg <= Camera.maxHorizontalFovDeg) {
+    const maxHorizontal = maxH ?? Camera.maxHorizontalFovDeg
+    if (hDeg <= maxHorizontal) {
       return baseFov
     }
-    const targetHRad = (Camera.maxHorizontalFovDeg * Math.PI) / 180
+    const targetHRad = (maxHorizontal * Math.PI) / 180
     const vRad = 2 * Math.atan(Math.tan(targetHRad / 2) / aspect)
     return (vRad * 180) / Math.PI
   }
@@ -328,6 +334,16 @@ export class Camera {
   /** v1.2.6 #232：清除回放框定，相机回到常规模式由调用方决定 */
   clearReplayFrame() {
     this.replayFocus = null
+  }
+
+  /**
+   * v1.2.11 #user：仅更新回放框定焦点，不切换相机模式。
+   * 回放每帧由 Replay 控制器调用，让 replayFrameView 平滑 lerp 到新焦点，
+   * 实现「跟随当前进球的球 → 袋口」动态镜头（区别于 setReplayFrame 固定三点）。
+   */
+  updateReplayFocus(points: Vector3[]) {
+    if (!points || points.length === 0) return
+    this.replayFocus = points
   }
 
   /**

@@ -1,6 +1,15 @@
 <!doctype html>
 <html lang="zh-CN">
   <head>
+    <!-- v1.2.29：直接打开站点根（无任何游戏/回放参数）时停留在主菜单，
+         而非用默认九球规则自动开局。菜单"开始游戏"会带 ruletype= 等参数、
+         回放会带 state=/replayId= 参数，这些合法入口不受影响。 -->
+    <script>
+      (function () {
+        var q = location.search || "";
+        if (q.replace("?", "").length === 0) location.replace("menu.html");
+      })();
+    </script>
     <title>奥特曼的台球 · 离线版</title>
     <link rel="icon" type="image/png" href="favicon.png" />
     <meta charset="UTF-8" />
@@ -10,6 +19,33 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover"
     />
+    <!-- v1.3.2：iOS Safari / WebView 底部工具栏常以 overlay 形式遮挡游戏底部操作栏。
+         通过 window.visualViewport 实时计算底部被遮挡高度并写入 --vv-bottom，CSS 用它把
+         .panel、回放进度条、白球操作弹窗整体上移，确保击球/力度/视角按钮不被压住。 -->
+    <script>
+      (function () {
+        function updateViewportFit() {
+          var vv = window.visualViewport;
+          var bottom = 0;
+          if (vv) {
+            bottom = Math.max(0, Math.round(window.innerHeight - vv.height));
+          }
+          var injected = parseInt(
+            getComputedStyle(document.documentElement).getPropertyValue("--vv-bottom") || "0",
+            10
+          );
+          bottom = Math.max(bottom, injected || 0);
+          document.documentElement.style.setProperty("--vv-bottom", bottom + "px");
+        }
+        updateViewportFit();
+        var vv = window.visualViewport;
+        if (vv && typeof vv.addEventListener === "function") {
+          vv.addEventListener("resize", updateViewportFit);
+          vv.addEventListener("scroll", updateViewportFit);
+        }
+        window.addEventListener("resize", updateViewportFit);
+      })();
+    </script>
     <link rel="stylesheet" type="text/css" href="css/fonts.css" />
     <link rel="stylesheet" type="text/css" href="css/index.css" />
     <link rel="stylesheet" type="text/css" href="css/aiminputs.css" />
@@ -20,15 +56,32 @@
     <link rel="stylesheet" type="text/css" href="css/wood.css" />
     <link rel="stylesheet" type="text/css" href="css/ingame-cn.css" />
     <!-- v1.1.16: 底部栏改版 + 设置按钮右上角 -->
-    <link rel="stylesheet" type="text/css" href="css/bottombar-v2.css?v=1.2.8" />
+    <link rel="stylesheet" type="text/css" href="css/bottombar-v2.css?v=1.2.20" />
     <!-- v1.1.18: 顶部计分板卡片（参考图2） -->
-    <link rel="stylesheet" type="text/css" href="css/scoreboard-v2.css" />
+    <link rel="stylesheet" type="text/css" href="css/scoreboard-v2.css?v=1.2.20" />
     <!-- v1.2.9 #F5：回放进度条（可滑动 + 进球吸附点） -->
-    <link rel="stylesheet" type="text/css" href="css/replay-seek.css?v=1.2.9" />
+    <link rel="stylesheet" type="text/css" href="css/replay-seek.css?v=1.2.20" />
   </head>
 
   <body>
     <h1 hidden>奥特曼的台球 单机离线版</h1>
+
+    <!-- v1.2.31：在线游戏模式横屏锁定。竖屏（移动端）时全屏覆盖「请横屏」遮罩，
+         屏蔽竖屏游玩，仅横屏模式可进入游戏；桌面/大屏（宽度 > 1024px）不触发。
+         显示/隐藏完全由 css/index.css 的 @media (orientation: portrait) 控制。 -->
+    <div id="rotateOverlay" class="rotate-overlay" aria-hidden="true">
+      <div class="rotate-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="7" y="2.5" width="10" height="19" rx="2.2" />
+          <line x1="11" y1="18.6" x2="13" y2="18.6" />
+          <path d="M4.6 9.6a4.4 4.4 0 0 1 4.4-4.4" />
+          <polyline points="4 6 4.6 9.6 8.2 9.2" />
+        </svg>
+      </div>
+      <p class="rotate-text">请横屏使用</p>
+      <p class="rotate-sub">为获得最佳台球体验，请将手机旋转至横屏模式</p>
+    </div>
+
     <div id="viewP1" class="view3d">
       <!-- v1.1.10：资源异步加载期间的 Loading 覆盖层，避免几百毫秒黑屏 -->
       <div class="view3d-loading" id="view3dLoading">
@@ -42,7 +95,7 @@
         <iframe title="游戏菜单"></iframe>
         <div class="help-footer">
           <button class="lobby-btn" id="backToMenu">返回主菜单</button>
-          <span class="help-text">操作说明 · 设置 · 规则</span>
+          <button class="lobby-btn" id="restartGame">再来一局</button>
           <button id="helpClose">关闭</button>
         </div>
       </div>
@@ -156,16 +209,7 @@
         <!-- ⑤ 细微瞄准条（缩短） -->
         <div class="bb-seg bb-seg-aim">
           <div id="aimAngleBar" class="aim-angle-bar" hidden>
-            <div
-              role="button"
-              tabindex="0"
-              class="aim-nudge"
-              id="aimNudgeL"
-              aria-label="瞄准左微调"
-            >
-              ‹
-            </div>
-            <div class="aim-angle-track">
+            <div class="aim-angle-track" id="aim-angle-track">
               <span class="aim-angle-center"></span>
               <input
                 type="range"
@@ -177,15 +221,6 @@
                 value="0"
                 aria-label="横向瞄准角度"
               />
-            </div>
-            <div
-              role="button"
-              tabindex="0"
-              class="aim-nudge"
-              id="aimNudgeR"
-              aria-label="瞄准右微调"
-            >
-              ›
             </div>
           </div>
         </div>
@@ -253,6 +288,13 @@
         />
         <div id="replaySeekSnaps" class="replay-seek-snaps" aria-hidden="true"></div>
       </div>
+      <!-- v1.2.17 #4：全局倍速按钮（回放模式常驻），在 0.5x/1x/2x/4x 间循环，
+           不自动按击球/进球提速，完全由用户选择，保证击球到进球的真实时间间隔。 -->
+      <button id="replaySpeedBtn" class="replay-speed-btn" type="button">1x</button>
+      <!-- v1.2.26：视角切换按钮（固定/俯视），默认「固定」侧后视角（击球后不切俯视、
+           不跟随）；点击在固定侧后视角与固定俯视全局视角之间切换。 -->
+      <button id="replayCamBtn" class="replay-cam-btn" type="button">固定</button>
+      <button id="replayExitBtn" class="replay-exit-btn" type="button" hidden>退出回放</button>
     </div>
 
     <!-- v1.2.5：白球操作弹窗移到 body 直接子级，脱离底部栏的层叠/变形上下文，
@@ -274,7 +316,12 @@
               </div>
             </div>
           </div>
-          <button id="resetSpin" class="resetSpin" aria-label="加塞复位">⟲</button>
+          <button id="resetSpin" class="resetSpin" aria-label="加塞复位" type="button">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+              <polyline points="21 3 21 9 15 9" />
+            </svg>
+          </button>
         </div>
         <div class="cb-area cb-tilt-area">
           <div class="cb-area-head">

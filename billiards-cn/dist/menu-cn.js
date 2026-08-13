@@ -32,16 +32,18 @@
   var DEFAULTS = {
     lod: 3,
     sound: true,
-    volume: 0.8,
+    // v1.2.28：音量默认最大（1.0）。与 settings.ts 对齐。
+    volume: 1,
     aimAssist: true,
     seenGuide: false,
-    practiceGuide: false,
     turnTimer: 0,
     lastRule: "nineball",
     lastOpponent: "solo",
     vsBot: false,
     fpsCap: 0,
-    targetLineLength: 2,
+    // v1.2.28：辅助线长度默认最长（3）。此前此处写 2（中）与 settings.ts 的 3 不一致，
+    // 且菜单这份 DEFAULTS 会被持久化，导致首次进入游戏辅助线默认不是最长。统一为 3。
+    targetLineLength: 3,
     aimLine: true,
     aimSlider: true,
     keepAllViews: true,
@@ -373,11 +375,6 @@
       saveSettings(settings)
     })
 
-    $("setPracticeGuide").addEventListener("change", function (e) {
-      settings.practiceGuide = e.target.checked
-      saveSettings(settings)
-    })
-
     $("setTurnTimer").addEventListener("change", function (e) {
       settings.turnTimer = parseInt(e.target.value, 10) || 0
       saveSettings(settings)
@@ -408,7 +405,6 @@
     $("setSkin").value = settings.skin || "classic"
     $("setCueTheme").value = settings.cueTheme || "auto"
     $("setScene").value = settings.scene || "snow"
-    $("setPracticeGuide").checked = settings.practiceGuide !== false
     $("setTurnTimer").value = String(settings.turnTimer || 0)
   }
 
@@ -916,13 +912,9 @@
       params.push("practice=true")
     }
 
-    // 分步实操新手引导（item 6）：
-    // 仅首次安装（!seenGuide）自动显示；若开启了「练习时显示引导」，练习模式强制显示。
-    // 不再在这里写 seenGuide（由游戏内引导完成后写入）。
-    var forceTutorial =
-      !settings.seenGuide ||
-      (selectedOpponent === "solo" && settings.practiceGuide === true)
-    if (forceTutorial) {
+    // 分步实操新手引导：仅首次安装或手动「重新打开新手引导」后自动显示一次。
+    // 由游戏内引导完成时写入 seenGuide，之后进入任何对局都不再自动弹出。
+    if (!settings.seenGuide) {
       params.push("tutorial=1")
     }
     location.href = "index.html?" + params.join("&")
@@ -977,7 +969,9 @@
     initSkins()
     initCueThemes()
     initScenes()
-    initMyReplays()
+
+    // v1.2.12：恢复首页「查看回放」按钮绑定（v1.2.11 #3 误删 initMyReplays 时一并丢失）
+    initReplays()
 
     // 首页「外观定制」二级菜单入口（item 4）
     Array.prototype.forEach.call(
@@ -1328,8 +1322,9 @@
       encodeURIComponent(rule || "nineball")
   }
 
-  function initMyReplays() {
-    var btn = $("btnMyReplays")
+  // v1.2.12：恢复首页「查看回放」按钮（v1.2.11 #3 删除「我的回放」时误删了本按钮的绑定）。
+  // 仅绑定首页 btnReplays + 回放列表 overlay；「我的回放」（关于页）按需求已删除，不再接线。
+  function initReplays() {
     var homeBtn = $("btnReplays")
     var overlay = $("replayListOverlay")
     if (!overlay) return
@@ -1370,7 +1365,6 @@
               "</span>"
             info.addEventListener("click", function () {
               overlay.hidden = true
-              // v1.2.5：改用 sessionStorage 传递完整回放，避免 URL 截断
               navigateToReplay(r.compressed, r.rule)
             })
 
@@ -1396,16 +1390,10 @@
         })
         .catch(function () {
           emptyEl.hidden = false
-          emptyEl.textContent =
-            "读取回放失败（当前环境可能不支持本地存储）。"
+          emptyEl.textContent = "读取回放失败（当前环境可能不支持本地存储）。"
         })
     }
 
-    btn.addEventListener("click", function () {
-      overlay.hidden = false
-      renderList()
-    })
-    // v1.2.5：首页「查看回放」按钮同样打开回放列表
     if (homeBtn) {
       homeBtn.addEventListener("click", function () {
         overlay.hidden = false

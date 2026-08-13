@@ -37,6 +37,8 @@ export class EightBall implements Rules {
   currentBreak = 0
   previousBreak = 0
   rulename = "eightball"
+  /** 本局第一杆（开球）是否已处理；开球杆进球不分球，球桌保持开放 */
+  private firstShotPlayed = false
 
   constructor(container: Container) {
     this.container = container
@@ -201,16 +203,21 @@ export class EightBall implements Rules {
   update(outcome: Outcome[]): Controller {
     const reason = this.foulReason(outcome)
 
+    let next: Controller
     if (reason) {
-      return this.handleFoul(outcome, reason)
+      next = this.handleFoul(outcome, reason)
+    } else {
+      const pots = Outcome.pots(outcome)
+      if (pots.length > 0) {
+        next = this.handlePot(outcome)
+      } else {
+        next = this.handleMiss()
+      }
     }
 
-    const pots = Outcome.pots(outcome)
-    if (pots.length > 0) {
-      return this.handlePot(outcome)
-    }
-
-    return this.handleMiss()
+    // 本局第一杆（开球）处理完毕，后续杆才允许按进球花色自动分球。
+    this.firstShotPlayed = true
+    return next
   }
 
   private handleFoul(outcome: Outcome[], reason: string): Controller {
@@ -252,23 +259,25 @@ export class EightBall implements Rules {
     const table = this.container.table
     const pots = Outcome.pots(outcome)
 
-    if (this.isEndOfGame(outcome)) {
-      return this.handleGameEnd(true)
-    }
-
-    if (pots.some((b) => b.label === 8)) {
+    // 8 号球提前进袋（非合法结束）按犯规处理：复位 8 号球，不计分。
+    // 注意：合法结束（清完本组后打进 8 号）不在此分支，会正常计分并结束对局。
+    if (pots.some((b) => b.label === 8) && !this.isEndOfGame(outcome)) {
       return this.respotEightBallFoul()
     }
 
     const myGroupBefore = session.p1type
     if (session.p1type === 0) {
-      const solids = pots.filter((b) => b.label! >= 1 && b.label! <= 7)
-      const stripes = pots.filter((b) => b.label! >= 9 && b.label! <= 15)
+      // 开球杆（本局第一杆）进球不分配花色：球桌保持开放，
+      // 玩家仍可自由选择打另一个花色，直到后续某一杆才按进球花色定组。
+      if (this.firstShotPlayed) {
+        const solids = pots.filter((b) => b.label! >= 1 && b.label! <= 7)
+        const stripes = pots.filter((b) => b.label! >= 9 && b.label! <= 15)
 
-      if (solids.length > 0 && stripes.length === 0) {
-        session.p1type = 1
-      } else if (stripes.length > 0 && solids.length === 0) {
-        session.p1type = 2
+        if (solids.length > 0 && stripes.length === 0) {
+          session.p1type = 1
+        } else if (stripes.length > 0 && solids.length === 0) {
+          session.p1type = 2
+        }
       }
     }
 
@@ -289,6 +298,14 @@ export class EightBall implements Rules {
     this.container.sendEvent(scoreEvent)
 
     this.container.sendEvent(new WatchEvent(table.serialise()))
+
+    // 合法打进 8 号球（清完本组后）→ 结束对局。此时 8 号球已计入得分，
+    // 比分栏显示的进球数 = 实际进袋球数（含 8 号），不再被限制为 7。
+    if (this.isEndOfGame(outcome)) {
+      const myCueBall = table.balls[session.playerIndex]
+      const amIWinner = table.cueball === myCueBall
+      return this.handleGameEnd(amIWinner)
+    }
 
     if (myGroupBefore !== 0) {
       const myGroupPotted = pots.some((b) => this.isMyType(b, myGroupBefore))

@@ -30,6 +30,7 @@ function initialise() {
   setupMobileBehaviour()
   setupOverlayControls(browserContainer)
   setupResizeListeners(browserContainer)
+  setupViewportFit()
 }
 
 /**
@@ -60,11 +61,46 @@ function setupResizeListeners(browserContainer: BrowserContainer) {
   window.addEventListener("resize", debouncedRender)
   window.addEventListener("orientationchange", debouncedRender)
 
+  // v1.2.30：iOS Safari 的地址栏展开/收起不会触发 window.resize，
+  // 但会触发 visualViewport.resize。监听它才能及时更新 canvas/body 尺寸，
+  // 避免黑边或球桌比例畸变。
+  const visualViewport = (window as any).visualViewport
+  if (visualViewport && typeof visualViewport.addEventListener === "function") {
+    visualViewport.addEventListener("resize", debouncedRender)
+  }
+
   // screen.orientation change（容错：部分 WebView 不支持）
   const orientation = (screen as any)?.orientation
   if (orientation && typeof orientation.addEventListener === "function") {
     orientation.addEventListener("change", debouncedRender)
   }
+}
+
+/**
+ * v1.2.32：iOS Safari / 微信等 WebView 的底部工具栏/操作栏会以 overlay 形式
+ * 盖在页面内容之上，导致游戏底部操作栏被压住。通过 visualViewport 计算
+ * layout viewport 与 visual viewport 的高度差，得到底部被遮挡的高度，写入
+ * --vv-bottom CSS 变量；CSS 再用它把 .panel / 回放进度条整体上移，确保
+ * 击球/力度/视角等控件始终位于工具栏上方。
+ */
+function setupViewportFit() {
+  const update = () => {
+    const vv = (window as any).visualViewport
+    let bottom = 0
+    if (vv) {
+      bottom = Math.max(0, Math.round(window.innerHeight - vv.height))
+    }
+    document.documentElement.style.setProperty("--vv-bottom", `${bottom}px`)
+  }
+  update()
+
+  const vv = (window as any).visualViewport
+  if (vv && typeof vv.addEventListener === "function") {
+    vv.addEventListener("resize", update)
+    vv.addEventListener("scroll", update)
+  }
+  window.addEventListener("resize", update)
+  window.addEventListener("orientationchange", update)
 }
 
 /** 低画质档位下给 body 加类，关闭一些昂贵的 CSS 效果 */
@@ -81,6 +117,35 @@ function setupOverlayControls(browserContainer: BrowserContainer) {
   if (backToMenu) {
     backToMenu.onclick = () => {
       globalThis.location.href = "menu.html"
+    }
+  }
+
+  // 设置浮层「再来一局」：先关闭浮层，再弹二次确认，确认后才原地重开本局
+  const restartGame = document.getElementById("restartGame")
+  if (restartGame) {
+    restartGame.onclick = () => {
+      document.getElementById("helpOverlay")?.setAttribute("hidden", "true")
+      const c = browserContainer.container
+      if (c?.notification) {
+        c.notification.show(
+          {
+            type: "Info",
+            title: "确认重新开始本局？",
+            subtext: "将重新摆球并开始新一局",
+            extra:
+              '<button class="notification-btn" data-notification-action="confirm-restart">重新开始</button>' +
+              '<button class="notification-btn" data-notification-action="cancel-restart">取消</button>',
+            duration: 0,
+          },
+          0,
+          {
+            "confirm-restart": () => globalThis.location.reload(),
+            "cancel-restart": () => c.notification.clear(),
+          }
+        )
+      } else {
+        globalThis.location.reload()
+      }
     }
   }
 

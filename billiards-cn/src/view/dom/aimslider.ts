@@ -1,5 +1,4 @@
 import { id } from "../../utils/dom"
-import { Settings } from "../../utils/settings"
 import { unitAtAngle } from "../../utils/three-utils"
 import { Tutorial } from "../tutorial"
 import type { Container } from "../../container/container"
@@ -8,9 +7,9 @@ import type { Container } from "../../container/container"
  * 横向瞄准角度滑动条（悬浮 2D UI，不参与 3D 场景渲染）。
  *
  * 数值映射：
-* - 滑动条总长度 = 瞄准的完整左右转动范围（普通对局 ±1°，v1.1.31 由 ±2° 收紧，
-   *   比屏幕拖动瞄准的角分辨率更细微，专用于「差一点点」时的极精细修正，
-   *   分析模式收窄到 aimLimits 给出的窗口）。
+ * - 滑动条总长度 = 瞄准的完整左右转动范围（普通对局 ±1°，v1.1.31 由 ±2° 收紧，
+ *   比屏幕拖动瞄准的角分辨率更细微，专用于「差一点点」时的极精细修正，
+ *   分析模式收窄到 aimLimits 给出的窗口）。
  * - 滑块居中 = 进入瞄准时的初始正向瞄准方向（cue.aimBase）。
  * - 向左拖 → 角度向左转；向右拖 → 角度向右转；位置与角度线性一一对应。
  * - 触达两端后 input[type=range] 自身即会夹住，滑块拖不出去。
@@ -22,38 +21,29 @@ import type { Container } from "../../container/container"
  * 「aim.angle 增大是否等于瞄准线在屏幕上向右转」的符号，对滑块做镜像，保证
  * 任何视角下「滑块右拖 = 瞄准线在屏幕上向右转（即同步瞄准方向，而非视角方向）」。
  *
- * 数据同步：滑动条 / 手指拖拽瞄准 / 左右微调按钮三者共用 cue.aim.angle
+ * 数据同步：滑动条 / 手指拖拽瞄准 共用 cue.aim.angle
  * 这一份数据。任何一方改动都会经由 Cue.updateAimInput / rotateAim 回灌到
- * updateAimAngleSlider()，因此三者永远一致。
+ * updateAimAngleSlider()，因此两者永远一致。
  */
 export class AimSlider {
   private readonly container: Container
   private readonly bar: HTMLElement | null
   private readonly track: HTMLElement | null
   private readonly slider: HTMLInputElement | null
-  private readonly nudgeLeft: HTMLElement | null
-  private readonly nudgeRight: HTMLElement | null
 
   /** 用户正在拖滑块：此时不要用程序值回写，否则会和手指打架 */
   private dragging = false
   /** 拖动起点：屏幕 X 与当时的瞄准角，用于相对增量（不截断、可继续滑动） */
   private dragStartX = 0
   private dragStartAngle = 0
-  /** 拖动起点元素（用于区分「轻点微调按钮」与「滑动」） */
-  private dragStartTarget: HTMLElement | null = null
   /** 本次手势是否发生了有效滑动（>3px 视为拖动，否则视为轻点） */
   private didDrag = false
-
-  /** 单次微调步长（弧度）≈0.11°，轻点左右微调按钮时走一步 */
-  private static readonly NUDGE_STEP = 0.002
 
   constructor(container: Container) {
     this.container = container
     this.bar = id("aimAngleBar")
     this.track = id("aim-angle-track")
     this.slider = id("aimAngle") as HTMLInputElement | null
-    this.nudgeLeft = id("aimNudgeL")
-    this.nudgeRight = id("aimNudgeR")
     this.addListeners()
     this.applyVisibility()
     // 初始与其它瞄准控件一致：未轮到玩家出杆前为禁用态
@@ -83,26 +73,13 @@ export class AimSlider {
     if (this.bar && this.bar !== this.track) {
       this.bar.addEventListener("pointerdown", this.onDragStart)
     }
-    // v1.2.9 #F2：把拖动发起也直接挂到 ‹ › 微调按钮本身（不再仅靠冒泡）。
-    // 原生 <button> 在触摸拖动时会立刻触发 pointercancel（被当作点击/选择手势），
-    // 导致「按住滑动」在 onDragEnd 里被立即结束、表现为「按钮无法滑动拉杆」。
-    // 已把按钮改为 div[role=button]，这里再显式绑定 + onDragStart 内 preventDefault，
-    // 双保险确保从按钮按下也能稳定进入拖动。
-    if (this.nudgeLeft) {
-      this.nudgeLeft.addEventListener("pointerdown", this.onDragStart)
-    }
-    if (this.nudgeRight) {
-      this.nudgeRight.addEventListener("pointerdown", this.onDragStart)
-    }
-    // v1.2.7 #D4：不再为左右微调按钮单独绑定 pointerdown。
-    // 整条（含 ‹ › 按钮）统一作为拖动/轻点表面，由 onDragStart/onDragEnd 处理，
-    // 既支持「按住滑动微调」，也保留「轻点单步微调」（见 onDragEnd）。
-  }
-
-  private nudge(sign: number) {
-    if (this.isDisabled()) return
-    this.cue.rotateAim(sign * AimSlider.NUDGE_STEP * this.viewSign(), this.container.table)
-    this.container.lastEventTime = performance.now()
+    // v1.2.19 #1：不再把拖动发起挂到 input[range] 旋钮本身。
+    // Android WebView 上 input[range] 的 thumb 会触发原生 range 拖动，
+    // 导致只有浏览器原生 thumb 在动（视觉跟手），而我们的 onDragMove 里的
+    // setAimAngle 根本收不到有效的 move / 角度未更新。
+    // 改为让旋钮纯视觉：CSS 设 pointer-events:none，手指按在旋钮上时事件
+    // 穿透到下方的 .aim-angle-track，由 track 的 pointerdown 启动拖动，
+    // onDragMove 再同步更新 slider.value/--v，让旋钮跟随手指并真正改变角度。
   }
 
   /**
@@ -143,9 +120,6 @@ export class AimSlider {
     } catch {
       /* 个别环境不支持 preventDefault，忽略 */
     }
-    // v1.2.7 #D4：移除「落在微调按钮上不触发拖动」的守卫——整条（含左右 ‹ › 按钮）
-    // 都可按下并滑动微调瞄准。轻点微调按钮（无移动）仍保留「单步微调」，见 onDragEnd。
-    this.dragStartTarget = (e.target as HTMLElement) ?? null
     // v1.2.6：新手引导步骤 2 推进——首次拖动瞄准条 = 用户在做瞄准动作
     Tutorial.notifyAimDrag()
     this.dragging = true
@@ -154,14 +128,10 @@ export class AimSlider {
     this.dragStartX = e.clientX
     this.dragStartAngle = this.cue.aim.angle
     this.cue.beginAimInteraction()
-    // 捕获指针（best-effort）：支持的浏览器里手指滑出范围也继续收到 move。
-    // 用 e.currentTarget（bar 或 track），因为监听现在同时挂在两者上。
-    const captureEl = (e.currentTarget as HTMLElement) ?? this.track ?? this.bar
-    try {
-      captureEl?.setPointerCapture(e.pointerId)
-    } catch {
-      /* 某些 WebView 在非 primary pointer 上会抛错，忽略 */
-    }
+    // v1.2.17 #6：不再调用 setPointerCapture。部分 Android WebView 在 pointerdown
+    // 上 preventDefault 后再 setPointerCapture，会立刻派发 pointercancel 并结束拖动，
+    // 表现为「按住拉杆没反应」。全局 move/up/cancel 已由下方 window 捕获阶段监听
+    // 统一接管，手指滑出元素也能持续收到事件，无需 setPointerCapture。
     // v1.2.6 #235：在 window 捕获阶段挂 move/up/cancel。
     // 捕获阶段早于 bar 的冒泡 stopPropagation，因此即便手指滑出元素、
     // 或浏览器把横拖当滚动而触发 pointercancel，也能持续收到 move 事件，
@@ -189,14 +159,16 @@ export class AimSlider {
     // 视觉填充仅作方向提示（轨道中心=本杆初始方向），角度本身不截断
     const pct = Math.max(0, Math.min(100, 50 + (dx / rect.width) * 50))
     if (this.slider) {
+      // v1.2.17 #6：同步更新滑块 value，让旋钮（拉杆）在拖动时跟随手指移动，
+      // 否则旋钮永远 Snap 回中心、手指拖它不动，表现为「无法拖动拉杆」。
+      const frac = Math.max(-1, Math.min(1, (dx / rect.width) * 2))
+      this.slider.value = frac.toFixed(4)
       this.slider.style.setProperty("--v", pct.toFixed(2) + "%")
     }
   }
 
   private onDragEnd = (e: PointerEvent) => {
     if (!this.dragging) return
-    const wasTap = !this.didDrag
-    const startTarget = this.dragStartTarget
     this.dragging = false
     try {
       this.track?.releasePointerCapture(e.pointerId)
@@ -215,12 +187,6 @@ export class AimSlider {
       this.slider.style.setProperty("--v", "50%")
     }
     this.cue.setAimBase(this.cue.aim.angle)
-    // v1.2.7 #D4：轻点（无滑动）落在左右微调按钮上 → 单步微调，保留原「点一下走一步」。
-    // 滑动则已在 onDragMove 中实时调整瞄准角，这里不再重复。
-    if (wasTap && startTarget?.closest?.(".aim-nudge")) {
-      const sign = startTarget.closest("#aimNudgeL") ? -1 : 1
-      this.nudge(sign)
-    }
   }
 
   /**
@@ -241,9 +207,6 @@ export class AimSlider {
   setDisabled(disabled: boolean) {
     this.bar?.classList.toggle("is-disabled", disabled)
     if (this.slider) this.slider.disabled = disabled
-    if (this.nudgeLeft) (this.nudgeLeft as HTMLButtonElement).disabled = disabled
-    if (this.nudgeRight)
-      (this.nudgeRight as HTMLButtonElement).disabled = disabled
   }
 
   /** 读取设置里的开关，决定这条悬浮条是否出现 */

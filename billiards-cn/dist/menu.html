@@ -200,7 +200,7 @@
               <li><b>调整俯仰</b>：单指上下拖动</li>
               <li><b>缩放画面</b>：双指捏合放大 / 缩小</li>
               <li><b>击球</b>：点击右下角的「击球」按钮</li>
-              <li><b>力度</b>：拖动力度滑条，百分比实时显示</li>
+              <li><b>力度</b>：拖动底部栏的力度条设定击球力量，百分比实时显示；击球后力度条维持设定值，下一杆可直接沿用</li>
             </ul>
           </div>
 
@@ -208,13 +208,36 @@
             <h3>加塞与杆法</h3>
             <ul class="guide-list">
               <li>
-                <b>击球点</b>：在白色母球图示上点选，偏上为高杆（跟进），偏下为低杆（缩杆），左右为左右塞
+                <b>击球点</b>：点开底部栏「击球点」展开母球圆盘，在盘上点选落点——偏上为高杆（跟进）、偏下为低杆（缩杆）、左右为左右塞（加塞走位）
               </li>
               <li>
-                <b>抬杆角度</b>：点击母球图示旁的「+」，可调整球杆抬起角度，用于跳球或加强弧线
+                <b>抬杆角度</b>：点击母球圆盘旁的「+」，可抬高球杆角度，用于跳球或打出弧线
               </li>
-              <li><b>复位</b>：双击母球图示可将击球点恢复到正中心</li>
+              <li><b>复位</b>：双击母球圆盘中心，击球点恢复正中心</li>
             </ul>
+            <div class="guide-fig" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-top:8px">
+              <svg viewBox="0 0 130 130" width="118" height="118" aria-hidden="true" style="flex:0 0 auto">
+                <circle cx="65" cy="65" r="56" fill="#f3ead2" stroke="#6b4a22" stroke-width="3"/>
+                <circle cx="65" cy="65" r="5" fill="#6b4a22"/>
+                <circle cx="65" cy="22" r="7" fill="#c0392b"/>
+                <circle cx="65" cy="108" r="7" fill="#2980b9"/>
+                <circle cx="22" cy="65" r="7" fill="#27ae60"/>
+                <circle cx="108" cy="65" r="7" fill="#e67e22"/>
+                <text x="65" y="13" text-anchor="middle" font-size="11" fill="#c0392b">高杆</text>
+                <text x="65" y="126" text-anchor="middle" font-size="11" fill="#2980b9">低杆</text>
+                <text x="9" y="69" text-anchor="middle" font-size="10" fill="#27ae60">左塞</text>
+                <text x="121" y="69" text-anchor="middle" font-size="10" fill="#e67e22">右塞</text>
+              </svg>
+              <svg viewBox="0 0 200 70" width="186" height="64" aria-hidden="true" style="flex:0 0 auto">
+                <rect x="4" y="22" width="192" height="26" rx="13" fill="#3a2a14" stroke="#c89534" stroke-width="2"/>
+                <rect x="6" y="24" width="116" height="22" rx="11" fill="url(#pgFill)"/>
+                <defs><linearGradient id="pgFill" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0" stop-color="#f0a23a"/><stop offset="1" stop-color="#e23b2e"/>
+                </linearGradient></defs>
+                <circle cx="122" cy="35" r="13" fill="#111" stroke="#fff" stroke-width="2"/>
+                <text x="122" y="62" text-anchor="middle" font-size="11" fill="#f3d79a">力度 ≈ 60%</text>
+              </svg>
+            </div>
           </div>
 
           <div class="guide-block">
@@ -297,21 +320,21 @@
                 step="5"
                 class="range"
               />
-              <span class="range-val" id="volumeVal">80%</span>
+              <span class="range-val" id="volumeVal">100%</span>
             </div>
           </div>
 
           <div class="setting-group">
             <h3>操作</h3>
             <div class="setting-row">
-              <label for="setAim">瞄准辅助线</label>
+              <label for="setAim">球杆延长线</label>
               <label class="switch">
                 <input type="checkbox" id="setAim" />
                 <span class="slider-ui"></span>
               </label>
             </div>
             <div class="setting-row">
-              <label for="setAimLine">进球辅助线</label>
+              <label for="setAimLine">进球预测线</label>
               <label class="switch">
                 <input type="checkbox" id="setAimLine" />
                 <span class="slider-ui"></span>
@@ -325,10 +348,10 @@
                 min="0"
                 max="3"
                 step="1"
-                value="2"
+                value="3"
                 class="range"
               />
-              <span class="range-val" id="setTLineVal">中</span>
+              <span class="range-val" id="setTLineVal">最长</span>
             </div>
             <p class="setting-hint">没有正对袋口时辅助线的延伸长度，拖到最左可关闭。</p>
             <div class="setting-row">
@@ -390,16 +413,9 @@
 
           <div class="setting-group">
             <h3>训练</h3>
-            <div class="setting-row">
-              <label for="setPracticeGuide">练习时显示分步引导</label>
-              <label class="switch">
-                <input type="checkbox" id="setPracticeGuide" />
-                <span class="slider-ui"></span>
-              </label>
-            </div>
             <p class="about-text dim" style="margin-top:6px">
-              仅在安装后第一次进入对局时自动显示一次分步引导，引导你实做「瞄准→击球」。
-              之后不再自动弹出，可随时点击下方按钮重新观看。
+              安装后首次进入对局（训练或对战）会自动显示一次分步引导，引导你实做「摆白球→瞄准→击球」。
+              引导走完后不再自动弹出，可随时点击下方按钮重新观看。
             </p>
             <div class="setting-row" style="margin-top:10px">
               <span>手动重看引导</span>
@@ -516,11 +532,6 @@
                 恢复默认设置
               </button>
             </div>
-            <div class="link-actions">
-              <button class="btn btn-mini" id="btnMyReplays">
-                我的回放
-              </button>
-            </div>
           </div>
         </div>
         <button class="btn btn-primary back-btn" data-back>返回</button>
@@ -624,6 +635,262 @@
           <p class="about-text dim">
             本应用自 v1.0.4（2026-08-03）起的全部版本变更记录，新版本置顶。详细条目可在每个版本下展开。
           </p>
+
+          <div class="setting-group">
+            <h3>v1.3.2 · 2026-08-13 10:37:00</h3>
+            <p class="about-text dim"><b>1 项修复（Android 浏览器菜单底部仍被遮挡）：</b></p>
+            <ul class="changelog-list">
+              <li><b>菜单页底部地址栏兜底避让</b>：v1.2.34 通过 <code>visualViewport</code> 计算底部遮挡高度，可解决 iOS Safari 底部工具栏问题；但 Android Chrome 的底部地址栏以 overlay 形式压在页面上时，<code>visualViewport.height</code> 与 <code>window.innerHeight</code> 差值为 0，导致“开始游戏”等底部按钮仍被地址栏压住。本次在 CSS 中用 <code>max()</code> 给 <code>.app</code> 底部增加至少 72px 的固定留白，并让首页默认允许纵向滚动；同时在 JS 中对 Android 设备给出 72px 兜底高度，双保险确保底部按钮始终可点。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.3.1 · 2026-08-13 09:53:00</h3>
+            <p class="about-text dim"><b>1 项修复（iOS 浏览器游戏内底部操作栏仍被遮挡）：</b></p>
+            <ul class="changelog-list">
+              <li><b>补全游戏页 visualViewport 适配</b>：v1.2.32/v1.2.34 已为菜单页和 CSS 加入 <code>--vv-bottom</code> 变量，但游戏页 <code>index.html</code> 漏掉了 visualViewport 计算脚本，导致 iOS Safari 底部工具栏弹出时 <code>--vv-bottom</code> 始终为 0，底部操作栏（击球/力度/视角）仍被压住。现已补入脚本，与菜单页一致实时计算底部遮挡高度并整体上移。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.3.0 · 2026-08-12 18:01:00</h3>
+            <p class="about-text dim"><b>版本统一 + 开源同步发布：</b></p>
+            <ul class="changelog-list">
+              <li><b>版本号统一为 1.3.0</b>：在线网页、安卓 APK、GitHub 源码三方的显示版本号现完全一致（此前在线 1.2.34、APK 1.2.33 存在不一致）。</li>
+              <li><b>同步开源发布到 GitHub</b>：首次将完整工程（前端源码 <code>src</code> + 构建产物 <code>dist</code> + 安卓封装 <code>billiards-apk</code> + 文档）推送至 GitHub，并在 Release 中附带 APK、源码包与 Android 构建 SDK（<code>sdk.tar.gz</code>），确保工程可直接克隆迁移、离线构建 APK。</li>
+              <li>内含 v1.2.26–v1.2.34 全部修复：回放视角优化、回放倍速、辅助线/音量默认值、在线入口与横屏锁定、iOS 黑边/球桌倾斜、iOS 底部工具栏避让（游戏内与菜单）等。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.34 · 2026-08-12 17:40:00</h3>
+            <p class="about-text dim"><b>1 项修复（在线菜单底部被 iOS 工具栏遮挡）：</b></p>
+            <ul class="changelog-list">
+              <li><b>菜单页也避让 iOS Safari / WebView 底部工具栏</b>：v1.2.32 的 --vv-bottom 避让只做到了游戏内底部栏，主菜单（menu.html）的“开始游戏”等底部按钮仍会被 iOS 浏览器底部操作栏（分享/下载/标签页等 overlay 工具栏）压住、无法点击。本次在菜单页内嵌同样的 <code>window.visualViewport</code> 计算逻辑，实时把底部被遮挡高度写入 <code>--vv-bottom</code>；给 <code>.app</code> 底部增加对应留白，并在工具栏占用空间时允许首页纵向滚动，确保“开始游戏 / 操作介绍 / 查看回放 / 游戏设置”始终可点。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.33 · 2026-08-12 16:47:00</h3>
+            <p class="about-text dim"><b>1 项修复（在线游戏无法看到被击球）：</b></p>
+            <ul class="changelog-list">
+              <li><b>进入瞄准视角时立即定位相机</b>：从摆球/俯视视角切换到瞄准视角后，原逻辑依赖每帧 8% 的 lerp 过渡，相机在初始阶段停留在白球附近，导致白球/球杆占满画面、前方被击球被切出视野。现在在 <code>Aim</code> 控制器初始化时立即调用 <code>forceMove</code>，把相机一步到位摆到瞄准位置。</li>
+              <li><b>放宽瞄准视角横向 FOV 上限</b>：iPhone 横屏等超宽可视比例下，原 60° 横向 FOV 上限会过度收窄纵向 FOV，使远处被击球跑到画面上方之外。瞄准视角单独放宽到 80°，在保留 16:9 观感的同时给超宽屏留出足够纵向视野。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.32 · 2026-08-12 16:06:00</h3>
+            <p class="about-text dim"><b>1 项修复（iOS 底部操作栏重叠）：</b></p>
+            <ul class="changelog-list">
+              <li><b>避让 iOS Safari / WebView 底部工具栏</b>：iOS 浏览器底部操作栏（分享/下载/标签页等）常以 overlay 形式盖在页面内容之上，导致游戏底部操作栏（击球/力度/视角等）被压住。本次新增 <code>--vv-bottom</code> CSS 变量，通过 <code>window.visualViewport</code> 实时计算底部被遮挡的高度，并把 .panel、白球操作弹窗、回放进度条同步整体上移，确保底部控件不被工具栏覆盖。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.31 · 2026-08-12 15:20:00</h3>
+            <p class="about-text dim"><b>1 项改动（在线游戏横屏锁定）：</b></p>
+            <ul class="changelog-list">
+              <li><b>在线游戏模式仅保留横屏</b>：删除竖屏可玩模式。游戏页（index.html）在竖屏（移动端，宽度 ≤ 1024px）时显示全屏「请横屏使用」遮罩并屏蔽游戏交互，仅横屏模式可进入对局；桌面/大屏不受影响。菜单页仍支持竖屏浏览与选模式。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.30 · 2026-08-12 14:44:00</h3>
+            <p class="about-text dim"><b>2 项移动端渲染/布局修复：</b></p>
+            <ul class="changelog-list">
+              <li><b>修复 iOS Safari 上下黑边、游戏被压缩</b>：`html/body` 的 `height:100%` 在移动端 Safari 会把地址栏/工具栏排除在视口外，导致 .view3d 无法占满可用空间，出现上下大黑边。本次保留 fallback 的同时改用 `100dvh` 动态视口高度，并增加 `min-height:100dvh`，让 body 随地址栏展开/收起自动占满当前可视区域，游戏画面不再被压缩到顶部。</li>
+              <li><b>修复偶发球桌倾斜/畸变</b>：`canvas` 的 CSS 原本使用 `width:100% !important; height:100% !important;` 强制覆盖 three.js `setSize` 的 inline style。在 iOS 方向旋转或地址栏变化时，若 drawing buffer 尚未更新而 CSS 已按新容器拉伸，就会导致球桌被压扁/倾斜。本次去掉 `!important`，让 setSize 的 inline style 优先控制 canvas 尺寸，确保 drawing buffer 与显示比例严格一致；同时在 `index.ts` 增加 `window.visualViewport` resize 监听，iOS 地址栏变化也能及时触发重绘与尺寸更新。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.29 · 2026-08-12 13:32:00</h3>
+            <p class="about-text dim"><b>1 项入口行为修复：</b></p>
+            <ul class="changelog-list">
+              <li><b>在线打开链接默认停留主菜单</b>：此前访问在线站点根目录会直接加载游戏页（index.html），并用默认九球规则自动开局；本次在 index.html 增加入口判断——当 URL 不带任何游戏/回放参数（即直接打开站点根或 index.html）时自动跳转到主菜单（menu.html），用户需手动选模式开始。菜单"开始游戏"（带 ruletype= 等参数）与回放（带 state=/replayId= 参数）等合法入口不受影响，正常进入对应模式。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.28 · 2026-08-12 13:05:00</h3>
+            <p class="about-text dim"><b>2 项默认设置调整：</b></p>
+            <ul class="changelog-list">
+              <li><b>辅助线长度默认最长</b>：此前「辅助线长度」默认值在菜单脚本（menu-cn.js）里写成了「中」(2)，与游戏设置（settings.ts）的「最长」(3) 不一致，且该菜单默认值会被持久化，导致首次进入游戏辅助线默认不是最长。本次把菜单默认值统一改为「最长」(3)，并同步修正设置页滑块初始值。</li>
+              <li><b>音量默认最大</b>：音量默认值由 0.8（80%）提到 1.0（100%），开局面即最大音量；游戏设置与菜单默认值同步修改。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.27 · 2026-08-12 09:50:00</h3>
+            <p class="about-text dim"><b>1 项修复（回放倍速失效）：</b></p>
+            <ul class="changelog-list">
+              <li><b>回放「倍速」按钮恢复生效</b>：此前回放里球运动阶段（击球→全部静止）被硬编码强制 1x，用户选的 2x/4x 只在杆间短暂等待里生效，导致「倍速」按钮看起来完全无效。本次移除该强制 1x 限制，全程使用用户选择的全局倍速：默认 1x 仍看清击球/碰撞/进球，选 2x/4x 即整段回放加速。发布前用 Playwright 真实进入回放验证：选 2x 后球运动阶段 timeScale 由恒 1 变为 2、仿真推进速率由 ≈1x 升到 ≈2x。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.26 · 2026-08-12 09:00:00</h3>
+            <p class="about-text dim"><b>回放视角重做（2 项）：</b></p>
+            <ul class="changelog-list">
+              <li><b>「固定」视角：击球后不再被切成俯视（根因修复）</b>：此前回放「每次击球后会被切成俯视视角」，根因是渲染层 <code>view.render()</code> 在任意球缓慢移动（isMovingSlowly）或出框时每帧 <code>suggestMode(topView)</code> 把相机切到俯视——回放里母球在动就被覆盖。本次在回放模式下禁用该自动切俯视，回放由自身选定视角（固定侧后 / 俯视）全程稳定保持，绝不中途切俯视、也不跟随白球飞出。</li>
+              <li><b>「跟随」视角改为「俯视」并固定化</b>：原「跟随母球」视角重做为「俯视」——固定俯视全局视角，相机停在台面上方俯瞰整桌（不再跟随白球移动）。底部「视角」按钮现可在「固定 / 俯视」之间一键切换，默认「固定」。</li>
+              <li>清理了已不再使用的跟随视角代码（followView / followTarget）。发布前已用 Playwright 真实进入回放验证：默认固定模式击球全程相机保持 spectatorView、不切俯视；点击可切到俯视（topView）再切回固定；并回归 3 球换行、齿轮隐藏、倍速等。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.25 · 2026-08-12 01:05:00</h3>
+            <p class="about-text dim"><b>1 项修复（八球规则）：</b></p>
+            <ul class="changelog-list">
+              <li><b>修复「开球后进另一种花色被判犯规」</b>：开球（break 杆）进球本应让球桌保持开放、玩家可自由选择任意花色，原逻辑却在第一杆就按进球花色锁定分组，导致第二杆打另一种花色被误判「先碰到了对方的球」。现新增开球杆识别，开球进球不再提前分球，从第二杆起才按进球花色定组（符合 WPA / 中式国标「开球后球桌开放」规则）。</li>
+              <li>发布前已用 Playwright 注入 outcome 验证：开球进全色 → 第二杆进花色不犯规、球桌仍开放；第三杆打对方球仍正常判犯规（分组约束回归正常）。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.24 · 2026-08-11 16:48:00</h3>
+            <p class="about-text dim"><b>1 项新增（回放模式）：</b></p>
+            <ul class="changelog-list">
+              <li><b>回放新增「跟随视角」</b>：回放默认采用跟随母球的视角，相机随白球飞出而平滑跟随移动，让「击球→走位→进球」全过程始终在画面中、清晰可见（原固定旁观视角相机停在击球点，白球飞出就看不清）。底部进度条新增「视角」按钮，可在「跟随 / 固定」之间一键切换，兼顾不同观看习惯。</li>
+              <li>发布前已用 Playwright 对回放模式跑截图与跟随验证，确认视角按钮可切换、击球后相机随母球移动。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.23 · 2026-08-11 16:38:00</h3>
+            <p class="about-text dim"><b>1 项调整（针对回放模式）：</b></p>
+            <ul class="changelog-list">
+              <li><b>回放比分栏恢复球号可读尺寸</b>：v1.2.22 为紧凑而把回放模式进球球缩到 10px，导致球号只有 5px、难以辨认。v1.2.23 把球恢复为 14px，进球容器恢复为 46px（3 球换行），同时通过收紧卡片 padding、列间距、字号等方式继续保持比分栏紧凑，兼顾可读性与遮挡控制。</li>
+              <li>发布前已用 Playwright 对回放模式跑截图验证，确认 3 球换行、球尺寸恢复、进度条与球桌布局正常。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.22 · 2026-08-12 13:46:00</h3>
+            <p class="about-text dim"><b>3 项调整（针对回放模式）：</b></p>
+            <ul class="changelog-list">
+              <li><b>回放比分栏大幅紧凑化</b>：仅回放模式下比分栏尺寸全面收紧（卡片、列、已进球球、时间全部缩小），只保留 3 球换行所需的最小空间，显著减少左上角对球桌的遮挡。</li>
+              <li><b>进度条不再遮挡球桌</b>：进度条整体做薄（高度、padding、thumb、按钮均缩小），并为 3D 渲染区底部留出安全间距，WebGL 画布会整体上移，球桌底部不再被进度条压住。</li>
+              <li><b>击球过程强制常速</b>：无论倍速按钮调到 0.5x/1x/2x/4x，白球击出后到所有球静止的这段时间强制以 1x 播放，确保击球、碰撞、进球细节清晰可见；杆间等待与回放结束后仍由倍速按钮控制。</li>
+              <li>发布前已用 Playwright 对回放模式跑截图与倍速验证。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.21 · 2026-08-11 13:29:00</h3>
+            <p class="about-text dim"><b>2 项调整：</b></p>
+            <ul class="changelog-list">
+              <li><b>设置项改名，消除歧义</b>："瞄准辅助线"改为"球杆延长线"，"进球辅助线"改为"进球预测线"。前者控制的是沿球杆方向的一根半透明延长杆（看方向），后者控制 ghost-ball 两段式进球预测线（看进球），两者功能独立、互不重复，新名字更直观。</li>
+              <li><b>细微瞄准栏精简紧凑</b>：删除两侧的 ‹ › 微调按钮，仅保留拉杆拖动操作；同时收窄 padding、降低高度、减小最小宽度，整体更紧凑，减少底部栏占用空间。</li>
+              <li>发布前已用 Playwright 对训练/对战/回放三种模式跑截图验证，确认比分栏 3 球换行、回放齿轮隐藏、拉杆可正常调节角度。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.20 · 2026-08-11 12:27:00</h3>
+            <p class="about-text dim"><b>3 项修复（基于 v1.2.19）：</b></p>
+            <ul class="changelog-list">
+              <li><b>比分栏所有模式强制 3 球换行</b>：v1.2.19 把 .sc-player-balls 宽度设为 60px，导致一行能放 4 球（截图 4+3）。现改回精确 46px（3×14px + 2×2px），并为 .sc-player 加 min-width:60px 防止对战模式两列时被压缩，训练/对战/回放三种模式均验证为 3+3+1。</li>
+              <li><b>细微瞄准条真正可调角度</b>：v1.2.19 思路正确但遗漏 DOM 细节——.aim-angle-track 只有 class 没有 id，aimslider.ts 里 id('aim-angle-track') 始终为 null，onDragMove 直接 return，角度不变。现已给 track 补上 id="aim-angle-track"，经自动化测试拖动后角度变化正常。</li>
+              <li><b>回放设置齿轮继续稳定隐藏</b>：保留 display:none !important + JS 内联 style 双重保险。</li>
+              <li>本次发布前已用 Playwright 对训练/对战/回放三种模式分别跑截图验证，确认无误后再上线。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.19 · 2026-08-11 00:32:00</h3>
+            <p class="about-text dim"><b>3 项修复（基于 v1.2.18）：</b></p>
+            <ul class="changelog-list">
+              <li><b>彻底隐藏回放模式右上角设置齿轮</b>：v1.2.18 的 opacity/visibility 方案在部分 WebView / 缓存下未生效，改为 display:none !important，并在 replay.ts 里用 JS 内联 style 强制隐藏，退出回放时再做淡入恢复，避免跳动。</li>
+              <li><b>比分栏稳定按 3 球换行</b>：把 .sc-player-balls 最大宽度从 46px 放宽到 60px，并为 .sc-ball 加 flex-shrink:0，解决部分 WebView 下 5 球仍排成 2+2+1 的问题。</li>
+              <li><b>细微瞄准条拖动真正改变瞄准角度</b>：把 input[range] 旋钮改为纯视觉元素（pointer-events:none），手指按在旋钮上时事件穿透到 .aim-angle-track，由 track 启动拖动，彻底绕开 Android WebView 原生 range thumb 对 move 事件的拦截。</li>
+              <li>版本号由 1.2.18 升到 1.2.19。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.18 · 2026-08-10 23:56:00</h3>
+            <p class="about-text dim"><b>4 项修复（基于 v1.2.17）：</b></p>
+            <ul class="changelog-list">
+              <li><b>修复细微瞄准条拉杆拖动不调节瞄准角度</b>：拖动旋钮（拉杆）时临时关闭其原生 pointer 行为并释放隐式指针捕获，确保 window 捕获阶段的 pointermove 能抵达角度逻辑，拉杆拖动真正改变瞄准方向（此前只有浏览器原生 thumb 在动、角度纹丝不动）。</li>
+              <li><b>回放设置按钮不再跳动</b>：回放隐藏右上角设置齿轮由 display:none 改为 opacity/visibility 平滑过渡，退出回放时齿轮淡入而非突跳。</li>
+              <li><b>回放比分栏换行</b>：确认回放与游戏共用同一计分 DOM 与换行规则（每行 3 颗球），并强化回放模式下该行换行样式，避免回放中不按 3 球换行。</li>
+              <li><b>更新操作说明的力度与杆法示意</b>：重写「力度」与「加塞与杆法」说明，补充杆法圆盘（高/低/左/右塞）与力度条的操作示意图示。</li>
+              <li>版本号由 1.2.17 升到 1.2.18。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.17 · 2026-08-10 23:13:00</h3>
+            <p class="about-text dim"><b>6 项修复（基于 v1.2.16）：</b></p>
+            <ul class="changelog-list">
+              <li><b>比分栏进球数按实际记数</b>：移除「最多 7 个」的隐藏上限；8 球模式合法打完（含 8 号球）后，比分栏按真实进球数显示，不再被截断为 7。</li>
+              <li><b>修复大力进球时进袋音重复播放</b>：进袋音按球 id 增加 120ms 同球时间间隔兜底，配合既有「每杆去重」集合，覆盖回放重算 / outcome 重建等去重集合被清空的场景。</li>
+              <li><b>回放击球与进球前后不再自动切换视角 / 倍速</b>：进入回放使用固定视角（forceMode），不再每杆重新框定或跟踪镜头；击球到进球的真实时间间隔既不压缩也不拉长。</li>
+              <li><b>回放新增全局倍速按钮</b>：进度条右侧加入「0.5x / 1x / 2x / 4x」循环切换按钮，由用户自行选择倍速，不再自动提速。</li>
+              <li><b>回放隐藏右上角设置齿轮</b>：回放模式下通过 body.replay-mode 类隐藏 #menu 设置按钮，退出回放自动恢复。</li>
+              <li><b>修复细微瞄准条（拉杆）无法拖动</b>：旋钮（#aimAngle）改为可直接抓取（pointer-events:auto）并跟随手指移动，同时去掉会导致部分 Android WebView 立即触发 pointercancel 而中断拖动的 setPointerCapture。</li>
+              <li>版本号由 1.2.16 升到 1.2.17。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.16 · 2026-08-10 21:55:00</h3>
+            <p class="about-text dim"><b>2 项修复（基于 v1.2.15）：</b></p>
+            <ul class="changelog-list">
+              <li><b>恢复三步新手引导并修复训练模式重复弹出</b>：保留原来的「摆白球→瞄准→击球」三步骤；移除菜单中「练习时显示分步引导」开关，首次安装后仅第一次进入训练或对战时自动显示，完成全部步骤后写入 seenGuide，之后不再自动弹出；设置页「重新打开新手引导」可复位该状态。</li>
+              <li><b>修复电脑对战比分栏仍 2 球换行</b>：为 .sc-ball 增加 box-sizing:border-box，让 14px 宽度包含 1px 边框，避免实际占用 16px 导致 3 颗球被挤到第二行；同时给 scoreboard-v2.css 加缓存版本号，防止旧 CSS 缓存覆盖修复。</li>
+              <li>版本号由 1.2.15 升到 1.2.16。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.15 · 2026-08-10 20:55:00</h3>
+            <p class="about-text dim"><b>4 项修复（基于 v1.2.14）：</b></p>
+            <ul class="changelog-list">
+              <li><b>修复与电脑对战胜负弹窗错误</b>：bot 模式自然结束时，按当前行动方（玩家/电脑）判定胜负，不再简单按比分判断；电脑合法打进黑八/九号球时正确显示「你输了」。</li>
+              <li><b>回放进度条移至屏幕底部</b>：回放模式进度条改为贴底全宽显示，与隐藏后的底部栏位置一致，视觉上更稳定且不易遮挡画面中心。</li>
+              <li><b>电脑对战比分栏恢复 3 球换行</b>：所有对战模式（含与电脑对战）的已进球列表统一每满 3 颗换行，不再出现 2 颗就换行。</li>
+              <li><b>新手引导临时简化为单步并仅显示一次</b>：简化为一条欢迎提示，用户点击「知道了」后立即关闭并标记已看过；之后进入新对局不再自动弹出（v1.2.16 恢复为三步）。</li>
+              <li>版本号由 1.2.14 升到 1.2.15。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.14 · 2026-08-10 20:04:00</h3>
+            <p class="about-text dim"><b>2 项回放修复（基于 v1.2.13）：</b></p>
+            <ul class="changelog-list">
+              <li><b>修复回放模式底部栏未隐藏</b>：将 `replay-mode` 类设置前移到 Replay 构造函数首行，setupReplaySeek 中增加内联 `display:none !important` 双重保险；并刷新 CSS 缓存版本号，避免旧版 bottombar-v2.css 被 WebView 缓存导致规则不生效。</li>
+              <li><b>修复回放停在开局不动</b>：`precomputeAllShots` 整局预计算增加 try/catch 保护，单杆预计算失败即回退到逐杆现场计算，避免异常中断控制器切换导致 onFirst 未执行；同时增加关键路径日志，方便后续诊断。</li>
+              <li><b>回放数据失效时不再静默进入普通游戏</b>：若 `?replayId=` 对应的 sessionStorage 数据缺失，直接 alert 提示并返回菜单，避免用户误以为已进入回放。</li>
+              <li>版本号由 1.2.13 升到 1.2.14。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.13 · 2026-08-10 19:35:00</h3>
+            <p class="about-text dim"><b>2 项修复（基于 v1.2.12）：</b></p>
+            <ul class="changelog-list">
+              <li><b>修复首页「查看回放」按钮无反应</b>：重接首页查看回放按钮与回放列表弹层的绑定（上一版删除「我的回放」时误删了该绑定），弹层标题统一为「查看回放」。</li>
+              <li><b>训练模式比分栏改为每 3 个球换行</b>：训练模式下比分栏每方进球满 3 颗换行（其余模式维持原 2 颗换行）。</li>
+              <li>版本号由 1.2.12 升到 1.2.13。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.2.12 · 2026-08-10 18:15:00</h3>
+            <p class="about-text dim"><b>6 项功能改动（基于已发布的 v1.2.11 基线）：</b></p>
+            <ul class="changelog-list">
+              <li><b>设置菜单「再来一局」+ 二次确认</b>：游戏内设置浮层新增「再来一局」按钮，点击先弹出确认框（确认才开始下一把），避免误触。</li>
+              <li><b>回放全屏 + 每进球跟踪动态镜头</b>：回放模式隐藏底部操作栏、界面全屏；相机在每颗球进袋的时间窗口内平滑框定「进球球 → 袋口 → 白球」，动态跟随进球。</li>
+              <li><b>删除「我的回放」+ 回放结束先停 + 退出按钮</b>：关于页移除「我的回放」按钮；回放结束后只暂停、不再弹出「回放结束」按钮，保留进度条供自行回看；进度条区新增「退出回放」按钮。</li>
+              <li><b>回放进度条整局时间轴（#F11 升级）</b>：进入回放时预跑完整局，进度条从开局贯穿到结束（不再是逐杆叠加），全部进球吸附点一次性铺满。</li>
+              <li><b>删除设置弹窗说明行</b>：移除设置浮层底部的「操作说明 · 设置 · 规则」一行。</li>
+              <li><b>白球击球点复位图标居中</b>：复位图标（⟲）由字形改为几何居中的内联 SVG，横竖严格居中。</li>
+              <li>版本号由 1.2.11 升到 1.2.12。</li>
+            </ul>
+          </div>
 
           <div class="setting-group">
             <h3>v1.2.11 · 2026-08-10 04:04:00</h3>
@@ -1556,9 +1823,9 @@
     <!-- v1.2.4：我的回放（离线本地保存的回放列表） -->
     <div id="replayListOverlay" class="replay-overlay" hidden>
       <div class="replay-backdrop" data-close-replay></div>
-      <div class="replay-modal" role="dialog" aria-label="我的回放">
+      <div class="replay-modal" role="dialog" aria-label="查看回放">
         <div class="replay-modal-head">
-          <h3>我的回放</h3>
+          <h3>查看回放</h3>
           <button class="replay-close" type="button" data-close-replay aria-label="关闭">×</button>
         </div>
         <div class="replay-list" id="replayList"></div>
@@ -1569,8 +1836,49 @@
     </div>
 
     <script>
-      window.__BILLIARDS_VERSION__ = "1.2.11-26081011";
+      window.__BILLIARDS_VERSION__ = "1.3.2-2608131057";
     </script>
     <script src="menu-cn.js"></script>
+    <script>
+      // v1.3.2：iOS Safari / WebView 与 Android Chrome 的底部工具栏/地址栏常以 overlay
+      // 形式盖在页面内容之上，导致菜单页底部“开始游戏”等按钮被压住。这里通过
+      // visualViewport 计算底部被遮挡的高度并写入 --vv-bottom；对 Android Chrome 等
+      // 不会通过 visualViewport 暴露地址栏高度的浏览器做兜底，保证底部始终有足够留白。
+      (function () {
+        function updateViewportFit() {
+          var vv = window.visualViewport;
+          var bottom = 0;
+          if (vv) {
+            bottom = Math.max(0, Math.round(window.innerHeight - vv.height));
+          }
+          // Android Chrome 底部地址栏不会反映在 visualViewport.height 差值里，
+          // 但会以 overlay 形式压住页面。若当前没检测到遮挡且 UA 为 Android，
+          // 给出一个保守的兜底高度，让 CSS 的 max() 兜底生效。
+          if (!bottom && /android/i.test(navigator.userAgent || "")) {
+            bottom = 72;
+          }
+          // 若外部已注入 --vv-bottom（如测试或某些 WebView 预置），取较大值作为最终避让高度
+          var injected = parseInt(
+            getComputedStyle(document.documentElement).getPropertyValue("--vv-bottom") || "0",
+            10
+          );
+          bottom = Math.max(bottom, injected || 0);
+          document.documentElement.style.setProperty("--vv-bottom", bottom + "px");
+          var home = document.getElementById("screen-home");
+          if (home) {
+            home.classList.toggle("scrollable", bottom > 0);
+          }
+        }
+        window.__updateMenuViewportFit = updateViewportFit;
+        updateViewportFit();
+        var vv = window.visualViewport;
+        if (vv && typeof vv.addEventListener === "function") {
+          vv.addEventListener("resize", updateViewportFit);
+          vv.addEventListener("scroll", updateViewportFit);
+        }
+        window.addEventListener("resize", updateViewportFit);
+        window.addEventListener("orientationchange", updateViewportFit);
+      })();
+    </script>
   </body>
 </html>

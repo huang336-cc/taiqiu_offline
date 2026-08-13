@@ -4,7 +4,12 @@ html {
   background-color: #000;
   color: #444;
   width: 100%;
+  /* v1.2.30：移动端 Safari 的 100% 高度会把地址栏/工具栏排除在外，
+     导致竖屏或地址栏变化时出现上下黑边。改用动态视口高度 dvh，
+     让 body 始终等于当前可用视口高度。 */
   height: 100%;
+  height: 100dvh;
+  min-height: 100dvh;
   border: 0;
   overflow: hidden;
   display: flex;
@@ -68,6 +73,13 @@ p {
   padding-top: 0;
 }
 
+/* v1.2.22：回放模式下为底部进度条留出空间，避免 WebGL 画布中的球桌被遮挡。
+   进度条做薄后总高约 26px，加上安全区；这里留 34px + safe-area，确保不重叠。
+   v1.2.32：再叠加 --vv-bottom，避让 iOS Safari / WebView 底部工具栏 overlay。 */
+body.replay-mode .view3d {
+  padding-bottom: calc(34px + env(safe-area-inset-bottom, 0px) + var(--vv-bottom, 0px));
+}
+
 .view3d:focus {
   outline: none;
 }
@@ -78,13 +90,15 @@ canvas {
   border-radius: 5px;
   -webkit-user-drag: none;
   user-select: none;
-  /* v1.1.19 兜底：强制 canvas 铺满 .view3d 容器，
-     防止极少数 WebView 上 three.js setSize 后 CSS 尺寸仍为 0 导致画面空白 */
+  /* v1.2.30：去掉 !important，让 three.js setSize 设置的 inline style
+     优先控制 canvas 的 CSS 像素尺寸，确保 drawing buffer 与显示比例严格一致，
+     避免 iOS 方向/地址栏变化时 canvas 被 CSS 强制拉伸导致球桌倾斜/畸变。
+     兜底仍铺满容器（setSize 未生效时）。 */
   display: block;
   position: absolute;
   inset: 0;
-  width: 100% !important;
-  height: 100% !important;
+  width: 100%;
+  height: 100%;
 }
 
 .panel {
@@ -237,4 +251,55 @@ label {
 /* 视角切换按钮的三种状态 */
 .menuButton.aimz {
   font-size: 28px;
+}
+
+/* v1.2.31：在线游戏模式横屏锁定遮罩。竖屏（移动端）时全屏覆盖，屏蔽竖屏游玩，
+   仅横屏模式可进入游戏。显示/隐藏由下方 @media 控制；桌面/大屏（>1024px）不触发，
+   以免误伤桌面窄窗口。z-index 置于所有游戏 UI（设置齿轮、底部栏、帮助层）之上。 */
+.rotate-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #f4f4f7;
+  background: radial-gradient(circle at 50% 38%, #1b2330, #0a0d12 72%);
+  padding: env(safe-area-inset-top, 0px) 28px env(safe-area-inset-bottom, 0px);
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: none;
+}
+.rotate-overlay .rotate-icon {
+  width: 92px;
+  height: 92px;
+  margin-bottom: 22px;
+  color: #f0c060;
+  animation: rotate-hint 2.4s ease-in-out infinite;
+}
+.rotate-overlay .rotate-icon svg {
+  width: 100%;
+  height: 100%;
+}
+@keyframes rotate-hint {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-90deg); }
+}
+.rotate-overlay .rotate-text {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 10px;
+  letter-spacing: 1px;
+}
+.rotate-overlay .rotate-sub {
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0;
+  color: #aab2c0;
+  max-width: 280px;
+}
+@media (orientation: portrait) and (max-width: 1024px) {
+  .rotate-overlay { display: flex; }
 }

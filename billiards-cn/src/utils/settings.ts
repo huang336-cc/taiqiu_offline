@@ -47,7 +47,8 @@ const SEEN_GUIDE_KEY = "billiards_cn_seenGuide_v1"
 const DEFAULTS: GameSettings = {
   lod: 3,
   sound: true,
-  volume: 0.8,
+  // v1.2.28：音量默认最大（1.0）。此前默认 0.8，用户希望开局面即最大音量。
+  volume: 1,
   aimAssist: true,
   seenGuide: false,
   lastRule: "nineball",

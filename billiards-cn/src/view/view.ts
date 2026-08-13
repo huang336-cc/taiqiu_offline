@@ -182,7 +182,16 @@ export class View {
   }
 
   render() {
-    if ((this.isInMotionNotVisible() || this.isMovingSlowly()) && !this.camera.isZoomedOut) {
+    // v1.2.26：回放模式下禁止自动切俯视。
+    // 原逻辑：任意球缓慢移动（isMovingSlowly）或出框（isInMotionNotVisible）时，
+    // 每帧 suggestMode(topView) 把相机切到俯视——这是「回放中每次击球后被切成俯视」
+    // 的真正根因。回放由自身 forceMode/suggestMode 选定视角（固定=spectatorView /
+    // 俯视=topView），不应被这里的实时逻辑覆盖；故回放模式直接跳过。
+    if (
+      (this.isInMotionNotVisible() || this.isMovingSlowly()) &&
+      !this.camera.isZoomedOut &&
+      !document.body.classList.contains("replay-mode")
+    ) {
       this.camera.suggestMode(this.camera.topView)
     }
     this.renderCamera(this.camera)

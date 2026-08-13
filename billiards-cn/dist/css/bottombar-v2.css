@@ -30,6 +30,22 @@ html body.game-ready #panel {
   transition: opacity 0.4s ease;
 }
 
+/* 回放模式：隐藏底部操作栏，游戏界面保持全屏（#F replay fullscreen） */
+html body.replay-mode #panel {
+  display: none !important;
+}
+
+/* v1.2.17 #5：回放模式下隐藏右上角设置齿轮（#menu 是 #panel 的兄弟节点，
+   不会被上面的 #panel 规则覆盖），利用 replay.ts 进出回放时切换的
+   body.replay-mode 类实现，退出回放自动恢复显示。 */
+/* v1.2.19 #2：改回 display:none !important。v1.2.18 用 opacity/visibility
+   在部分 WebView / 缓存环境下没有生效，导致回放时齿轮仍可见。
+   同时为 #menu 加 transition 让退出回放时淡入，避免 display 切换造成的跳动。 */
+html body.replay-mode #menu,
+body.replay-mode #menu {
+  display: none !important;
+}
+
 /* ---------- 1. .panel / .bottom-bar：底部栏容器，铺满、不留左侧缝隙 ---------- */
 .panel {
   display: flex;
@@ -41,9 +57,10 @@ html body.game-ready #panel {
      v1.1.37：左侧内边距从 8px → 2px，让 ①②③ 三颗按钮左移吃回空白带；右侧安全区保持 */
   padding: 0
     max(26px, env(safe-area-inset-right, 16px))
-    var(--cn-safe-bottom, 0px)
+    calc(var(--cn-safe-bottom, 0px) + var(--vv-bottom, 0px))
     max(2px, env(safe-area-inset-left, 2px));
-  height: calc(70px + var(--cn-safe-bottom, 0px));
+  /* v1.2.32：高度增加 --vv-bottom，避让 iOS Safari / WebView 底部工具栏 overlay */
+  height: calc(70px + var(--cn-safe-bottom, 0px) + var(--vv-bottom, 0px));
   width: 100%;
   box-sizing: border-box;
   position: relative;
@@ -246,8 +263,8 @@ html body.game-ready #panel {
   left: max(8px, env(safe-area-inset-left, 8px));
   right: auto;
   transform: none;
-  /* 紧贴底部栏上方（底部栏高 70px + 底部安全区），不再用 100% 相对按钮 */
-  bottom: calc(70px + var(--cn-safe-bottom, 0px) + 12px);
+  /* 紧贴底部栏上方（底部栏高 70px + 底部安全区 + iOS 工具栏高度），不再用 100% 相对按钮 */
+  bottom: calc(70px + var(--cn-safe-bottom, 0px) + var(--vv-bottom, 0px) + 12px);
   width: 256px;
   /* 极窄屏兜底：弹窗宽度不超过视口，避免右缘溢出 */
   max-width: calc(100vw - 16px);
@@ -646,23 +663,14 @@ html body.game-ready #panel {
 }
 .bb-seg-aim .aim-angle-bar {
   width: 100%;
-  height: 54px;
+  height: 44px;
   margin: 0;
   background: transparent;
   border: none;
   box-shadow: none;
   border-radius: 0;
-  padding: 0 4px;
-  gap: 4px;
-}
-.bb-seg-aim .aim-nudge {
-  width: 24px;
-  height: 30px;
-  font-size: 16px;
-  color: #e8c37a;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(232, 195, 122, 0.35);
-  border-radius: 6px;
+  padding: 0 2px;
+  gap: 0;
 }
 .bb-seg-aim .aim-angle-track::before {
   height: 3px;
@@ -683,6 +691,8 @@ html body.game-ready #panel {
   width: auto;
   height: auto;
   display: flex;
+  /* v1.2.18 #2：配合回放隐藏改用 opacity，退出回放时齿轮平滑淡入而非突跳 */
+  transition: opacity 0.18s ease;
   flex-direction: column;
   align-items: center;
   gap: 4px;
@@ -740,7 +750,7 @@ html body.game-ready #panel {
 /* ---------- 8. 小屏 / 横屏微调 ---------- */
 @media (orientation: landscape) and (max-height: 500px) {
   .panel {
-    height: calc(58px + var(--cn-safe-bottom, 0px));
+    height: calc(58px + var(--cn-safe-bottom, 0px) + var(--vv-bottom, 0px));
   }
   .bottom-bar {
     height: 58px;

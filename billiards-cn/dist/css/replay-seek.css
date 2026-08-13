@@ -2,31 +2,110 @@
 
 .replay-seek-bar {
   position: fixed;
-  left: 50%;
-  bottom: clamp(84px, 13vh, 116px);
-  transform: translateX(-50%);
-  width: min(560px, calc(100% - 32px));
+  left: 0;
+  /* v1.2.32：整体上移 --vv-bottom，避让 iOS Safari / WebView 底部工具栏 overlay */
+  bottom: var(--vv-bottom, 0px);
+  transform: none;
+  width: 100%;
+  max-width: none;
   z-index: 45;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 9px 16px;
-  background: rgba(18, 14, 9, 0.74);
-  border: 1px solid rgba(212, 175, 55, 0.5);
-  border-radius: 999px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  gap: 8px;
+  /* v1.2.22：进度条整体做薄，减少底部遮挡
+     v1.2.32：底部再叠加 --vv-bottom */
+  padding: 4px 10px calc(4px + env(safe-area-inset-bottom, 0px) + var(--vv-bottom, 0px));
+  background: rgba(18, 14, 9, 0.72);
+  border: none;
+  border-top: 1px solid rgba(212, 175, 55, 0.5);
+  border-radius: 0;
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-sizing: border-box;
 }
 
 .replay-seek-bar[hidden] {
   display: none;
 }
 
+/* 退出回放按钮：回放结束后常驻进度条右侧，半透明金边，不遮挡画面 */
+.replay-exit-btn {
+  flex: 0 0 auto;
+  margin-left: 4px;
+  /* v1.2.22：按钮同步收紧 */
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: #f3e3b3;
+  background: rgba(120, 30, 20, 0.55);
+  border: 1px solid rgba(212, 175, 55, 0.7);
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.replay-exit-btn[hidden] {
+  display: none;
+}
+
+/* v1.2.17 #4：全局倍速按钮（0.5x/1x/2x/4x 循环），与退出按钮同款半透明金边，
+   常驻进度条右侧，置于退出按钮之前；点击由 replay.ts 的 onSpeedClick 处理。 */
+.replay-speed-btn {
+  flex: 0 0 auto;
+  margin-left: 4px;
+  /* v1.2.22：按钮同步收紧 */
+  padding: 4px 10px;
+  min-width: 42px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-align: center;
+  color: #f3e3b3;
+  background: rgba(20, 40, 55, 0.6);
+  border: 1px solid rgba(212, 175, 55, 0.7);
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.replay-speed-btn:active {
+  background: rgba(40, 70, 90, 0.8);
+}
+
+.replay-cam-btn {
+  flex: 0 0 auto;
+  margin-left: 4px;
+  /* v1.2.24：与倍速按钮同尺寸风格，仅背景色不同以区分「视角」语义 */
+  padding: 4px 10px;
+  min-width: 42px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-align: center;
+  color: #f3e3b3;
+  background: rgba(55, 35, 20, 0.6);
+  border: 1px solid rgba(212, 175, 55, 0.7);
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.replay-cam-btn:active {
+  background: rgba(90, 60, 35, 0.85);
+}
+
 .replay-seek-label {
   flex: 0 0 auto;
   color: #d4af37;
-  font-size: 12px;
+  /* v1.2.22：标签同步缩小 */
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 1px;
   white-space: nowrap;
@@ -36,7 +115,8 @@
 .replay-seek-wrap {
   position: relative;
   flex: 1 1 auto;
-  height: 24px;
+  /* v1.2.22：轨道高度从 24px 降到 18px */
+  height: 18px;
   display: flex;
   align-items: center;
 }
@@ -45,7 +125,8 @@
   position: relative;
   z-index: 2;
   width: 100%;
-  height: 24px;
+  /* v1.2.22：input 高度同步降低 */
+  height: 18px;
   margin: 0;
   background: transparent;
   accent-color: #d4af37;
@@ -56,7 +137,8 @@
 }
 
 #replaySeek::-webkit-slider-runnable-track {
-  height: 6px;
+  /* v1.2.22：轨道细到 4px */
+  height: 4px;
   border-radius: 999px;
   background: linear-gradient(
     to right,
@@ -66,7 +148,7 @@
 }
 
 #replaySeek::-moz-range-track {
-  height: 6px;
+  height: 4px;
   border-radius: 999px;
   background: linear-gradient(
     to right,
@@ -78,9 +160,10 @@
 #replaySeek::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 18px;
-  height: 18px;
-  margin-top: -6px;
+  /* v1.2.22：thumb 从 18px 降到 14px，垂直居中于 4px 轨道 */
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
   border-radius: 50%;
   background: #fff4d6;
   border: 2px solid #d4af37;
@@ -89,8 +172,8 @@
 }
 
 #replaySeek::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   background: #fff4d6;
   border: 2px solid #d4af37;
@@ -113,11 +196,12 @@
 .replay-snap {
   position: absolute;
   top: 50%;
-  width: 9px;
-  height: 9px;
-  margin-left: -4.5px;
-  margin-top: -4.5px;
+  /* v1.2.22：吸附点同步缩小 */
+  width: 7px;
+  height: 7px;
+  margin-left: -3.5px;
+  margin-top: -3.5px;
   border-radius: 50%;
   background: #ff5a3c;
-  box-shadow: 0 0 7px rgba(255, 90, 60, 0.95);
+  box-shadow: 0 0 6px rgba(255, 90, 60, 0.95);
 }

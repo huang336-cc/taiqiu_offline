@@ -64,7 +64,9 @@
 /* 单个选手列 */
 .sc-player {
   flex: 1 1 0;
-  min-width: 0;
+  /* v1.2.20：确保每列至少能完整放下 3 颗球（46px）+ 自身 padding/border，
+     避免对战模式两列并排时列宽被压缩，导致进球球色提前换行成 2+2+1。 */
+  min-width: 60px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -110,11 +112,21 @@
   gap: 2px;
   min-height: 14px;
   align-items: center;
-  /* v1.2.8 #E7：限定容器宽度 = 3 颗球 + 2 个间距（3×14px + 2×2px = 46px），
-     使已进球每满 3 个就换行，不再随比分栏宽度无限横排。
-     v1.2.11 #F3：改为任一方 3 个球就换行 → 容器宽 = 2 颗球 + 1 间距（2×14px + 1×2px = 30px），
-     任一方进球到第 3 颗即换行。 */
-  max-width: 30px;
+  /* v1.2.8 #E7 / v1.2.20：严格限定容器宽度 = 3 颗球 + 2 个间距
+     (3×14px + 2×2px = 46px)，使已进球每满 3 个必须换行。
+     .sc-ball 已 box-sizing:border-box，14px 已含 1px 边框，无需额外扣除。
+     同时设为固定宽度，避免父级列宽被压缩时容器跟着变窄。 */
+  width: 46px;
+  max-width: 46px;
+  /* 防止容器自身宽度被父级 padding/border 挤压后提前换行 */
+  box-sizing: border-box;
+}
+/* 回放模式与游戏/训练模式共用同一 DOM，强制同样 3 球换行 */
+body.replay-mode .sc-player-balls {
+  width: 46px;
+  max-width: 46px;
+  flex-wrap: wrap;
+  box-sizing: border-box;
 }
 .sc-player-balls:empty::before {
   content: "";
@@ -127,6 +139,7 @@
   position: relative;
   width: 14px;
   height: 14px;
+  box-sizing: border-box;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
@@ -140,6 +153,8 @@
     inset 0 1px 2px rgba(255, 255, 255, 0.3),
     0 1px 2px rgba(0, 0, 0, 0.45);
   flex: 0 0 auto;
+  /* v1.2.19 #3：禁止小球在窄容器中被 flex 压缩，避免宽度不足导致提前换行。 */
+  flex-shrink: 0;
   /* v1.2.8 #E6：overflow:hidden 把花球的白色横条裁切回圆内，
      解决「水平白条超出球体」；同时作为高光裁剪容器。 */
   overflow: hidden;
@@ -250,4 +265,54 @@ body.train-mode .score-card {
   .sc-time {
     font-size: 9px;
   }
+}
+
+/* ---- v1.2.23：回放模式比分栏紧凑化，但保持球号可读 ----
+   已进球严格 3 球换行：球恢复 14px + gap 2px → 容器宽 3×14 + 2×2 = 46px。
+   通过收紧 padding、gap、字号和球员列尺寸来整体紧凑，不牺牲球的数字可读性。 */
+body.replay-mode .score-card {
+  padding: 3px 4px;
+  gap: 2px;
+  max-width: 122px;
+  border-radius: 8px;
+}
+body.replay-mode .sc-players {
+  gap: 3px;
+}
+body.replay-mode .sc-player {
+  min-width: 50px;
+  padding: 2px 3px;
+  gap: 1px;
+  border-radius: 5px;
+}
+body.replay-mode .sc-player-head {
+  gap: 2px;
+}
+body.replay-mode .sc-player-label {
+  font-size: 9px;
+}
+body.replay-mode .sc-player-score {
+  font-size: 14px;
+}
+body.replay-mode .sc-player-balls {
+  width: 46px;
+  max-width: 46px;
+  min-height: 14px;
+  gap: 2px;
+}
+body.replay-mode .sc-ball {
+  width: 14px;
+  height: 14px;
+  font-size: 8px;
+}
+body.replay-mode .sc-ball-num {
+  font-size: 7px;
+}
+body.replay-mode .sc-time {
+  padding: 1px 5px;
+  font-size: 9px;
+}
+body.replay-mode .sc-time svg {
+  width: 8px;
+  height: 8px;
 }

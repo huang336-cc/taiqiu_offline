@@ -257,12 +257,23 @@ export class BotEventHandler {
     )
   }
 
-  private handleGameEnd(): void {
+  private handleGameEnd(forcedAmIWinner?: boolean): void {
     const session = Session.getInstance()
-    const { p1, p2 } = session.orderedScoresForHud()
-    const amIWinner = session.playerIndex === 0 ? p1 >= p2 : p2 >= p1
+    let amIWinner: boolean
+    if (forcedAmIWinner !== undefined) {
+      amIWinner = forcedAmIWinner
+    } else if (
+      this.container.rules.rulename === "eightball" ||
+      this.container.rules.rulename === "nineball"
+    ) {
+      // v1.2.15：落袋游戏自然结束时，isEndOfGame 触发的一方获胜。
+      // 当前行动方由 cueball.id 判断（玩家=0，电脑=1）。
+      amIWinner = this.container.table.cueball.id === session.playerIndex
+    } else {
+      const { p1, p2 } = session.orderedScoresForHud()
+      amIWinner = session.playerIndex === 0 ? p1 >= p2 : p2 >= p1
+    }
 
-    console.log("Bot handleGameEnd, p1=" + p1 + ", p2=" + p2)
     console.log("Bot handleGameEnd, amIWinner=" + amIWinner)
     console.log("Bot handleGameEnd, session", session)
     this.container.updateController(
@@ -296,7 +307,8 @@ export class BotEventHandler {
       return true
     }
 
-    this.handleGameEnd()
+    // v1.2.15：bot 犯规打进黑八且没有剩余目标球时，判玩家获胜。
+    this.handleGameEnd(true)
     return true
   }
 

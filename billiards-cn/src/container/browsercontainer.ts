@@ -83,6 +83,15 @@ export class BrowserContainer {
       const stored = readReplayFromStorage(replayId)
       if (stored) {
         this.replay = stored
+      } else {
+        // v1.2.13 #replay：sessionStorage 中找不到对应回放（可能被清理或 WebView 限制），
+        // 避免静默进入普通游戏，直接提示并返回菜单。
+        console.error(`[replay] sessionStorage missing for replayId=${replayId}`)
+        try {
+          alert("回放数据已失效或无法读取，请返回菜单重试。")
+        } catch {}
+        globalThis.location.href = "menu.html"
+        return
       }
     }
     this.ruletype = params.get("ruletype") ?? "nineball"
