@@ -19,6 +19,33 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover"
     />
+    <!-- v1.3.1：iOS Safari / WebView 底部工具栏常以 overlay 形式遮挡游戏底部操作栏。
+         通过 window.visualViewport 实时计算底部被遮挡高度并写入 --vv-bottom，CSS 用它把
+         .panel、回放进度条、白球操作弹窗整体上移，确保击球/力度/视角按钮不被压住。 -->
+    <script>
+      (function () {
+        function updateViewportFit() {
+          var vv = window.visualViewport;
+          var bottom = 0;
+          if (vv) {
+            bottom = Math.max(0, Math.round(window.innerHeight - vv.height));
+          }
+          var injected = parseInt(
+            getComputedStyle(document.documentElement).getPropertyValue("--vv-bottom") || "0",
+            10
+          );
+          bottom = Math.max(bottom, injected || 0);
+          document.documentElement.style.setProperty("--vv-bottom", bottom + "px");
+        }
+        updateViewportFit();
+        var vv = window.visualViewport;
+        if (vv && typeof vv.addEventListener === "function") {
+          vv.addEventListener("resize", updateViewportFit);
+          vv.addEventListener("scroll", updateViewportFit);
+        }
+        window.addEventListener("resize", updateViewportFit);
+      })();
+    </script>
     <link rel="stylesheet" type="text/css" href="css/fonts.css" />
     <link rel="stylesheet" type="text/css" href="css/index.css" />
     <link rel="stylesheet" type="text/css" href="css/aiminputs.css" />
