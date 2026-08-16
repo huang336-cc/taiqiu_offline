@@ -637,6 +637,14 @@
           </p>
 
           <div class="setting-group">
+            <h3>v1.3.4 · 2026-08-17 01:46:00</h3>
+            <p class="about-text dim"><b>1 项修复（8 球比分栏漏计开球进球）：</b></p>
+            <ul class="changelog-list">
+              <li><b>开球犯规仍计进球分</b>：8 球规则下，开球杆若同时发生犯规（如母球落袋、击球后无球碰库等），原先进入犯规分支后未把已落袋的非 8 号球计入比分，导致比分栏数字比实际已进球数少 1。本次在犯规处理中加入补偿：只要处于本局第一杆（开球）、进袋的不是 8 号球，就把进球数加到当前玩家分数并刷新比分栏。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
             <h3>v1.3.3 · 2026-08-13 16:28:00</h3>
             <p class="about-text dim"><b>1 项修复（iOS Safari 游戏内底部操作栏仍被遮挡）：</b></p>
             <ul class="changelog-list">
@@ -1844,7 +1852,7 @@
     </div>
 
     <script>
-      window.__BILLIARDS_VERSION__ = "1.3.3-2608131628";
+      window.__BILLIARDS_VERSION__ = "1.3.4-2608170146";
     </script>
     <script src="menu-cn.js"></script>
     <script>

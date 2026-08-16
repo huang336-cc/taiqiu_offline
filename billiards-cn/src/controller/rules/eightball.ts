@@ -232,6 +232,14 @@ export class EightBall implements Rules {
     const eightBallPotted = pots.some((b) => b.label === 8)
     const cueball = this.container.table.cueball
 
+    // v1.3.4：开球杆即使犯规，非 8 号进球仍应计入比分（球已被拿出桌面）。
+    if (!this.firstShotPlayed && pots.length > 0 && !eightBallPotted) {
+      const session = Session.getInstance()
+      session.addMyScore(pots.length)
+      const { p1: s1, p2: s2 } = session.orderedScoresForHud()
+      this.container.sendScoreUpdate(s1, s2, this.currentBreak)
+    }
+
     if (eightBallPotted) {
       const session = Session.getInstance()
       const hasGroupBalls = this.container.table.balls.some(
