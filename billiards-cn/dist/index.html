@@ -19,16 +19,25 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover"
     />
-    <!-- v1.3.2：iOS Safari / WebView 底部工具栏常以 overlay 形式遮挡游戏底部操作栏。
+    <!-- v1.3.3：iOS Safari 底部地址栏/工具栏常以 overlay 形式遮挡游戏底部操作栏。
          通过 window.visualViewport 实时计算底部被遮挡高度并写入 --vv-bottom，CSS 用它把
-         .panel、回放进度条、白球操作弹窗整体上移，确保击球/力度/视角按钮不被压住。 -->
+         .panel、回放进度条、白球操作弹窗整体上移。针对 iOS Safari 增加 50px 兜底偏移，
+         避免 visualViewport 在地址栏收起/展开过程中返回 0 导致按钮被压住。 -->
     <script>
       (function () {
+        var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        var isSafari = /Safari/.test(navigator.userAgent) && !/Chrome|CriOS/.test(navigator.userAgent);
+
         function updateViewportFit() {
           var vv = window.visualViewport;
           var bottom = 0;
           if (vv) {
             bottom = Math.max(0, Math.round(window.innerHeight - vv.height));
+          }
+          // iOS Safari 兜底：地址栏/工具栏 overlay 时 visualViewport 可能晚于 UI 出现，
+          // 给足 50px 底部偏移，确保“击球/力度/视角”按钮不被压住。
+          if (isIOS && isSafari) {
+            bottom = Math.max(bottom, 50);
           }
           var injected = parseInt(
             getComputedStyle(document.documentElement).getPropertyValue("--vv-bottom") || "0",
@@ -37,6 +46,7 @@
           bottom = Math.max(bottom, injected || 0);
           document.documentElement.style.setProperty("--vv-bottom", bottom + "px");
         }
+
         updateViewportFit();
         var vv = window.visualViewport;
         if (vv && typeof vv.addEventListener === "function") {
@@ -44,6 +54,11 @@
           vv.addEventListener("scroll", updateViewportFit);
         }
         window.addEventListener("resize", updateViewportFit);
+        window.addEventListener("orientationchange", updateViewportFit);
+        // iOS Safari 地址栏高度在页面加载后仍可能变化，延迟再算几次
+        setTimeout(updateViewportFit, 100);
+        setTimeout(updateViewportFit, 500);
+        setTimeout(updateViewportFit, 1000);
       })();
     </script>
     <link rel="stylesheet" type="text/css" href="css/fonts.css" />

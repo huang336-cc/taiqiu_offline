@@ -637,6 +637,22 @@
           </p>
 
           <div class="setting-group">
+            <h3>v1.3.4 · 2026-08-17 01:46:00</h3>
+            <p class="about-text dim"><b>1 项修复（8 球比分栏漏计开球进球）：</b></p>
+            <ul class="changelog-list">
+              <li><b>开球犯规仍计进球分</b>：8 球规则下，开球杆若同时发生犯规（如母球落袋、击球后无球碰库等），原先进入犯规分支后未把已落袋的非 8 号球计入比分，导致比分栏数字比实际已进球数少 1。本次在犯规处理中加入补偿：只要处于本局第一杆（开球）、进袋的不是 8 号球，就把进球数加到当前玩家分数并刷新比分栏。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.3.3 · 2026-08-13 16:28:00</h3>
+            <p class="about-text dim"><b>1 项修复（iOS Safari 游戏内底部操作栏仍被遮挡）：</b></p>
+            <ul class="changelog-list">
+              <li><b>增加 iOS Safari 兜底偏移</b>：v1.3.1 通过 <code>window.visualViewport</code> 计算底部遮挡高度，但 iOS Safari 底部地址栏/工具栏在页面加载后常以 overlay 形式出现，<code>visualViewport</code> 未能及时返回正确高度，导致击球/力度/视角按钮仍被压住。本次在 JS 中对 iOS Safari 强制保留至少 50px 底部偏移，并延迟多次重算；同时将 .panel 的纵向对齐改为 <code>flex-end</code>，确保按钮紧贴安全区域上沿。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
             <h3>v1.3.2 · 2026-08-13 10:37:00</h3>
             <p class="about-text dim"><b>1 项修复（Android 浏览器菜单底部仍被遮挡）：</b></p>
             <ul class="changelog-list">
@@ -1836,7 +1852,7 @@
     </div>
 
     <script>
-      window.__BILLIARDS_VERSION__ = "1.3.2-2608131057";
+      window.__BILLIARDS_VERSION__ = "1.3.4-2608170146";
     </script>
     <script src="menu-cn.js"></script>
     <script>

@@ -47,10 +47,12 @@ body.replay-mode #menu {
 }
 
 /* ---------- 1. .panel / .bottom-bar：底部栏容器，铺满、不留左侧缝隙 ---------- */
+/* v1.3.3：align-items 改为 flex-end，让底部按钮紧贴面板内容区底边（即 --vv-bottom 上方），
+   避免面板被 iOS Safari 工具栏撑高后按钮悬浮在空隙中间。 */
 .panel {
   display: flex;
   flex-direction: row;
-  align-items: center;
+  align-items: flex-end;
   justify-content: flex-start;
   /* v1.1.19：右侧留出 R 角安全区（约 26px），避免屏幕圆角遮住最右边的瞄准按钮
      v1.1.23：增加左侧 50px 内边距，将整个底部栏左移，让右侧按钮离 R 角更远
