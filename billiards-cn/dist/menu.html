@@ -451,7 +451,7 @@
             </p>
             <table class="key-table">
               <tr><td>开发者</td><td>huang336</td></tr>
-              <tr><td>版本</td><td id="versionCell">1.0.17</td></tr>
+              <tr><td>版本</td><td id="versionCell">1.3.5</td></tr>
               <tr><td>协议</td><td>GNU GPL v3.0</td></tr>
               <tr>
                 <td>项目源码</td>
@@ -635,6 +635,16 @@
           <p class="about-text dim">
             本应用自 v1.0.4（2026-08-03）起的全部版本变更记录，新版本置顶。详细条目可在每个版本下展开。
           </p>
+
+          <div class="setting-group">
+            <h3>v1.3.5 · 2026-08-21 16:33:00</h3>
+            <p class="about-text dim"><b>3 项修复（APK 安装失败 + 体积暴涨 + 横屏菜单被裁）：</b></p>
+            <ul class="changelog-list">
+              <li><b>修复 APK 安装报 PackageInfo is null</b>：此前 clean APK 仅用 jarsigner 签 v1 签名，而 AndroidManifest 的 targetSdkVersion=35，Android 14（API 34）起强制要求 v2/v3 签名，导致系统拒绝安装、解析不到包信息。本次改用本地 apksigner 签 v1+v2+v3（同原 keystore），已按 min-sdk 34 强制校验通过。</li>
+              <li><b>修复 APK 体积暴涨至 47MB</b>：build-apk.sh 整目录拷贝前端 dist 时只排除了 *.apk、漏排 *.zip，把 GitHub 发布用的 44MB 资产包误打进 assets/dist。本次在打包脚本中追加排除 *.zip/*.tar.gz/*.tar/*.bundle，重出后 APK 回到 1.8MB 零权限。</li>
+              <li><b>修复主菜单横屏矮视口「开始游戏」按钮被裁需下滑</b>：原响应式断点只覆盖横屏 &lt;560px，1920×720 横屏落空导致内容溢出、开始按钮被裁且无法滚动。本次扩展横屏断点至 max-height:820px 并新增极矮档，同时将「外观定制」改为原生折叠（默认收起），横屏首屏即可看见开始游戏。</li>
+            </ul>
+          </div>
 
           <div class="setting-group">
             <h3>v1.3.4 · 2026-08-17 01:46:00</h3>
