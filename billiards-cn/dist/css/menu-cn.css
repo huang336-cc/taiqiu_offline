@@ -494,6 +494,29 @@ body {
   flex: 0 0 auto;
 }
 
+/* v1.3.4-fix：外观定制默认折叠（<details> 原生），横屏矮视口首页首屏只留玩法+模式+开始。
+   收起时仅显示标题行，点 summary 展开；零 JS 改动。 */
+.custom-summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+.custom-summary::-webkit-details-marker {
+  display: none;
+}
+.custom-caret {
+  display: inline-block;
+  font-size: 10px;
+  transition: transform 0.15s ease;
+  color: var(--text-dim);
+}
+.sec-custom[open] .custom-caret {
+  transform: rotate(90deg);
+}
+
 /* 外观定制：三个入口横向平铺成卡片，省掉三行纵向空间 */
 .menu-tiles {
   display: grid;
@@ -911,14 +934,15 @@ kbd {
 }
 
 /* ---------- 横屏适配 ---------- */
-@media (orientation: landscape) and (max-height: 560px) {
+/* v1.3.4-fix：横屏矮视口（含 1920×720 这类 ~720 高）覆盖到 820，避免开始游戏被裁 */
+@media (orientation: landscape) and (max-height: 820px) {
   .app {
     max-width: 100%;
     padding: calc(var(--safe-top) + 8px) calc(var(--safe-right) + 20px)
       calc(var(--safe-bottom) + 8px + var(--vv-bottom, 0px)) calc(var(--safe-left) + 20px);
   }
   .hero {
-    margin-bottom: 8px;
+    margin-bottom: 6px;
   }
   .hero-title {
     font-size: 21px;
@@ -931,31 +955,46 @@ kbd {
     gap: 8px;
   }
   .mode-card {
-    padding: 8px 6px 10px;
-    gap: 3px;
+    padding: 6px 6px 8px;
+    gap: 2px;
   }
   .sec-mode .mode-icon {
-    width: 50px;
-    height: 50px;
+    width: 46px;
+    height: 46px;
   }
   .mode-name {
-    font-size: 14px;
+    font-size: 13px;
     margin-top: 1px;
   }
   .section {
-    margin-bottom: 9px;
+    margin-bottom: 7px;
+  }
+  .sec-custom {
+    margin-bottom: 2px;
   }
   .seg-hint {
     min-height: 0;
-    margin-top: 5px;
+    margin-top: 4px;
   }
   .btn {
-    padding: 10px;
-    font-size: 14px;
+    padding: 9px;
+    font-size: 13px;
   }
   .actions-row {
-    margin-top: 7px;
+    margin-top: 6px;
   }
+}
+
+/* 极矮横屏（如 360 高）：进一步压，仍放不下则由 #screen-home 滚动兜底 */
+@media (orientation: landscape) and (max-height: 560px) {
+  .hero-title { font-size: 18px; }
+  .mode-card { padding: 4px 4px 6px; }
+  .sec-mode .mode-icon { width: 40px; height: 40px; }
+  .mode-name { font-size: 12px; }
+  .seg-btn { font-size: 11px; padding: 4px 2px; }
+  .menu-row-title { font-size: 10px; }
+  .btn { padding: 7px; font-size: 12px; }
+  .section { margin-bottom: 5px; }
 }
 
 /* v1.1.12 变更履历列表 */
