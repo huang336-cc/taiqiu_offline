@@ -448,17 +448,16 @@ html.in-app .app {
    v1.3.6：让整个 home 内容作为一个整体垂直居中，消除上半 / 下半大片黑色集中的问题，
    上下空白对称、内容紧凑；当视口很矮时由 overflow-y:auto 兜底滚动。 */
 #screen-home {
-  /* v1.3.9：把 v1.3.7（sec-mode flex:1 把卡片撑成 280px）和 v1.3.8（.actions margin-top:auto
-     在底部留 60% 视口的单一巨缝）都否掉。改用 justify-content:space-between 把剩余垂直
-     空间均摊到 4 个 section 之间，外加顶端 .home-hero 与底部 .home-footer 作视觉锚点，
-     最大单缝 ≤ 视口 13%，避免任何一条 ≥ 15% 视口的纯黑带。 */
+  /* v1.3.10：回到"开局紧凑顶、actions 贴底"的简单排版（v1.3.8 的核心），
+     不再用 space-between 把留白均匀切碎成 6 段小缝。
+     留白只在 hero↔sec-mode 中部 + sec-cust↔actions 各 1 处（视觉上读作"中
+     段留白"+"贴底操作区"），不再被切碎成 6 条等距黑带。极矮时 overflow-y:auto 滚动。 */
   height: 100%;
   min-height: 100%;
   overflow-y: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
-  gap: 7px;
-  justify-content: space-between;
+  gap: 5px;
 }
 #screen-home::-webkit-scrollbar {
   display: none;
@@ -512,13 +511,14 @@ html.in-app .app {
   font-size: 13px;
 }
 
-.sec-opponent,
-.sec-custom {
+.sec-opponent {
   flex: 0 0 auto;
 }
 
 /* v1.3.4-fix：外观定制默认折叠（<details> 原生），横屏矮视口首页首屏只留玩法+模式+开始。
-   收起时仅显示标题行，点 summary 展开；零 JS 改动。 */
+   收起时仅显示标题行，点 summary 展开。
+   v1.3.10：在 summary 末尾追加 <span class="custom-current">，显示当前已选项
+   摘要（场景·球杆·台面），折叠态信息密度 ↑，让折叠态显得"有内容"。 */
 .custom-summary {
   cursor: pointer;
   list-style: none;
@@ -526,6 +526,7 @@ html.in-app .app {
   align-items: center;
   gap: 6px;
   user-select: none;
+  padding: 4px 2px;
 }
 .custom-summary::-webkit-details-marker {
   display: none;
@@ -538,6 +539,23 @@ html.in-app .app {
 }
 .sec-custom[open] .custom-caret {
   transform: rotate(90deg);
+}
+/* v1.3.10：折叠态"当前选项摘要"，右对齐贴在 summary 右半部分 */
+.custom-summary .custom-current {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 65%;
+  padding-right: 2px;
+}
+/* v1.3.10：sec-custom 加少量 padding 让 summary 行更舒展（折叠态 ~40px 高） */
+.sec-custom {
+  flex: 0 0 auto;
+  padding: 6px 4px;
 }
 
 /* 外观定制：三个入口横向平铺成卡片，省掉三行纵向空间 */
@@ -585,30 +603,79 @@ html.in-app .app {
 }
 
 #screen-home .actions {
-  margin-top: 0; /* v1.3.9：去掉 v1.3.8 的 margin-top:auto，让 #screen-home 的
-                   justify-content:space-between 统一均摊剩余空间，避免底部单缝。 */
-  padding-top: 4px; /* v1.3.9：从 8px 收到 4px，配合 space-between 不再需要额外顶距 */
+  /* v1.3.10：1 行 toolbar：开始游戏占左 1.7fr，操作介绍/查看回放/游戏设置 3
+     个小按钮占右 1fr（3 sub-col）。50px 高，比 v1.3.9 的 2 行 105px 省 55px
+     —— 让"操作介绍"那行不再被压扁或推出视口外。同时 margin-top:auto 让
+     toolbar 始终贴底（不受中间 sec-cust 折叠展开影响）。 */
+  display: grid;
+  grid-template-columns: 1.7fr 1fr;
+  grid-auto-rows: 50px;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 4px;
   flex: 0 0 auto;
 }
+#screen-home .actions .btn-primary.btn-start {
+  grid-column: 1;
+  grid-row: 1;
+  height: 50px;
+  padding: 0 14px;
+  font-size: 15px;
+  letter-spacing: 3px;
+}
+#screen-home .actions .actions-row {
+  grid-column: 2;
+  grid-row: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+  margin: 0;
+}
+#screen-home .actions .actions-row .btn {
+  height: 50px;
+  padding: 0 4px;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
-/* v1.3.9：菜单顶端一个紧凑的"标题 + 副标题"作顶部视觉锚点。
-   复用已有 .hero / .hero-title / .hero-sub（金色渐变标题），不新增文字样式。
-   极矮横屏 ≤560 由下方断点 display:none 隐藏，留出空间给玩法卡 + 操作按钮。 */
+/* v1.3.10：菜单顶端一个紧凑的"标题 + 副标题"作顶部视觉锚点（hairline
+   分割线 + 弱金色阴影，把 hero 区跟下方卡片区视觉分层，让中段留白
+   不再读作"空白"。复用已有 .hero / .hero-title / .hero-sub（金色渐变标题）。
+   横屏 ≤720 由下方断点 display:none 隐藏，省下 ~73px 让折叠态能更好贴底。 */
 .home-hero {
   flex: 0 0 auto;
   text-align: center;
-  padding-top: 2px;
+  padding-top: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(232, 195, 122, 0.18);
+  box-shadow: 0 6px 16px -10px rgba(232, 195, 122, 0.25);
+}
+.home-hero .hero-title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 8px;
+}
+.home-hero .hero-sub {
+  margin: 4px 0 0;
+  font-size: 11px;
+  letter-spacing: 2.5px;
 }
 
-/* v1.3.9：菜单底部一行小字作底部视觉锚点（版本 + 副标题）。 */
+/* v1.3.10：菜单底部一行小字作底部视觉锚点，简化字重并加 hairline 顶边
+   跟 hero 视觉呼应。 */
 .home-footer {
   flex: 0 0 auto;
   text-align: center;
   font-size: 10px;
   color: var(--text-dim);
-  letter-spacing: 1.2px;
-  padding-bottom: 2px;
-  opacity: 0.7;
+  letter-spacing: 1.5px;
+  padding-top: 6px;
+  padding-bottom: 4px;
+  opacity: 0.6;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .actions-row {
@@ -1047,22 +1114,34 @@ kbd {
   }
 }
 
-/* 极矮横屏（如 360 高）：进一步压，仍放不下则由 #screen-home 滚动兜底 */
-@media (orientation: landscape) and (max-height: 560px) {
-  /* v1.3.9：极矮横屏连 hero/footer 都不要，把空间留给玩法卡 + 操作按钮 */
+/* v1.3.10：横屏 ≤720 隐藏 hero/footer（含 1280×720、1920×720 桌面/电视场景），
+   把空间让给玩法卡 + toolbar。 */
+@media (orientation: landscape) and (max-height: 720px) {
   .home-hero,
   .home-footer {
     display: none;
   }
+}
+
+/* ≤560 极矮横屏：进一步压缩卡片/字号 + toolbar 矮到 44px，由 #screen-home 滚动兜底 */
+@media (orientation: landscape) and (max-height: 560px) {
   .hero-title { font-size: 18px; }
   .mode-card { padding: 4px 4px 6px; }
-  .sec-mode .mode-card { min-height: 80px; } /* v1.3.7-fix：极矮断点也重置下限 */
+  .sec-mode .mode-card { min-height: 80px; }
   .sec-mode .mode-icon { width: 40px; height: 40px; }
   .mode-name { font-size: 12px; }
-  .seg-btn { font-size: 11px; padding: 4px 2px; }
+  .seg-btn { font-size: 11px; padding: 4px 4px; }
   .menu-row-title { font-size: 10px; }
   .btn { padding: 7px; font-size: 12px; }
   .section { margin-bottom: 5px; }
+  #screen-home .actions {
+    grid-template-rows: 44px;
+  }
+  #screen-home .actions .btn-primary.btn-start,
+  #screen-home .actions .actions-row .btn {
+    height: 44px;
+    font-size: 12px;
+  }
 }
 
 /* v1.1.12 变更履历列表 */

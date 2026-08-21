@@ -895,6 +895,16 @@
         tk.style.backgroundImage = "url(" + cv3.toDataURL() + ")"
       }
     }
+    // v1.3.10：同步折叠态 summary 末尾的「当前选项摘要」行内显示
+    var ce = document.getElementById("customCurrent")
+    if (ce) {
+      ce.textContent =
+        (document.getElementById("valScene")?.textContent || "") +
+        " · " +
+        (document.getElementById("valCue")?.textContent || "") +
+        " · " +
+        (document.getElementById("valSkin")?.textContent || "")
+    }
   }
 
   /* ---------------- 启动游戏 ---------------- */

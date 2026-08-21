@@ -110,7 +110,7 @@
         </section>
 
         <details class="section sec-custom" id="customDetails">
-          <summary class="section-title custom-summary">外观定制 <span class="custom-caret">▸</span></summary>
+          <summary class="section-title custom-summary">外观定制 <span class="custom-caret">▸</span><span class="custom-current" id="customCurrent">雪山 · 随台面 · 经典原木</span></summary>
           <div class="menu-rows menu-tiles" id="customRows">
             <button class="menu-row" data-target="scene">
               <span class="menu-thumb skin-swatch" id="thumbScene"></span>
@@ -147,7 +147,7 @@
             <button class="btn btn-ghost" id="btnSettings">游戏设置</button>
           </div>
         </div>
-        <footer class="home-footer">v1.3.9 · 离线版</footer>
+        <footer class="home-footer">v1.3.10 · 离线版</footer>
       </main>
 
       <!-- 环境场景二级菜单 -->
@@ -502,7 +502,7 @@
             </p>
             <table class="key-table">
               <tr><td>开发者</td><td>huang336</td></tr>
-              <tr><td>版本</td><td id="versionCell">1.3.9</td></tr>
+              <tr><td>版本</td><td id="versionCell">1.3.10</td></tr>
               <tr><td>协议</td><td>GNU GPL v3.0</td></tr>
               <tr>
                 <td>项目源码</td>
@@ -686,6 +686,14 @@
           <p class="about-text dim">
             本应用自 v1.0.4（2026-08-03）起的全部版本变更记录，新版本置顶。详细条目可在每个版本下展开。
           </p>
+
+          <div class="setting-group">
+            <h3>v1.3.10 · 2026-08-22 02:35:00</h3>
+            <p class="about-text dim"><b>1 项修复（v1.3.9 把 60% 单缝均分成 6 段小缝后仍被读作"还有大片空白"，改为 toolbar + 信息密度方案）：</b></p>
+            <ul class="changelog-list">
+              <li><b>折叠态「开始游戏 + 操作介绍/查看回放/游戏设置」改成 1 行 toolbar，最大单缝不再出现</b>：v1.3.9 用 <code>justify-content: space-between</code> 把 60% 视口的单缝均分成 6 段每段约 71px 的小缝（≈ 10% 视口），结果用户视觉上仍读作"网页版还有大片空白"。本版改方案：① <code>#screen-home .actions</code> 改成单行 toolbar grid（<code>grid-template-columns: 1.7fr 1fr</code>，开始游戏占左 1.7fr，操作介绍/查看回放/游戏设置 3 个按钮占右 1fr 内 3 sub-col），整体高度从 2 行 105px 压到 1 行 50px，省下 55px；② toolbar 用 <code>margin-top: auto</code> 始终紧贴视口底部，"开始游戏"按钮和 3 个 ghost 按钮在同一行，视觉重心稳，**"操作介绍"那行不再被压扁或推出框外**；③ <code>#screen-home</code> 由 v1.3.9 的 <code>space-between</code> 改回 <code>flex-start</code>，不再切 6 段等距，留白集中在 hero↔sec-mode 中段 + sec-cust↔toolbar 末段两处，视觉上读作"中部留白 + 贴底操作区"，不再是分散的 6 条黑带；④ <code>.sec-custom</code> summary 行加上 <code>&lt;span class="custom-current"&gt;</code> 显示当前已选项摘要（场景 · 球杆 · 台面），折叠态一眼看出当前定制，无需展开；⑤ <code>.home-hero</code> 加 hairline border + 弱金色阴影、字号 18→22，让顶/底锚点视觉上更清晰；⑥ ≤720 横屏断点（含 1280×720 / 1920×720 桌面场景）隐藏 hero/footer，省下 73px；⑦ <code>#screen-home</code> 内 gap 由 7→5，再次让出纵向 12px。结果：折叠态在 1280×720 inner viewport 下不再有"开始游戏按钮"和"操作介绍按钮"被 60% 视口的留白隔开，工具栏紧贴底部，操作按钮不再被压扁或推出屏幕。</li>
+            </ul>
+          </div>
 
           <div class="setting-group">
             <h3>v1.3.9 · 2026-08-22 01:10:00</h3>
