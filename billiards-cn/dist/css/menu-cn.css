@@ -431,14 +431,15 @@ body {
   flex-shrink: 0;
 }
 
-/* ---------- 首页：所有按钮平铺一屏，小屏/底部工具栏时可滚动 ---------- */
+/* ---------- 首页：所有按钮平铺一屏，小屏/底部工具栏时可滚动 ----------
+   v1.3.6：让整个 home 内容作为一个整体垂直居中，消除上半 / 下半大片黑色集中的问题，
+   上下空白对称、内容紧凑；当视口很矮时由 overflow-y:auto 兜底滚动。 */
 #screen-home {
-  /* v1.3.2：默认即允许纵向滚动，避免 Android Chrome 底部地址栏 overlay 时“开始游戏”被压住；
-     隐藏滚动条保持一屏观感。 */
   overflow-y: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
   gap: 7px;
+  justify-content: center;
 }
 #screen-home::-webkit-scrollbar {
   display: none;
@@ -458,8 +459,7 @@ body {
   margin-bottom: 0;
 }
 
-/* 玩法区吃掉剩余高度，四张卡片 2×2 自适应铺满 */
-/* 玩法区吃掉剩余高度，四张卡片平铺（自动 4 列） */
+/* 玩法区自然高度，配合 #screen-home + actions margin-top:auto 的紧凑+推底布局 */
 .sec-mode {
   flex: 0 0 auto;
   display: flex;
@@ -933,8 +933,26 @@ kbd {
   .section { margin-bottom: 4px; }
 }
 
+/* v1.3.6：窄屏（窗口宽度 ≤ 720px）下 mode-grid 改 2 列，避免 4 列被挤出去超界；
+   actions-row 三个按钮 wrap，避免右边被裁 */
+@media (max-width: 720px) {
+  .sec-mode .mode-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .actions-row {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  .actions-row .btn {
+    flex: 1 1 calc(50% - 3px);
+    min-width: 0;
+  }
+}
+
 /* ---------- 横屏适配 ---------- */
-/* v1.3.4-fix：横屏矮视口（含 1920×720 这类 ~720 高）覆盖到 820，避免开始游戏被裁 */
+/* v1.3.4-fix：横屏矮视口（含 1920×720 这类 ~720 高）覆盖到 820，避免开始游戏被裁。
+   v1.3.6：放大 mode-icon / mode-name，让卡片更高大、视觉占满中部，配合 #screen-home
+   整体居中消除大片黑色空白。 */
 @media (orientation: landscape) and (max-height: 820px) {
   .app {
     max-width: 100%;
@@ -952,18 +970,18 @@ kbd {
   }
   .sec-mode .mode-grid {
     grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
+    gap: 10px;
   }
   .mode-card {
-    padding: 6px 6px 8px;
-    gap: 2px;
+    padding: 10px 8px 12px;
+    gap: 6px;
   }
   .sec-mode .mode-icon {
-    width: 46px;
-    height: 46px;
+    width: 64px;
+    height: 64px;
   }
   .mode-name {
-    font-size: 13px;
+    font-size: 16px;
     margin-top: 1px;
   }
   .section {
@@ -977,8 +995,8 @@ kbd {
     margin-top: 4px;
   }
   .btn {
-    padding: 9px;
-    font-size: 13px;
+    padding: 11px;
+    font-size: 15px;
   }
   .actions-row {
     margin-top: 6px;

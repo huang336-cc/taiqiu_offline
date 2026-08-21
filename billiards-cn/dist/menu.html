@@ -451,7 +451,7 @@
             </p>
             <table class="key-table">
               <tr><td>开发者</td><td>huang336</td></tr>
-              <tr><td>版本</td><td id="versionCell">1.3.5</td></tr>
+              <tr><td>版本</td><td id="versionCell">1.3.6</td></tr>
               <tr><td>协议</td><td>GNU GPL v3.0</td></tr>
               <tr>
                 <td>项目源码</td>
@@ -635,6 +635,14 @@
           <p class="about-text dim">
             本应用自 v1.0.4（2026-08-03）起的全部版本变更记录，新版本置顶。详细条目可在每个版本下展开。
           </p>
+
+          <div class="setting-group">
+            <h3>v1.3.6 · 2026-08-21 17:25:00</h3>
+            <p class="about-text dim"><b>1 项修复（横屏 / 窄屏主菜单大片黑色空白）：</b></p>
+            <ul class="changelog-list">
+              <li><b>修复 1920×720 / 1080×720 横屏与窄屏下「主菜单」大片黑色空白</b>：原 #screen-home 内部仅紧凑堆叠 sec-mode + sec-opponent + sec-custom + actions，而 mode-icon 在横屏断点被压缩到 46px，导致卡片视觉单薄、内容集中在屏幕中段且上下大量黑色。本次让 #screen-home 整体垂直居中（上下空白对称），同时在横屏 max-height:820px 断点把 mode-icon 放大到 64px、cards padding/mode-name 微调、在 ≤720px 窄屏给 mode-grid 2 列兜底 + actions-row 包裹兜底；APK 与网页同步生效。</li>
+            </ul>
+          </div>
 
           <div class="setting-group">
             <h3>v1.3.5 · 2026-08-21 16:33:00</h3>
