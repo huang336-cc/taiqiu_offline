@@ -67,6 +67,10 @@ public class MainActivity extends Activity {
         s.setAllowFileAccess(false);      // 已改走虚拟域名，不再需要 file 访问
         s.setAllowContentAccess(false);
         s.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        // v1.3.7：让 WebView 以设备物理宽度布局（铺满宽度），并禁用「总览缩放」，
+        // 配合页面 JS 实测 innerHeight 写入 --vh，使主菜单精确铺满整屏。
+        softSet(s, "setUseWideViewPort", true);
+        softSet(s, "setLoadWithOverviewMode", false);
 
         // 这些 setter 在部分精简版 android.jar 里没有声明，用反射调用，
         // 调不到就跳过（不影响虚拟域名方案本身）。
@@ -128,6 +132,17 @@ public class MainActivity extends Activity {
                     : "渲染进程被系统回收（可能内存不足）";
                 showFatal(reason + "\n\n建议：\n1. 把『Android System WebView』和『Chrome』都更新到最新\n2. 关闭该游戏的省电/性能限制与安全防护拦截\n3. 重启手机后重试");
                 return true;
+            }
+
+            /**
+             * v1.3.7：页面加载完成后，触发一次 JS 尺寸适配（实测 innerHeight 写入 --vh），
+             * 确保 WebView 完成自身布局后再把主菜单铺满整屏。
+             */
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                softEvaluate(
+                    "(function(){try{window.__fitViewport&&window.__fitViewport()}catch(e){}})()"
+                );
             }
         });
 

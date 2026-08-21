@@ -7,6 +7,50 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover"
     />
     <title>奥特曼的台球 · 离线版</title>
+    <script>
+      // v1.3.7：打开即识别屏幕尺寸，把实测可用高度/宽度写入 CSS 变量，让主菜单精确铺满。
+      // 同时按虚拟域名 billiards.local 识别安卓 APP 沉浸全屏模式（无地址栏/系统栏）。
+      // 注意：先在 <head> 阶段就把 .in-app 挂到 <html> 上，避免首屏按"网页"样式
+      // （72px 底部避让）闪一帧再切换到 APP 样式。
+      (function () {
+        var INAPP = location.hostname === 'billiards.local';
+        if (INAPP) {
+          document.documentElement.classList.add('in-app');
+        }
+        function fitViewport() {
+          var de = document.documentElement;
+          de.style.setProperty('--vh', window.innerHeight * 0.01 + 'px');
+          de.style.setProperty('--vw', window.innerWidth * 0.01 + 'px');
+          var b = document.body;
+          if (!b) {
+            return;
+          }
+          var land = window.innerWidth >= window.innerHeight;
+          b.classList.toggle('orient-landscape', land);
+          b.classList.toggle('orient-portrait', !land);
+          if (INAPP) {
+            b.classList.add('in-app');
+          }
+        }
+        function reveal() {
+          fitViewport();
+          if (document.body) {
+            document.body.classList.add('fit-ready');
+          }
+        }
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', reveal);
+        } else {
+          reveal();
+        }
+        window.addEventListener('load', fitViewport);
+        window.addEventListener('resize', fitViewport);
+        window.addEventListener('orientationchange', function () {
+          setTimeout(fitViewport, 60);
+        });
+        window.__fitViewport = fitViewport;
+      })();
+    </script>
     <link rel="icon" type="image/png" href="favicon.png" />
     <link rel="stylesheet" href="css/menu-cn.css" />
   </head>
@@ -451,7 +495,7 @@
             </p>
             <table class="key-table">
               <tr><td>开发者</td><td>huang336</td></tr>
-              <tr><td>版本</td><td id="versionCell">1.3.6</td></tr>
+              <tr><td>版本</td><td id="versionCell">1.3.7</td></tr>
               <tr><td>协议</td><td>GNU GPL v3.0</td></tr>
               <tr>
                 <td>项目源码</td>
@@ -635,6 +679,14 @@
           <p class="about-text dim">
             本应用自 v1.0.4（2026-08-03）起的全部版本变更记录，新版本置顶。详细条目可在每个版本下展开。
           </p>
+
+          <div class="setting-group">
+            <h3>v1.3.7 · 2026-08-21 18:05:00</h3>
+            <p class="about-text dim"><b>1 项修复（主菜单真正铺满整屏，APP 与网页同步）：</b></p>
+            <ul class="changelog-list">
+              <li><b>修复 v1.3.6 居中方案仍留黑的问题</b>：v1.3.6 用 justify-content:center 让内容垂直居中后，上下仍有大片对称黑边，加上 APP 沉浸全屏里仍被 72px 网页端底部避让白白吃掉一截。本版本按需求改为「打开后先识别屏幕尺寸，再把主菜单铺满」：① 移除 #screen-home 的居中，改为 sec-mode 用 flex:1 吃掉中间剩余高度，mode-grid 用 grid-auto-rows:1fr 把 4 张卡片纵向撑满（窄屏 2×2 同样撑满）；② menu.html head 加 fitViewport 脚本，把 window.innerHeight 实测值写入 --vh，让 html/body/.app 以实测视口高度为准；③ 按虚拟域名 billiards.local 识别安卓 APP，给 html 挂 .in-app 关掉 72px 底部兜底（早于 body 解析避免首屏闪烁）；④ MainActivity 开启 setUseWideViewPort 强制按设备宽度布局，并在 onPageFinished 再次触发 fitViewport 兜底。结果：1920×720 / 1080×720 / 900×600 / 640×360 / 844×390 / 420×800 全部铺满，APP 底部不再有黑条。</li>
+            </ul>
+          </div>
 
           <div class="setting-group">
             <h3>v1.3.6 · 2026-08-21 17:25:00</h3>
