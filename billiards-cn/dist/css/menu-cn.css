@@ -476,37 +476,38 @@ html.in-app .app {
   margin-bottom: 0;
 }
 
-/* 玩法区吃掉中间剩余高度，让四张卡片纵向撑满，铺满整屏不留黑边 */
+/* v1.3.7-flex：sec-mode 用自然高度（不让 4 张卡片均分高度被无限拉高）。
+   上版 grid-auto-rows:1fr + sec-mode flex:1 让卡片撑成整屏大片、把后面区段挡住
+   （"自己练习 / 电脑·稳健 / 电脑·激进" 被卡片覆盖），这里恢复紧凑堆叠。
+   mode-card 给个 min-height 下限保证视觉重量；actions 保留 margin-top:auto 推底。 */
 .sec-mode {
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
 }
 
 .sec-mode .mode-grid {
-  flex: 1 1 auto;
-  min-height: 130px; /* 极矮屏的兜底下限，超出则由 #screen-home 滚动 */
-  min-width: 0;
+  flex: 0 0 auto;
+  min-height: 0;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  grid-auto-rows: 1fr; /* 行高均分，卡片铺满剩余高度 */
-  align-items: stretch;
-  gap: 8px;
+  grid-auto-rows: auto; /* 卡片自然行高 */
+  gap: 10px; /* v1.3.7-fix：稍微加大 gap，避免极矮横屏下卡片下边界与下方 seg 行视觉紧贴 */
 }
 
 .sec-mode .mode-card {
-  justify-content: center; /* 图标/文字在撑高后的卡片内居中 */
+  justify-content: flex-start; /* 不在拉高后居中；自然顶部对齐 */
   gap: 4px;
-  padding: 8px 6px 10px;
+  padding: 6px 4px 8px; /* v1.3.7-fix：紧凑内边距，避免在宽屏下横向被拉成大块 */
+  min-height: 130px;
 }
 
 .sec-mode .mode-icon {
-  width: 60px;
-  height: 60px;
+  width: 48px;
+  height: 48px;
 }
 
 .sec-mode .mode-name {
-  font-size: 15px;
+  font-size: 13px;
 }
 
 .sec-opponent,
@@ -582,8 +583,8 @@ html.in-app .app {
 }
 
 #screen-home .actions {
-  margin-top: 0;
-  padding-top: 2px;
+  margin-top: auto; /* v1.3.7-fix：覆盖上面 margin-top:0，让 actions 推到底，避免底部留黑 */
+  padding-top: 8px;
   flex: 0 0 auto;
 }
 
@@ -997,11 +998,11 @@ kbd {
     gap: 6px;
   }
   .sec-mode .mode-icon {
-    width: 64px;
-    height: 64px;
+    width: 56px;
+    height: 56px;
   }
   .mode-name {
-    font-size: 16px;
+    font-size: 14px;
     margin-top: 1px;
   }
   .section {
@@ -1027,6 +1028,7 @@ kbd {
 @media (orientation: landscape) and (max-height: 560px) {
   .hero-title { font-size: 18px; }
   .mode-card { padding: 4px 4px 6px; }
+  .sec-mode .mode-card { min-height: 80px; } /* v1.3.7-fix：极矮断点也重置下限 */
   .sec-mode .mode-icon { width: 40px; height: 40px; }
   .mode-name { font-size: 12px; }
   .seg-btn { font-size: 11px; padding: 4px 2px; }

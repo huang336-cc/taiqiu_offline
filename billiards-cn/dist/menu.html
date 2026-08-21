@@ -495,7 +495,7 @@
             </p>
             <table class="key-table">
               <tr><td>开发者</td><td>huang336</td></tr>
-              <tr><td>版本</td><td id="versionCell">1.3.7</td></tr>
+              <tr><td>版本</td><td id="versionCell">1.3.8</td></tr>
               <tr><td>协议</td><td>GNU GPL v3.0</td></tr>
               <tr>
                 <td>项目源码</td>
@@ -679,6 +679,14 @@
           <p class="about-text dim">
             本应用自 v1.0.4（2026-08-03）起的全部版本变更记录，新版本置顶。详细条目可在每个版本下展开。
           </p>
+
+          <div class="setting-group">
+            <h3>v1.3.8 · 2026-08-21 18:50:00</h3>
+            <p class="about-text dim"><b>1 项修复（修复 v1.3.7 模式卡片撑大 + seg 行重叠到卡片）：</b></p>
+            <ul class="changelog-list">
+              <li><b>修复主菜单「游戏模式」4 张卡片纵向被撑大、seg 选择器被压到卡片内部</b>：v1.3.7 用 sec-mode flex:1 + mode-grid grid-auto-rows:1fr 让 4 张卡片均分视口剩余高度，结果在 1920×720 横屏下卡片被拉成 ~280px 高、占视口的 39%，且把「自己练习 / 电脑·稳健 / 电脑·激进」等 seg 选择器压到了卡片内部造成视觉重叠。本版修正：① sec-mode 改回自然高度（flex:0 0 auto）；② mode-grid 改回 grid-auto-rows:auto，让 4 张卡片按内容自然行高；③ mode-card 缩小视觉重量（min-height:130、padding 6/4/8、mode-icon 48×48、mode-name 13px），既保持卡片视觉重量又不挤压其他区段；④ mode-grid gap 8→10 让卡片与下方 seg 行之间有更明显的视觉分离；⑤ 560 极矮横屏断点重置 min-height=80 保证 640×360 等极矮视口也不会撑高；⑥ #screen-home .actions 把被覆盖掉的 margin-top:0 改回 margin-top:auto，让 actions 真正贴底、避免底部留大片黑。</li>
+            </ul>
+          </div>
 
           <div class="setting-group">
             <h3>v1.3.7 · 2026-08-21 18:05:00</h3>
