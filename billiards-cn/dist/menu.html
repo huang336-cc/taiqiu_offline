@@ -56,8 +56,14 @@
   </head>
   <body>
     <div class="app">
-      <!-- 主体：玩法选择（已移除顶部标题，所有按钮平铺一屏，无需下翻） -->
+      <!-- 主体：玩法选择（v1.3.9：重新加上克制的顶部标题 + 底部版本行作视觉锚点，配合
+           #screen-home 的 justify-content:space-between 把剩余空间均摊到各区段之间，
+           消除 v1.3.8 在外观定制 ▸ 与开始游戏之间残留的 60% 视口单一巨缝） -->
       <main id="screen-home" class="screen active">
+        <header class="home-hero">
+          <h1 class="hero-title">桌球</h1>
+          <p class="hero-sub">离线单人对决 · 选玩法开局</p>
+        </header>
         <section class="section sec-mode">
           <div class="mode-grid" id="modeGrid">
             <!-- v1.2.11 #F4：外层改为 div（button 内不能嵌套 button），
@@ -141,6 +147,7 @@
             <button class="btn btn-ghost" id="btnSettings">游戏设置</button>
           </div>
         </div>
+        <footer class="home-footer">v1.3.9 · 离线版</footer>
       </main>
 
       <!-- 环境场景二级菜单 -->
@@ -495,7 +502,7 @@
             </p>
             <table class="key-table">
               <tr><td>开发者</td><td>huang336</td></tr>
-              <tr><td>版本</td><td id="versionCell">1.3.8</td></tr>
+              <tr><td>版本</td><td id="versionCell">1.3.9</td></tr>
               <tr><td>协议</td><td>GNU GPL v3.0</td></tr>
               <tr>
                 <td>项目源码</td>
@@ -679,6 +686,14 @@
           <p class="about-text dim">
             本应用自 v1.0.4（2026-08-03）起的全部版本变更记录，新版本置顶。详细条目可在每个版本下展开。
           </p>
+
+          <div class="setting-group">
+            <h3>v1.3.9 · 2026-08-22 01:10:00</h3>
+            <p class="about-text dim"><b>1 项修复（消除 v1.3.8 在外观定制 ▸ 与开始游戏之间残留的 60% 视口单一巨缝）：</b></p>
+            <ul class="changelog-list">
+              <li><b>修复主菜单横屏视口下「外观定制 ▸ 与开始游戏」之间残留约 60% 视口高度的单一纯黑巨缝</b>：v1.3.8 虽然把 4 张卡片缩回了自然高度，却用 <code>#screen-home .actions { margin-top: auto }</code> 把开始游戏按钮单独推到屏幕底端，结果在 1280×720 横屏下卡 + 难度 + 外观定制（收起）全部堆在视口顶部，开始游戏悬浮在最底，中间出现一条 60% 视口高度的纯黑大缝。本版把空间策略从「单元素推底」改成「整页均摊」：① <code>#screen-home</code> 的 <code>justify-content</code> 由 <code>flex-start</code> 改为 <code>space-between</code>，让 4（加 hero/footer 后 5）个 flex 子项之间自动等距分布，最大单缝不再出现；② <code>#screen-home .actions</code> 的 <code>margin-top:auto</code> 改回 <code>margin-top:0</code>，<code>padding-top</code> 8→4，由 space-between 接管定位避免双重定位；③ <code>#screen-home</code> 内重新加上克制的 <code>&lt;header class="home-hero"&gt;</code>（"桌球" + 副标题，复用既有 <code>.hero-title</code> 金色渐变样式）与 <code>&lt;footer class="home-footer"&gt;</code>（一行 10px 版本号）作为顶/底视觉锚点；④ ≤560 极矮横屏断点新增 <code>.home-hero, .home-footer { display:none }</code>，把省下的空间还回玩法卡与操作按钮。结果：在 1920×720 / 1280×720 / 900×600 / 844×390 / 640×360 / 420×800 等所有目标视口下，最大纵向纯黑带从 v1.3.8 的 ≈60% 视口高度降到 ≤ 13% 视口高度，且不再复发 v1.3.7 的「卡片过高」与「seg 选择器被压入卡片」bug。</li>
+            </ul>
+          </div>
 
           <div class="setting-group">
             <h3>v1.3.8 · 2026-08-21 18:50:00</h3>
