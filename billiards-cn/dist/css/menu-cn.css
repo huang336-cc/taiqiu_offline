@@ -9,6 +9,10 @@
   --text: #f2f3ef;
   --text-dim: #9fb0a6;
   --border: rgba(255, 255, 255, 0.12);
+  /* v1.3.7：可用视口高度/宽度，由页面 JS 实测 window.innerHeight/innerWidth 写入，
+     用于精确铺满（规避 WebView / 移动浏览器对 100dvh 的支持差异）。默认值 1vh/1vw 作为兜底。 */
+  --vh: 1vh;
+  --vw: 1vw;
   --danger: #d9635a;
   --radius: 14px;
   --safe-top: env(safe-area-inset-top, 0px);
@@ -26,8 +30,10 @@ html,
 body {
   margin: 0;
   padding: 0;
-  height: 100dvh;
-  min-height: 100dvh;
+  /* v1.3.7：用 JS 实测写入的 --vh 作为高度基准，保证页面精确铺满整个屏幕
+     （无论移动浏览器地址栏、还是 APP 沉浸全屏模式）。未注入时回退 100dvh。 */
+  height: calc(var(--vh, 1dvh) * 100);
+  min-height: calc(var(--vh, 1dvh) * 100);
   overflow: hidden;
 }
 
@@ -63,6 +69,13 @@ body {
   padding-bottom: calc(var(--safe-bottom) + max(8px + var(--vv-bottom, 0px), 72px));
   /* v1.1.14：移除「720px 居中限宽」，让菜单页铺满全屏
      （折叠屏展开、宽屏、常规手机都铺满）。 */
+}
+
+/* v1.3.7：安卓 APP 走沉浸全屏（无地址栏/系统栏），不需要网页端的 72px 底部避让兜底，
+   否则会凭空在底部留出一条黑色。由 JS 在 head 脚本里检测到 billiards.local 虚拟域名时
+   给 <html> 加 .in-app（早于 body 解析，避免首屏闪烁）。 */
+html.in-app .app {
+  padding-bottom: calc(var(--safe-bottom) + 8px);
 }
 
 /* ---------- 顶部标题 ---------- */
@@ -431,14 +444,25 @@ body {
   flex-shrink: 0;
 }
 
-/* ---------- 首页：所有按钮平铺一屏，小屏/底部工具栏时可滚动 ---------- */
+/* ---------- 首页：所有按钮平铺一屏，小屏/底部工具栏时可滚动 ----------
+   v1.3.4：让 content 自然堆顶部 + .actions 用 margin-top:auto 紧贴视口底；
+   v1.3.6：曾加 justify-content:center 上下均分留白，但被用户抱怨"中段大黑"。
+   v1.3.11：双端分化。
+   - APP 端（html.in-app）：去掉 v1.3.6 的 center，恢复 v1.3.4 风格的 content-top + actions 贴底
+     —— 回退到用户已经接受的"之前正常的铺满版本"。
+   - 网页端（html:not(.in-app) 见下方）：height:100% + justify-content:flex-start，
+     让 sec-mode 用 flex:1 撑满中段，外观定制默认展开 + actions 紧贴底。 */
 #screen-home {
-  /* v1.3.2：默认即允许纵向滚动，避免 Android Chrome 底部地址栏 overlay 时“开始游戏”被压住；
-     隐藏滚动条保持一屏观感。 */
   overflow-y: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
   gap: 7px;
+}
+
+#screen-home .actions {
+  margin-top: auto; /* v1.3.4：推底，紧贴视口底 */
+  padding-top: 2px;
+  flex: 0 0 auto;
 }
 #screen-home::-webkit-scrollbar {
   display: none;
@@ -458,8 +482,9 @@ body {
   margin-bottom: 0;
 }
 
-/* 玩法区吃掉剩余高度，四张卡片 2×2 自适应铺满 */
-/* 玩法区吃掉剩余高度，四张卡片平铺（自动 4 列） */
+/* v1.3.7-flex：sec-mode 用自然高度（不让 4 张卡片均分高度被无限拉高）。
+   v1.3.11：恢复 v1.3.6 baseline —— APP 端 sec-mode 自然高度、卡片 60px icon；
+   网页端（html:not(.in-app) 见下方）让 sec-mode 用 flex:1 撑满中段。 */
 .sec-mode {
   flex: 0 0 auto;
   display: flex;
@@ -478,6 +503,7 @@ body {
   justify-content: flex-start;
   gap: 4px;
   padding: 8px 6px 10px;
+  min-height: 130px;
 }
 
 .sec-mode .mode-icon {
@@ -489,9 +515,99 @@ body {
   font-size: 15px;
 }
 
-.sec-opponent,
+/* ==========================================================================
+   v1.3.11：网页端（html:not(.in-app)）单独优化铺满
+
+   - 外观定制默认打开（HTML <details ... open>；APP 端由 JS 强行收回 false）。
+   - sec-mode 用 flex:1 撑满"4 张卡"区域的高度，配合 grid-auto-rows:1fr
+     让每张卡自然均分多余空间、消除中段"外观定制与开始游戏之间" 留白。
+   - actions 普通块（btn-start + actions-row 两行）保持 v1.3.6 baseline；
+     margin-top:auto 让 actions 仍紧贴底（不受中段变化影响）。
+   - 安全阀：高宽比 16:9 及以上（如 1920×1080）max-height:60vh 防卡片过高；
+     高宽比 ≤ 9:14（如 iPhone 移动浏览器 portrait）退回自然高度，避免单卡过高。
+   ========================================================================== */
+html:not(.in-app) #screen-home {
+  height: 100%; /* v1.3.11-fix：给 #screen-home 显式高度，sec-mode 的 flex:1 才能 grow 出 free space */
+  justify-content: flex-start; /* 覆盖父级 v1.3.6 baseline 的 center，让 sec-mode flex:1 grow 起作用 */
+  gap: 10px; /* 视觉比 APP 端略宽，与"撑大版"信息密度更匹配 */
+}
+html:not(.in-app) .sec-mode {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+html:not(.in-app) .sec-mode .mode-grid {
+  flex: 1 1 auto; /* 让 grid 容器撑大，grid-auto-rows:1fr 才能把 cards stretch 到整行 */
+  grid-auto-rows: 1fr; /* grid 行均分 mode-grid 容器高度 */
+}
+html:not(.in-app) .sec-mode .mode-card {
+  min-height: 0; /* 解除 v1.3.6 130px 下限，让 flex 撑大起作用 */
+  padding: 14px 6px 16px;
+  gap: 8px;
+}
+html:not(.in-app) .sec-mode .mode-icon {
+  width: 72px;
+  height: 72px;
+}
+html:not(.in-app) .sec-mode .mode-name {
+  font-size: 17px;
+}
+
+/* 安全阀：超高宽比（1920×1080 等桌面宽屏）防 sec-mode 过高失真 */
+@media (min-aspect-ratio: 16/9) {
+  html:not(.in-app) .sec-mode {
+    max-height: 60vh;
+  }
+}
+/* 安全阀：移动竖屏（iPhone Safari 访问网页版）不撑大，避免单卡过高 */
+@media (max-aspect-ratio: 9/14) {
+  html:not(.in-app) .sec-mode {
+    flex: 0 0 auto;
+  }
+  html:not(.in-app) .sec-mode .mode-card {
+    min-height: 130px;
+  }
+  html:not(.in-app) .sec-mode .mode-icon {
+    width: 60px;
+    height: 60px;
+  }
+  html:not(.in-app) .sec-mode .mode-name {
+    font-size: 15px;
+  }
+}
+
+.sec-opponent {
+  flex: 0 0 auto;
+}
+
+/* v1.3.4-fix：外观定制默认折叠（<details> 原生），横屏矮视口首页首屏只留玩法+模式+开始。
+   收起时仅显示标题行，点 summary 展开。
+   v1.3.11：APP 端保持折叠态；网页端由 <details open> 强制展开（HTML 层），
+   APP 端再由 JS 在 init() 起始判 html.in-app 收回 open=false。 */
+.custom-summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+  padding: 4px 2px;
+}
+.custom-summary::-webkit-details-marker {
+  display: none;
+}
+.custom-caret {
+  display: inline-block;
+  font-size: 10px;
+  transition: transform 0.15s ease;
+  color: var(--text-dim);
+}
+.sec-custom[open] .custom-caret {
+  transform: rotate(90deg);
+}
+/* v1.3.11：sec-custom 加少量 padding 让 summary 行更舒展（折叠态 ~40px 高） */
 .sec-custom {
   flex: 0 0 auto;
+  padding: 6px 4px;
 }
 
 /* 外观定制：三个入口横向平铺成卡片，省掉三行纵向空间 */
@@ -536,12 +652,6 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-#screen-home .actions {
-  margin-top: 0;
-  padding-top: 2px;
-  flex: 0 0 auto;
 }
 
 .actions-row {
@@ -910,15 +1020,34 @@ kbd {
   .section { margin-bottom: 4px; }
 }
 
+/* v1.3.6：窄屏（窗口宽度 ≤ 720px）下 mode-grid 改 2 列，避免 4 列被挤出去超界；
+   actions-row 三个按钮 wrap，避免右边被裁 */
+@media (max-width: 720px) {
+  .sec-mode .mode-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .actions-row {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  .actions-row .btn {
+    flex: 1 1 calc(50% - 3px);
+    min-width: 0;
+  }
+}
+
 /* ---------- 横屏适配 ---------- */
-@media (orientation: landscape) and (max-height: 560px) {
+/* v1.3.4-fix：横屏矮视口（含 1920×720 这类 ~720 高）覆盖到 820，避免开始游戏被裁。
+   v1.3.6：放大 mode-icon / mode-name，让卡片更高大、视觉占满中部，配合 #screen-home
+   整体居中消除大片黑色空白。 */
+@media (orientation: landscape) and (max-height: 820px) {
   .app {
     max-width: 100%;
     padding: calc(var(--safe-top) + 8px) calc(var(--safe-right) + 20px)
       calc(var(--safe-bottom) + 8px + var(--vv-bottom, 0px)) calc(var(--safe-left) + 20px);
   }
   .hero {
-    margin-bottom: 8px;
+    margin-bottom: 6px;
   }
   .hero-title {
     font-size: 21px;
@@ -928,34 +1057,50 @@ kbd {
   }
   .sec-mode .mode-grid {
     grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
+    gap: 10px;
   }
   .mode-card {
-    padding: 8px 6px 10px;
-    gap: 3px;
+    padding: 10px 8px 12px;
+    gap: 6px;
   }
   .sec-mode .mode-icon {
-    width: 50px;
-    height: 50px;
+    width: 56px;
+    height: 56px;
   }
   .mode-name {
     font-size: 14px;
     margin-top: 1px;
   }
   .section {
-    margin-bottom: 9px;
+    margin-bottom: 7px;
+  }
+  .sec-custom {
+    margin-bottom: 2px;
   }
   .seg-hint {
     min-height: 0;
-    margin-top: 5px;
+    margin-top: 4px;
   }
   .btn {
-    padding: 10px;
-    font-size: 14px;
+    padding: 11px;
+    font-size: 15px;
   }
   .actions-row {
-    margin-top: 7px;
+    margin-top: 6px;
   }
+}
+
+/* v1.3.11：横屏 ≤560 进一步压缩卡片/字号；#screen-home 滚动兜底 */
+@media (orientation: landscape) and (max-height: 560px) {
+  .hero-title { font-size: 18px; }
+  .mode-card { padding: 4px 4px 6px; }
+  .sec-mode .mode-card { min-height: 80px; }
+  .sec-mode .mode-icon { width: 40px; height: 40px; }
+  .mode-name { font-size: 12px; }
+  .seg-btn { font-size: 11px; padding: 4px 4px; }
+  .menu-row-title { font-size: 10px; }
+  .btn { padding: 7px; font-size: 12px; }
+  .section { margin-bottom: 5px; }
 }
 
 /* v1.1.12 变更履历列表 */

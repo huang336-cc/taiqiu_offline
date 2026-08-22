@@ -43,6 +43,11 @@ cp -r "$WEB_DIST"/. assets/dist/
 # 不要把下载用的 APK 安装包打进 app 的 assets（否则每次构建都会把 dist 里
 # 的历史 .apk 一起塞进安装包，体积翻倍且无意义）。
 rm -f assets/dist/*.apk
+# 同样不要把「发布资产包」打进 app：dist 目录偶尔会残留给 GitHub 出的
+# 单一 zip 发布包（如 taiqiu-vX.Y.Z-release.zip），内含 sdk.tar.gz、
+# 仓库 bundle、源码等，单包可超 40MB——不排掉会把 APK 撑到 40+MB。
+# （v1.3.4 就因漏排此项导致 APK 从 1.8MB 暴涨到 46MB）
+rm -f assets/dist/*.zip assets/dist/*.tar.gz assets/dist/*.tar assets/dist/*.bundle
 
 # 兜底：overlayfs 下新建/截断大文件偶发读到 0 字节或截断（导致装到真机黑屏）。
 # 关键 JS 用 cp -f 覆盖（复用已有 inode，比 rm+cat 新建更稳），

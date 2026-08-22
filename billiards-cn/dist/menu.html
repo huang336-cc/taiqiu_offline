@@ -7,13 +7,62 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover"
     />
     <title>奥特曼的台球 · 离线版</title>
+    <script>
+      // v1.3.7：打开即识别屏幕尺寸，把实测可用高度/宽度写入 CSS 变量，让主菜单精确铺满。
+      // 同时按虚拟域名 billiards.local 识别安卓 APP 沉浸全屏模式（无地址栏/系统栏）。
+      // 注意：先在 <head> 阶段就把 .in-app 挂到 <html> 上，避免首屏按"网页"样式
+      // （72px 底部避让）闪一帧再切换到 APP 样式。
+      (function () {
+        var INAPP = location.hostname === 'billiards.local';
+        if (INAPP) {
+          document.documentElement.classList.add('in-app');
+        }
+        function fitViewport() {
+          var de = document.documentElement;
+          de.style.setProperty('--vh', window.innerHeight * 0.01 + 'px');
+          de.style.setProperty('--vw', window.innerWidth * 0.01 + 'px');
+          var b = document.body;
+          if (!b) {
+            return;
+          }
+          var land = window.innerWidth >= window.innerHeight;
+          b.classList.toggle('orient-landscape', land);
+          b.classList.toggle('orient-portrait', !land);
+          if (INAPP) {
+            b.classList.add('in-app');
+          }
+        }
+        function reveal() {
+          fitViewport();
+          if (document.body) {
+            document.body.classList.add('fit-ready');
+          }
+        }
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', reveal);
+        } else {
+          reveal();
+        }
+        window.addEventListener('load', fitViewport);
+        window.addEventListener('resize', fitViewport);
+        window.addEventListener('orientationchange', function () {
+          setTimeout(fitViewport, 60);
+        });
+        window.__fitViewport = fitViewport;
+      })();
+    </script>
     <link rel="icon" type="image/png" href="favicon.png" />
     <link rel="stylesheet" href="css/menu-cn.css" />
   </head>
   <body>
     <div class="app">
-      <!-- 主体：玩法选择（已移除顶部标题，所有按钮平铺一屏，无需下翻） -->
+      <!-- 主体：玩法选择（v1.3.9：重新加上克制的顶部标题 + 底部版本行作视觉锚点，配合
+           #screen-home 的 justify-content:space-between 把剩余空间均摊到各区段之间，
+           消除 v1.3.8 在外观定制 ▸ 与开始游戏之间残留的 60% 视口单一巨缝） -->
       <main id="screen-home" class="screen active">
+        <!-- v1.3.11：双端分化。APP 端（html.in-app）回退 v1.3.6 baseline；
+             网页端（html:not(.in-app)）由 <details open> + sec-mode flex:1 撑满中段。
+             v1.3.10 的 .home-hero / .home-footer 视觉锚点删除（信息密度已满）。 -->
         <section class="section sec-mode">
           <div class="mode-grid" id="modeGrid">
             <!-- v1.2.11 #F4：外层改为 div（button 内不能嵌套 button），
@@ -59,8 +108,10 @@
           </div>
         </section>
 
-        <section class="section sec-custom">
-          <h2 class="section-title">外观定制</h2>
+        <!-- v1.3.11：网页端默认展开（<details open>）；APP 端由 JS 在 reveal() 后
+             强设 customDetails.open=false 收回折叠态，保持原 v1.3.6 行为。 -->
+        <details class="section sec-custom" id="customDetails" open>
+          <summary class="section-title custom-summary">外观定制 <span class="custom-caret">▸</span></summary>
           <div class="menu-rows menu-tiles" id="customRows">
             <button class="menu-row" data-target="scene">
               <span class="menu-thumb skin-swatch" id="thumbScene"></span>
@@ -84,7 +135,7 @@
               </span>
             </button>
           </div>
-        </section>
+        </details>
 
         <div class="actions">
           <button class="btn btn-primary btn-start" id="btnStart">
@@ -451,7 +502,7 @@
             </p>
             <table class="key-table">
               <tr><td>开发者</td><td>huang336</td></tr>
-              <tr><td>版本</td><td id="versionCell">1.0.17</td></tr>
+              <tr><td>版本</td><td id="versionCell">1.3.11</td></tr>
               <tr><td>协议</td><td>GNU GPL v3.0</td></tr>
               <tr>
                 <td>项目源码</td>
@@ -635,6 +686,67 @@
           <p class="about-text dim">
             本应用自 v1.0.4（2026-08-03）起的全部版本变更记录，新版本置顶。详细条目可在每个版本下展开。
           </p>
+
+          <div class="setting-group">
+            <h3>v1.3.11 · 2026-08-22 03:25:00</h3>
+            <p class="about-text dim"><b>1 项修复（双端分化：APP 端回退到 v1.3.4 风格「content 顶紧凑 + actions 贴底」，网页端单独优化把中段空白填满、底部不再留空）：</b></p>
+            <ul class="changelog-list">
+              <li><b>按用户反馈拆成两端</b>：① <b>「不要折叠外观定制，不要最底下一排的按钮改动布局，网页版底下不要留空」</b> → 网页端（<code>html:not(.in-app)</code>）强制展开外观定制（<code>&lt;details open&gt;</code>），底部三按钮保持 v1.3.6 baseline 的「开始游戏 一行 + 操作介绍/查看回放/游戏设置 一行」普通块（不再用 v1.3.10 的 toolbar grid）。② <b>「app 端的主菜单回退之前正常的铺满版本」</b> → APP 端（<code>html.in-app</code>，billiards.local 虚拟域名）回退到 v1.3.4 baseline 行为：<code>#screen-home</code> 不再 justify-content:center，<code>.actions</code> 用 <code>margin-top:auto</code> 紧贴视口底，外观定制默认折叠（由 JS 在 <code>init()</code> 起始判 <code>html.in-app</code> 后把 <code>customDetails.open=false</code> 收回），v1.3.10 新增的 <code>.home-hero</code> / <code>.home-footer</code> / 折叠态 <code>.custom-current</code> 摘要全部删除。</li>
+              <li><b>网页端单独优化铺满</b>：<code>html:not(.in-app) #screen-home { height:100%; justify-content:flex-start; gap:10px }</code> + <code>.sec-mode { flex:1 1 auto }</code> + <code>.mode-grid { flex:1 1 auto; grid-auto-rows:1fr }</code> + <code>.mode-card { min-height:0; padding:14/6/16; gap:8 }</code> + <code>.mode-icon { 72×72 }</code> + <code>.mode-name { 17px }</code>，让 4 张卡片撑满中段、消除 v1.3.10 在 1280×720 横屏「外观定制 ▸ 与开始游戏之间 60% 视口高度单一黑缝」的视觉问题。安全阀：<code>@media (min-aspect-ratio:16/9) { .sec-mode { max-height:60vh } }</code> 防 1920×1080 等超高视口卡片过高失真；<code>@media (max-aspect-ratio:9/14)</code> 在 iPhone Safari portrait 等移动竖屏下回退到 <code>flex:0 0 auto + min-height:130</code> 防止单卡过高。<b>底部不再留空</b>：actions 用普通块 + 无 margin-top:auto，但因为 sec-mode <code>flex:1</code> 把中段填满、剩余位置由 <code>#screen-home</code> 的 stretch 行为占满，actions 紧贴在 padding-bottom 上沿（在 1280×720 inner viewport 633 高下，actions bottom=630 ≈ vh=633）。</li>
+              <li><b>关键技术点</b>：用既有 <code>&lt;head&gt;</code> 里的 <code>fitViewport()</code> IIFE 注入的 <code>html.in-app</code> 类做端识别，零新引入运行时检测；CSS 用 <code>html:not(.in-app)</code> 选择器覆盖所有网页端差异，安全阀用 <code>@media (aspect-ratio)</code> 防御性写法保证狭长 / 超宽屏不破图；<code>&lt;details open&gt;</code> HTML 属性层强制展开，APP 端由 JS 收回（HTML 写 <code>open</code> 不影响非 JS 场景）。</li>
+              <li><b>验证</b>：1280×720 横屏 web（vh=633）→ actions y=534 h=96 bottom=630 ✓ 贴底、4 卡高 296px；390×844 移动竖屏 web（vh=757）→ 安全阀生效卡片高度自然 155px、actions y=556 h=134 bottom=690 ✓ 贴底；1920×1080 宽屏 web（vh=993）→ <code>max-height:60vh</code> 生效卡高 596px、actions y=834 h=89 bottom=924 ✓ 贴底；1280×720 APP in-app 折叠态 → main y=13 h=617, secMode y=13 (顶部对齐), actions y=534 h=96 bottom=630 ≈ vh=633 ✓ 紧贴底、<code>detailsOpen=false</code> 折叠态确认。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.3.10 · 2026-08-22 02:35:00</h3>
+            <p class="about-text dim"><b>1 项修复（v1.3.9 把 60% 单缝均分成 6 段小缝后仍被读作"还有大片空白"，改为 toolbar + 信息密度方案）：</b></p>
+            <ul class="changelog-list">
+              <li><b>折叠态「开始游戏 + 操作介绍/查看回放/游戏设置」改成 1 行 toolbar，最大单缝不再出现</b>：v1.3.9 用 <code>justify-content: space-between</code> 把 60% 视口的单缝均分成 6 段每段约 71px 的小缝（≈ 10% 视口），结果用户视觉上仍读作"网页版还有大片空白"。本版改方案：① <code>#screen-home .actions</code> 改成单行 toolbar grid（<code>grid-template-columns: 1.7fr 1fr</code>，开始游戏占左 1.7fr，操作介绍/查看回放/游戏设置 3 个按钮占右 1fr 内 3 sub-col），整体高度从 2 行 105px 压到 1 行 50px，省下 55px；② toolbar 用 <code>margin-top: auto</code> 始终紧贴视口底部，"开始游戏"按钮和 3 个 ghost 按钮在同一行，视觉重心稳，**"操作介绍"那行不再被压扁或推出框外**；③ <code>#screen-home</code> 由 v1.3.9 的 <code>space-between</code> 改回 <code>flex-start</code>，不再切 6 段等距，留白集中在 hero↔sec-mode 中段 + sec-cust↔toolbar 末段两处，视觉上读作"中部留白 + 贴底操作区"，不再是分散的 6 条黑带；④ <code>.sec-custom</code> summary 行加上 <code>&lt;span class="custom-current"&gt;</code> 显示当前已选项摘要（场景 · 球杆 · 台面），折叠态一眼看出当前定制，无需展开；⑤ <code>.home-hero</code> 加 hairline border + 弱金色阴影、字号 18→22，让顶/底锚点视觉上更清晰；⑥ ≤720 横屏断点（含 1280×720 / 1920×720 桌面场景）隐藏 hero/footer，省下 73px；⑦ <code>#screen-home</code> 内 gap 由 7→5，再次让出纵向 12px。结果：折叠态在 1280×720 inner viewport 下不再有"开始游戏按钮"和"操作介绍按钮"被 60% 视口的留白隔开，工具栏紧贴底部，操作按钮不再被压扁或推出屏幕。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.3.9 · 2026-08-22 01:10:00</h3>
+            <p class="about-text dim"><b>1 项修复（消除 v1.3.8 在外观定制 ▸ 与开始游戏之间残留的 60% 视口单一巨缝）：</b></p>
+            <ul class="changelog-list">
+              <li><b>修复主菜单横屏视口下「外观定制 ▸ 与开始游戏」之间残留约 60% 视口高度的单一纯黑巨缝</b>：v1.3.8 虽然把 4 张卡片缩回了自然高度，却用 <code>#screen-home .actions { margin-top: auto }</code> 把开始游戏按钮单独推到屏幕底端，结果在 1280×720 横屏下卡 + 难度 + 外观定制（收起）全部堆在视口顶部，开始游戏悬浮在最底，中间出现一条 60% 视口高度的纯黑大缝。本版把空间策略从「单元素推底」改成「整页均摊」：① <code>#screen-home</code> 的 <code>justify-content</code> 由 <code>flex-start</code> 改为 <code>space-between</code>，让 4（加 hero/footer 后 5）个 flex 子项之间自动等距分布，最大单缝不再出现；② <code>#screen-home .actions</code> 的 <code>margin-top:auto</code> 改回 <code>margin-top:0</code>，<code>padding-top</code> 8→4，由 space-between 接管定位避免双重定位；③ <code>#screen-home</code> 内重新加上克制的 <code>&lt;header class="home-hero"&gt;</code>（"桌球" + 副标题，复用既有 <code>.hero-title</code> 金色渐变样式）与 <code>&lt;footer class="home-footer"&gt;</code>（一行 10px 版本号）作为顶/底视觉锚点；④ ≤560 极矮横屏断点新增 <code>.home-hero, .home-footer { display:none }</code>，把省下的空间还回玩法卡与操作按钮。结果：在 1920×720 / 1280×720 / 900×600 / 844×390 / 640×360 / 420×800 等所有目标视口下，最大纵向纯黑带从 v1.3.8 的 ≈60% 视口高度降到 ≤ 13% 视口高度，且不再复发 v1.3.7 的「卡片过高」与「seg 选择器被压入卡片」bug。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.3.8 · 2026-08-21 18:50:00</h3>
+            <p class="about-text dim"><b>1 项修复（修复 v1.3.7 模式卡片撑大 + seg 行重叠到卡片）：</b></p>
+            <ul class="changelog-list">
+              <li><b>修复主菜单「游戏模式」4 张卡片纵向被撑大、seg 选择器被压到卡片内部</b>：v1.3.7 用 sec-mode flex:1 + mode-grid grid-auto-rows:1fr 让 4 张卡片均分视口剩余高度，结果在 1920×720 横屏下卡片被拉成 ~280px 高、占视口的 39%，且把「自己练习 / 电脑·稳健 / 电脑·激进」等 seg 选择器压到了卡片内部造成视觉重叠。本版修正：① sec-mode 改回自然高度（flex:0 0 auto）；② mode-grid 改回 grid-auto-rows:auto，让 4 张卡片按内容自然行高；③ mode-card 缩小视觉重量（min-height:130、padding 6/4/8、mode-icon 48×48、mode-name 13px），既保持卡片视觉重量又不挤压其他区段；④ mode-grid gap 8→10 让卡片与下方 seg 行之间有更明显的视觉分离；⑤ 560 极矮横屏断点重置 min-height=80 保证 640×360 等极矮视口也不会撑高；⑥ #screen-home .actions 把被覆盖掉的 margin-top:0 改回 margin-top:auto，让 actions 真正贴底、避免底部留大片黑。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.3.7 · 2026-08-21 18:05:00</h3>
+            <p class="about-text dim"><b>1 项修复（主菜单真正铺满整屏，APP 与网页同步）：</b></p>
+            <ul class="changelog-list">
+              <li><b>修复 v1.3.6 居中方案仍留黑的问题</b>：v1.3.6 用 justify-content:center 让内容垂直居中后，上下仍有大片对称黑边，加上 APP 沉浸全屏里仍被 72px 网页端底部避让白白吃掉一截。本版本按需求改为「打开后先识别屏幕尺寸，再把主菜单铺满」：① 移除 #screen-home 的居中，改为 sec-mode 用 flex:1 吃掉中间剩余高度，mode-grid 用 grid-auto-rows:1fr 把 4 张卡片纵向撑满（窄屏 2×2 同样撑满）；② menu.html head 加 fitViewport 脚本，把 window.innerHeight 实测值写入 --vh，让 html/body/.app 以实测视口高度为准；③ 按虚拟域名 billiards.local 识别安卓 APP，给 html 挂 .in-app 关掉 72px 底部兜底（早于 body 解析避免首屏闪烁）；④ MainActivity 开启 setUseWideViewPort 强制按设备宽度布局，并在 onPageFinished 再次触发 fitViewport 兜底。结果：1920×720 / 1080×720 / 900×600 / 640×360 / 844×390 / 420×800 全部铺满，APP 底部不再有黑条。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.3.6 · 2026-08-21 17:25:00</h3>
+            <p class="about-text dim"><b>1 项修复（横屏 / 窄屏主菜单大片黑色空白）：</b></p>
+            <ul class="changelog-list">
+              <li><b>修复 1920×720 / 1080×720 横屏与窄屏下「主菜单」大片黑色空白</b>：原 #screen-home 内部仅紧凑堆叠 sec-mode + sec-opponent + sec-custom + actions，而 mode-icon 在横屏断点被压缩到 46px，导致卡片视觉单薄、内容集中在屏幕中段且上下大量黑色。本次让 #screen-home 整体垂直居中（上下空白对称），同时在横屏 max-height:820px 断点把 mode-icon 放大到 64px、cards padding/mode-name 微调、在 ≤720px 窄屏给 mode-grid 2 列兜底 + actions-row 包裹兜底；APK 与网页同步生效。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.3.5 · 2026-08-21 16:33:00</h3>
+            <p class="about-text dim"><b>3 项修复（APK 安装失败 + 体积暴涨 + 横屏菜单被裁）：</b></p>
+            <ul class="changelog-list">
+              <li><b>修复 APK 安装报 PackageInfo is null</b>：此前 clean APK 仅用 jarsigner 签 v1 签名，而 AndroidManifest 的 targetSdkVersion=35，Android 14（API 34）起强制要求 v2/v3 签名，导致系统拒绝安装、解析不到包信息。本次改用本地 apksigner 签 v1+v2+v3（同原 keystore），已按 min-sdk 34 强制校验通过。</li>
+              <li><b>修复 APK 体积暴涨至 47MB</b>：build-apk.sh 整目录拷贝前端 dist 时只排除了 *.apk、漏排 *.zip，把 GitHub 发布用的 44MB 资产包误打进 assets/dist。本次在打包脚本中追加排除 *.zip/*.tar.gz/*.tar/*.bundle，重出后 APK 回到 1.8MB 零权限。</li>
+              <li><b>修复主菜单横屏矮视口「开始游戏」按钮被裁需下滑</b>：原响应式断点只覆盖横屏 &lt;560px，1920×720 横屏落空导致内容溢出、开始按钮被裁且无法滚动。本次扩展横屏断点至 max-height:820px 并新增极矮档，同时将「外观定制」改为原生折叠（默认收起），横屏首屏即可看见开始游戏。</li>
+            </ul>
+          </div>
 
           <div class="setting-group">
             <h3>v1.3.4 · 2026-08-17 01:46:00</h3>
