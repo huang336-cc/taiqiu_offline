@@ -60,10 +60,9 @@
            #screen-home 的 justify-content:space-between 把剩余空间均摊到各区段之间，
            消除 v1.3.8 在外观定制 ▸ 与开始游戏之间残留的 60% 视口单一巨缝） -->
       <main id="screen-home" class="screen active">
-        <header class="home-hero">
-          <h1 class="hero-title">桌球</h1>
-          <p class="hero-sub">离线单人对决 · 选玩法开局</p>
-        </header>
+        <!-- v1.3.11：双端分化。APP 端（html.in-app）回退 v1.3.6 baseline；
+             网页端（html:not(.in-app)）由 <details open> + sec-mode flex:1 撑满中段。
+             v1.3.10 的 .home-hero / .home-footer 视觉锚点删除（信息密度已满）。 -->
         <section class="section sec-mode">
           <div class="mode-grid" id="modeGrid">
             <!-- v1.2.11 #F4：外层改为 div（button 内不能嵌套 button），
@@ -109,8 +108,10 @@
           </div>
         </section>
 
-        <details class="section sec-custom" id="customDetails">
-          <summary class="section-title custom-summary">外观定制 <span class="custom-caret">▸</span><span class="custom-current" id="customCurrent">雪山 · 随台面 · 经典原木</span></summary>
+        <!-- v1.3.11：网页端默认展开（<details open>）；APP 端由 JS 在 reveal() 后
+             强设 customDetails.open=false 收回折叠态，保持原 v1.3.6 行为。 -->
+        <details class="section sec-custom" id="customDetails" open>
+          <summary class="section-title custom-summary">外观定制 <span class="custom-caret">▸</span></summary>
           <div class="menu-rows menu-tiles" id="customRows">
             <button class="menu-row" data-target="scene">
               <span class="menu-thumb skin-swatch" id="thumbScene"></span>
@@ -147,7 +148,6 @@
             <button class="btn btn-ghost" id="btnSettings">游戏设置</button>
           </div>
         </div>
-        <footer class="home-footer">v1.3.10 · 离线版</footer>
       </main>
 
       <!-- 环境场景二级菜单 -->
@@ -502,7 +502,7 @@
             </p>
             <table class="key-table">
               <tr><td>开发者</td><td>huang336</td></tr>
-              <tr><td>版本</td><td id="versionCell">1.3.10</td></tr>
+              <tr><td>版本</td><td id="versionCell">1.3.11</td></tr>
               <tr><td>协议</td><td>GNU GPL v3.0</td></tr>
               <tr>
                 <td>项目源码</td>
@@ -686,6 +686,17 @@
           <p class="about-text dim">
             本应用自 v1.0.4（2026-08-03）起的全部版本变更记录，新版本置顶。详细条目可在每个版本下展开。
           </p>
+
+          <div class="setting-group">
+            <h3>v1.3.11 · 2026-08-22 03:25:00</h3>
+            <p class="about-text dim"><b>1 项修复（双端分化：APP 端回退到 v1.3.4 风格「content 顶紧凑 + actions 贴底」，网页端单独优化把中段空白填满、底部不再留空）：</b></p>
+            <ul class="changelog-list">
+              <li><b>按用户反馈拆成两端</b>：① <b>「不要折叠外观定制，不要最底下一排的按钮改动布局，网页版底下不要留空」</b> → 网页端（<code>html:not(.in-app)</code>）强制展开外观定制（<code>&lt;details open&gt;</code>），底部三按钮保持 v1.3.6 baseline 的「开始游戏 一行 + 操作介绍/查看回放/游戏设置 一行」普通块（不再用 v1.3.10 的 toolbar grid）。② <b>「app 端的主菜单回退之前正常的铺满版本」</b> → APP 端（<code>html.in-app</code>，billiards.local 虚拟域名）回退到 v1.3.4 baseline 行为：<code>#screen-home</code> 不再 justify-content:center，<code>.actions</code> 用 <code>margin-top:auto</code> 紧贴视口底，外观定制默认折叠（由 JS 在 <code>init()</code> 起始判 <code>html.in-app</code> 后把 <code>customDetails.open=false</code> 收回），v1.3.10 新增的 <code>.home-hero</code> / <code>.home-footer</code> / 折叠态 <code>.custom-current</code> 摘要全部删除。</li>
+              <li><b>网页端单独优化铺满</b>：<code>html:not(.in-app) #screen-home { height:100%; justify-content:flex-start; gap:10px }</code> + <code>.sec-mode { flex:1 1 auto }</code> + <code>.mode-grid { flex:1 1 auto; grid-auto-rows:1fr }</code> + <code>.mode-card { min-height:0; padding:14/6/16; gap:8 }</code> + <code>.mode-icon { 72×72 }</code> + <code>.mode-name { 17px }</code>，让 4 张卡片撑满中段、消除 v1.3.10 在 1280×720 横屏「外观定制 ▸ 与开始游戏之间 60% 视口高度单一黑缝」的视觉问题。安全阀：<code>@media (min-aspect-ratio:16/9) { .sec-mode { max-height:60vh } }</code> 防 1920×1080 等超高视口卡片过高失真；<code>@media (max-aspect-ratio:9/14)</code> 在 iPhone Safari portrait 等移动竖屏下回退到 <code>flex:0 0 auto + min-height:130</code> 防止单卡过高。<b>底部不再留空</b>：actions 用普通块 + 无 margin-top:auto，但因为 sec-mode <code>flex:1</code> 把中段填满、剩余位置由 <code>#screen-home</code> 的 stretch 行为占满，actions 紧贴在 padding-bottom 上沿（在 1280×720 inner viewport 633 高下，actions bottom=630 ≈ vh=633）。</li>
+              <li><b>关键技术点</b>：用既有 <code>&lt;head&gt;</code> 里的 <code>fitViewport()</code> IIFE 注入的 <code>html.in-app</code> 类做端识别，零新引入运行时检测；CSS 用 <code>html:not(.in-app)</code> 选择器覆盖所有网页端差异，安全阀用 <code>@media (aspect-ratio)</code> 防御性写法保证狭长 / 超宽屏不破图；<code>&lt;details open&gt;</code> HTML 属性层强制展开，APP 端由 JS 收回（HTML 写 <code>open</code> 不影响非 JS 场景）。</li>
+              <li><b>验证</b>：1280×720 横屏 web（vh=633）→ actions y=534 h=96 bottom=630 ✓ 贴底、4 卡高 296px；390×844 移动竖屏 web（vh=757）→ 安全阀生效卡片高度自然 155px、actions y=556 h=134 bottom=690 ✓ 贴底；1920×1080 宽屏 web（vh=993）→ <code>max-height:60vh</code> 生效卡高 596px、actions y=834 h=89 bottom=924 ✓ 贴底；1280×720 APP in-app 折叠态 → main y=13 h=617, secMode y=13 (顶部对齐), actions y=534 h=96 bottom=630 ≈ vh=633 ✓ 紧贴底、<code>detailsOpen=false</code> 折叠态确认。</li>
+            </ul>
+          </div>
 
           <div class="setting-group">
             <h3>v1.3.10 · 2026-08-22 02:35:00</h3>
