@@ -109,11 +109,13 @@
           </div>
         </section>
 
-        <!-- v1.3.11：网页端默认展开（<details open>）。
-             v1.3.12：APP 端也不再由 JS 收回折叠态，双端均展开。
-             v1.3.13：仅网页端在横屏矮视口下加了布局安全阀，APP 端零改动。 -->
-        <details class="section sec-custom" id="customDetails" open>
-          <summary class="section-title custom-summary">外观定制 <span class="custom-caret">▸</span></summary>
+        <!-- v1.3.14：删除外观定制折叠机制。
+             v1.3.13 及之前用 <details id="customDetails" open> + JS 折叠 APP 端
+             （v1.3.12 已删除 JS 折叠逻辑，HTML 仍保留 details 实现）。
+             现按用户诉求"折叠功能删除，默认都展开"，彻底改为普通 <section>，
+             双端（APP + 网页）一律永久展开，不再有 caret。 -->
+        <section class="section sec-custom" id="customSection">
+          <h2 class="section-title sec-custom-title">外观定制</h2>
           <div class="menu-rows menu-tiles" id="customRows">
             <button class="menu-row" data-target="scene">
               <span class="menu-thumb skin-swatch" id="thumbScene"></span>
@@ -137,7 +139,7 @@
               </span>
             </button>
           </div>
-        </details>
+        </section>
 
         <div class="actions">
           <button class="btn btn-primary btn-start" id="btnStart">
@@ -504,7 +506,7 @@
             </p>
             <table class="key-table">
               <tr><td>开发者</td><td>huang336</td></tr>
-              <tr><td>版本</td><td id="versionCell">1.3.13</td></tr>
+              <tr><td>版本</td><td id="versionCell">1.3.14</td></tr>
               <tr><td>协议</td><td>GNU GPL v3.0</td></tr>
               <tr>
                 <td>项目源码</td>
@@ -688,6 +690,15 @@
           <p class="about-text dim">
             本应用自 v1.0.4（2026-08-03）起的全部版本变更记录，新版本置顶。详细条目可在每个版本下展开。
           </p>
+
+          <div class="setting-group">
+            <h3>v1.3.14 · 2026-08-23 02:50:00</h3>
+            <p class="about-text dim"><b>2 项变更（1 项删除折叠、1 项修底部留空）：</b></p>
+            <ul class="changelog-list">
+              <li><b>删除外观定制折叠功能（双端永久展开）</b>：按用户诉求"折叠功能删除，默认都展开不需要折叠，其他不要改动"。v1.3.13 之前 <code>&lt;details id="customDetails" open&gt;</code> + <code>&lt;summary&gt;</code> + <code>.custom-caret</code> 的折叠机制仅在 HTML 层失效（JS 早被删），但 DOM 结构里仍挂着 <code>details/summary/caret ▾</code> 的视觉痕迹（旋转 90° 的折叠指示器）。本版彻底把 <code>&lt;details&gt;</code> 改为普通 <code>&lt;section class="sec-custom"&gt;</code>、<code>&lt;summary&gt;</code> 改为 <code>&lt;h2 class="sec-custom-title"&gt;</code>，同步删除 <code>.custom-summary</code>/<code>.custom-caret</code>/<code>.sec-custom[open] .custom-caret</code>/<code>::-webkit-details-marker</code> 等折叠 CSS。 <b>APP 端零行为改动</b>（v1.3.12 起 APP 端本就展开），仅视觉去掉了 caret，HTML 结构和 CSS 选择器变更不涉及 JS 的 <code>#customRows .menu-row</code> 点击绑定。</li>
+              <li><b>修复网页端横屏矮视口（vh ≤ 450 且方向为 landscape）底部留空</b>：v1.3.13 在 814×358 / 844×390 这种手机横屏下让 <code>.sec-mode</code> 改 <code>flex:0 0 auto</code> 自然高度，但仍超 <code>#screen-home</code> 内容（实测总高 384px > vh 271px，超出 113px），<code>.actions { margin-top: auto }</code> 把 actions 推到 vh 之下不可见，截图下方那条黑色区域就是被 <code>overflow-y: auto</code> 隐藏的内容 + 浏览器 UI + 系统栏。本版新增 <code>@media (max-height: 450px) and (orientation: landscape)</code> + <code>html:not(.in-app)</code> 紧凑规则：scn-mode 4 卡进一步缩（mode-icon 48→36px、padding 8 5 9 → 4 5 5、字号 13→12px），外观定制 3 块图卡缩（menu-tiles menu-thumb height 64→32px、menu-row padding 7 7 8 → 3 3 4、标题 margin 0 0 7 → 0 0 3、字号 12→11px），actions 取消多余 padding-top。全内容总高 384 → ~263px ≈ vh 271，actions 由 margin-top:auto 自然贴底。<b>APP 端零改动</b>，所有规则均在 <code>html:not(.in-app)</code> 内。</li>
+            </ul>
+          </div>
 
           <div class="setting-group">
             <h3>v1.3.13 · 2026-08-22 22:50:00</h3>

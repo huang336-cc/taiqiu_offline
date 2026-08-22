@@ -611,39 +611,89 @@ html:not(.in-app) .sec-mode .mode-name {
   }
 }
 
+/* v1.3.14-fix：横屏矮视口更紧凑（max-height ≤ 450）—— 修复 v1.3.13 修复后仍
+   内容溢出 #screen-home 高度的问题。
+   实测 814×358（vh=271）：scn-mode 94 + 对手 30 + 外观定制 163 + actions 73 ≈ 384，
+   超出 vh 271 约 113px，.actions { margin-top:auto } 把它推到 vh 下不可见，
+   截图下方那块黑就是被 overflow-y:auto 隐藏的部分。
+   修复：vh ≤ 450 且 landscape 时进一步紧凑全局 gap + 外观定制 + actions。
+   说明：v1.3.13 的 @media (max-height:500) 已经把 sec-mode 缩到 ~94px（在更高视口
+   如 vh=470 仍能容纳），所以 v1.3.14 仅在更窄（≤ 450）的横屏下进一步压缩
+   外观定制 3 块按钮 + actions padding。 */
+@media (max-height: 450px) and (orientation: landscape) {
+  html:not(.in-app) #screen-home {
+    gap: 4px;
+    padding: 2px 0 0;
+  }
+  /* 紧凑 sec-mode：覆盖 v1.3.13 max-height:500 的尺寸（更激进） */
+  html:not(.in-app) .sec-mode { min-height: 0; }
+  html:not(.in-app) .sec-mode .mode-grid { flex: 0 0 auto; grid-auto-rows: auto; }
+  html:not(.in-app) .sec-mode .mode-card {
+    min-height: 0;
+    padding: 2px 3px 3px;
+    gap: 2px;
+  }
+  html:not(.in-app) .sec-mode .mode-icon {
+    width: 30px;
+    height: 30px;
+    margin: 0;
+  }
+  html:not(.in-app) .sec-mode .mode-name {
+    font-size: 11px;
+    margin-top: 0;
+  }
+  html:not(.in-app) .sec-mode .mode-meta {
+    font-size: 9px;
+    line-height: 1.05;
+  }
+  /* 对手选择紧靠 */
+  html:not(.in-app) .sec-opponent { margin-bottom: 0; padding: 0; }
+  /* 紧凑外观定制：3 块图卡缩 */
+  html:not(.in-app) .sec-custom { padding: 1px 4px; }
+  html:not(.in-app) .sec-custom-title { margin: 0 0 2px; font-size: 11px; }
+  html:not(.in-app) .sec-custom .menu-tiles { gap: 3px; margin-top: 0; }
+  html:not(.in-app) .sec-custom .menu-row { padding: 2px 2px 3px; gap: 2px; }
+  html:not(.in-app) .sec-custom .menu-thumb { height: 24px; border-radius: 5px; }
+  html:not(.in-app) .sec-custom .menu-row-title { font-size: 10px; }
+  html:not(.in-app) .sec-custom .menu-row-val { font-size: 9px; }
+  /* actions 紧凑 padding + sticky 兜底贴住 #screen-home 视口底（防止极端矮视口下少量溢出） */
+  html:not(.in-app) #screen-home .actions {
+    padding-top: 0;
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    background: transparent;
+  }
+}
+
 .sec-opponent {
   flex: 0 0 auto;
 }
 
-/* v1.3.4-fix：外观定制默认折叠（<details> 原生），横屏矮视口首页首屏只留玩法+模式+开始。
-   收起时仅显示标题行，点 summary 展开。
-   v1.3.11：APP 端保持折叠态；网页端由 <details open> 强制展开（HTML 层），
-   APP 端再由 JS 在 init() 起始判 html.in-app 收回 open=false。 */
-.custom-summary {
-  cursor: pointer;
-  list-style: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  user-select: none;
-  padding: 4px 2px;
-}
-.custom-summary::-webkit-details-marker {
-  display: none;
-}
-.custom-caret {
-  display: inline-block;
-  font-size: 10px;
-  transition: transform 0.15s ease;
-  color: var(--text-dim);
-}
-.sec-custom[open] .custom-caret {
-  transform: rotate(90deg);
-}
-/* v1.3.11：sec-custom 加少量 padding 让 summary 行更舒展（折叠态 ~40px 高） */
+/* v1.3.14：删除外观定制折叠机制。
+   v1.3.13 及之前用 <details>/<summary>/.custom-caret 提供"折叠-展开"两态；
+   现按用户诉求"折叠功能删除"，彻底改为普通 <section> + 永久展开：
+   - HTML：<details ... open> → <section class="sec-custom">，<summary> → <h2 class="sec-custom-title">
+   - CSS：删除 .custom-summary/.custom-summary::-webkit-details-marker/.custom-caret/.sec-custom[open] .custom-caret
+   - JS：v1.3.12 已删除 init() 中的 customDetails.open=false，无需再动。
+   双端（APP + 网页）外观定制一律永久展开，不再有任何折叠痕迹。 */
 .sec-custom {
   flex: 0 0 auto;
   padding: 6px 4px;
+}
+
+/* v1.3.14：sec-custom-title 是普通 h2，不再是 <summary>
+   继承 .section-title（margin:0 0 7px, font-size:12px, color dim）
+   这里强制 section-title 的样式生效（防止某些覆盖被继承错），并去掉原 summary
+   的 click/list-style 行为 */
+.sec-custom-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+  letter-spacing: 1.5px;
+  cursor: default;
+  user-select: none;
 }
 
 /* 外观定制：三个入口横向平铺成卡片，省掉三行纵向空间 */
