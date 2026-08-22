@@ -963,16 +963,9 @@
   /* ---------------- 初始化 ---------------- */
 
   function init() {
-    // v1.3.11：双端分化。
-    // 网页端（默认）HTML 里已给 <details ... open> 让外观定制默认展开；
-    // APP 端（billiards.local / html.in-app）必须收回 open，回退到 v1.3.6
-    // 折叠态 baseline（用户要求"app 端回退之前正常的铺满版本"）。
-    var htmlEl = document.documentElement
-    var inApp = htmlEl.classList.contains("in-app")
-    var customDetails = document.getElementById("customDetails")
-    if (customDetails && inApp) {
-      customDetails.open = false
-    }
+    // v1.3.12：外观定制双端均默认展开。
+    // HTML 里 <details id="customDetails" open> 已默认展开；不再对 APP 端（html.in-app）
+    // 强制收回，用户要求"app 端外观定制不要折叠"。
 
     initModes()
     initOpponents()
