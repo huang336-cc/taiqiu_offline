@@ -575,6 +575,42 @@ html:not(.in-app) .sec-mode .mode-name {
   }
 }
 
+/* v1.3.13-fix：网页端横屏矮视口安全阀。
+   现象：手机横屏 vh ≈ 300 时，sec-mode 的 flex:1 + min-height:0 会把它压成 h=0，
+         mode-card overflow:hidden 把 72px mode-icon 切成只剩一窄条，
+         跟下面的 sec-opponent / sec-custom 撞在一起，视觉上"重叠挤压"。
+   修复：横屏 + max-height:500px 时 sec-mode 改为自然高度，缩小 mode-icon / 字号，
+         让 4 张卡片有合理可读高度（≈80-110px）且与下方有视觉间距。 */
+@media (max-height: 500px) and (orientation: landscape) {
+  html:not(.in-app) #screen-home { gap: 8px; }
+  html:not(.in-app) .sec-mode {
+    flex: 0 0 auto;
+    min-height: 0;
+  }
+  html:not(.in-app) .sec-mode .mode-grid {
+    flex: 0 0 auto;
+    grid-auto-rows: auto;
+  }
+  html:not(.in-app) .sec-mode .mode-card {
+    min-height: 0;
+    padding: 8px 5px 9px;
+    gap: 4px;
+  }
+  html:not(.in-app) .sec-mode .mode-icon {
+    width: 48px;
+    height: 48px;
+    margin: 4px 0 0;
+  }
+  html:not(.in-app) .sec-mode .mode-name {
+    font-size: 13px;
+    margin-top: 0;
+  }
+  html:not(.in-app) .sec-mode .mode-meta {
+    font-size: 10px;
+    line-height: 1.2;
+  }
+}
+
 .sec-opponent {
   flex: 0 0 auto;
 }

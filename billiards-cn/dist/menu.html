@@ -109,8 +109,9 @@
           </div>
         </section>
 
-        <!-- v1.3.12：外观定制双端均默认展开（<details open> 即展开；
-             APP 端不再由 JS 强设 customDetails.open=false，保持展开态）。 -->
+        <!-- v1.3.11：网页端默认展开（<details open>）。
+             v1.3.12：APP 端也不再由 JS 收回折叠态，双端均展开。
+             v1.3.13：仅网页端在横屏矮视口下加了布局安全阀，APP 端零改动。 -->
         <details class="section sec-custom" id="customDetails" open>
           <summary class="section-title custom-summary">外观定制 <span class="custom-caret">▸</span></summary>
           <div class="menu-rows menu-tiles" id="customRows">
@@ -503,7 +504,7 @@
             </p>
             <table class="key-table">
               <tr><td>开发者</td><td>huang336</td></tr>
-              <tr><td>版本</td><td id="versionCell">1.3.12</td></tr>
+              <tr><td>版本</td><td id="versionCell">1.3.13</td></tr>
               <tr><td>协议</td><td>GNU GPL v3.0</td></tr>
               <tr>
                 <td>项目源码</td>
@@ -687,6 +688,14 @@
           <p class="about-text dim">
             本应用自 v1.0.4（2026-08-03）起的全部版本变更记录，新版本置顶。详细条目可在每个版本下展开。
           </p>
+
+          <div class="setting-group">
+            <h3>v1.3.13 · 2026-08-22 22:50:00</h3>
+            <p class="about-text dim"><b>1 项修复（仅网页端，APP 不动）：</b></p>
+            <ul class="changelog-list">
+              <li><b>网页端横屏矮视口（vh ≤ 500 且方向为 landscape）下菜单重叠修复</b>：手机横屏（典型 844×390 vh=303 / 932×430 vh=343 等）浏览网页版时，<code>.sec-mode</code> 的 <code>flex:1 1 auto + min-height:0</code> 在中段空间被其他 section 抢完后被压成 h=0，4 张 mode-card 的 <code>overflow:hidden</code> 把 72px 的 mode-icon 只露出 ~32px 一窄条（看上去像图标被裁切），且底边直接贴上 <code>.sec-opponent</code>，再紧贴 <code>.sec-custom</code>，与下方外观定制 3 张大图视觉上挤压重叠。本版新增 <code>@media (max-height: 500px) and (orientation: landscape)</code> + <code>html:not(.in-app)</code> 选择器安全阀：横屏矮视口下 <code>.sec-mode</code> 改为 <code>flex:0 0 auto</code> 自然高度、<code>mode-icon</code> 缩到 48px、字号缩到 13px，让 4 张卡有合理可读高度（~94px）且与下方各 section 间保留 8px gap。量化验证：844×390 网页端 <code>sec-mode h: 0 → 94</code>；APP 端 844×390 同视口 <code>sec-mode h=90</code> 完全不变；桌面横屏 1280×720 / 移动竖屏 390×844 行为不变。<b>APP 端零改动</b>，所有规则均在 <code>html:not(.in-app)</code> 选择器内，<code>html.in-app</code> 命中零条。</li>
+            </ul>
+          </div>
 
           <div class="setting-group">
             <h3>v1.3.12 · 2026-08-22 14:15:00</h3>
