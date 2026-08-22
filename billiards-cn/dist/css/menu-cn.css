@@ -656,18 +656,47 @@ html:not(.in-app) .sec-mode .mode-name {
   html:not(.in-app) .sec-custom .menu-thumb { height: 24px; border-radius: 5px; }
   html:not(.in-app) .sec-custom .menu-row-title { font-size: 10px; }
   html:not(.in-app) .sec-custom .menu-row-val { font-size: 9px; }
-  /* actions 紧凑 padding + sticky 兜底贴住 #screen-home 视口底（防止极端矮视口下少量溢出） */
-  html:not(.in-app) #screen-home .actions {
-    padding-top: 0;
-    position: sticky;
-    bottom: 0;
-    z-index: 1;
-    background: transparent;
-  }
+  /* actions 紧凑 padding 留给下方 @media (orientation:landscape) 统一处理 sticky 兜底 */
 }
 
 .sec-opponent {
   flex: 0 0 auto;
+}
+
+/* v1.3.15：所有横屏（不限 vh）网页端 sec-mode 撑满中段 + actions sticky 兜底贴底，
+   移除 margin-top:auto 推底。根因是 #screen-home{ height:100% } + .actions{ margin-top:auto }
+   的对抗——之前在内容总高 < vh 时 margin-top:auto 会在 customSection 与 actions 之间
+   制造出 flex 真空（用户实拍"操作介绍 一排下方一大片空黑"就是这个）。本规则双管齐下：
+   ① 让 .sec-mode 强制 flex:1 吃满剩余中段；② 让 .actions 用 sticky bottom:0 兜底，
+   即使 450/500 紧凑段把它再压回自然高度也不留白。APP 端不命中此规则，
+   html.in-app 系列行动保持 v1.3.4 baseline 的 margin-top:auto 推底。 */
+@media (orientation: landscape) {
+  html:not(.in-app) #screen-home {
+    height: 100%;
+    justify-content: flex-start;
+    gap: 10px;
+  }
+  html:not(.in-app) .sec-mode {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  html:not(.in-app) .sec-mode .mode-grid {
+    flex: 1 1 auto;
+    grid-auto-rows: 1fr;
+    align-content: stretch;
+  }
+  html:not(.in-app) .sec-mode .mode-card {
+    min-height: 0;
+  }
+  html:not(.in-app) #screen-home .actions {
+    margin-top: 0;
+    padding-top: 2px;
+    flex: 0 0 auto;
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    background: transparent;
+  }
 }
 
 /* v1.3.14：删除外观定制折叠机制。
