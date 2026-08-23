@@ -511,7 +511,7 @@
             </p>
             <table class="key-table">
               <tr><td>开发者</td><td>huang336</td></tr>
-              <tr><td>版本</td><td id="versionCell">1.3.17</td></tr>
+              <tr><td>版本</td><td id="versionCell">1.3.18</td></tr>
               <tr><td>协议</td><td>GNU GPL v3.0</td></tr>
               <tr>
                 <td>项目源码</td>
@@ -695,6 +695,14 @@
           <p class="about-text dim">
             本应用自 v1.0.4（2026-08-03）起的全部版本变更记录，新版本置顶。详细条目可在每个版本下展开。
           </p>
+
+          <div class="setting-group">
+            <h3>v1.3.18 · 2026-08-24 18:20:00</h3>
+            <p class="about-text dim"><b>1 项 bug 修复（八球/九球 进球同帧母球进袋时进球数未递增）：</b></p>
+            <ul class="changelog-list">
+              <li><b>修复「进球同帧白球（母球）也进了，进球数未递增」bug</b>（八球/九球规则，玩家端与电脑端均修复）。根因：八球 <code>handleFoul</code> 与九球 <code>handleFoul</code> 之前只在 v1.3.4 引入的「开球杆特例（<code>!this.firstShotPlayed</code>）」中加分，非开球杆发生「合法进球 + 母球落袋」犯规时，玩家这杆的合法进球被一并剥夺——而这正是用户打八球最常见的「我拼了一颗本组球，母球跟着滚进袋了」场景。本版统一规则：任何犯规时，过滤掉母球（犯规代价）和黑八/九号球（按规则 respot 不算分），剩余合法进袋球依然计入本方累计比分。同样的对称问题在电脑端（<code>boteventhandler.handleFoul</code>）也存在（bot 出杆犯规时 bot 同帧合法进球也不计分），一并修复，对称行为。改后确认玩家 5 / 电脑 6 同帧「我打进一颗 11 号 + 母球落袋」时玩家比分仍正确 +1，电脑等场景同步生效。<b>双端同步生效</b>：修改的是 src/ TypeScript 源码，所有逻辑改动随 webpack 打包进 dist/index.js，APP 端通过 APK 重签打 v1.3.18 一并生效。</li>
+            </ul>
+          </div>
 
           <div class="setting-group">
             <h3>v1.3.17 · 2026-08-24 02:00:00</h3>
@@ -2024,7 +2032,7 @@
     </div>
 
     <script>
-      window.__BILLIARDS_VERSION__ = "1.3.17-2608240208";
+      window.__BILLIARDS_VERSION__ = "1.3.18-2608241820";
     </script>
     <script src="menu-cn.js"></script>
     <script>

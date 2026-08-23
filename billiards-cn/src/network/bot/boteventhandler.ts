@@ -351,6 +351,21 @@ export class BotEventHandler {
     const whitePotted = Outcome.isCueBallPotted(cueball, outcome)
     const ballInHand = !isSnooker || whitePotted
 
+    // v1.3.18：bot 出杆犯规时若同帧打进合法球，按规则过滤后仍计入 bot 累计比分。
+    // 与玩家端 eightball/nineball.handleFoul 对称：犯规（母球落袋）只损失球权，
+    // 但本杆已落袋的合法球不丢。八号/九号球视规则被 respot 复位，不算分。
+    const ruleName = this.container.rules.rulename
+    if (ruleName === "eightball" || ruleName === "nineball") {
+      const pots = Outcome.pots(outcome)
+      const disallowedLabel = ruleName === "eightball" ? 8 : 9
+      const foulScoredPots = pots.filter(
+        (b) => b !== cueball && b.label !== disallowedLabel
+      )
+      if (foulScoredPots.length > 0) {
+        session.addOpponentScore(foulScoredPots.length)
+      }
+    }
+
     if (isSnooker) {
       session.addMyScore(this.snookerFoulPoints(outcome))
     }

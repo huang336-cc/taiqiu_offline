@@ -232,10 +232,17 @@ export class EightBall implements Rules {
     const eightBallPotted = pots.some((b) => b.label === 8)
     const cueball = this.container.table.cueball
 
-    // v1.3.4：开球杆即使犯规，非 8 号进球仍应计入比分（球已被拿出桌面）。
-    if (!this.firstShotPlayed && pots.length > 0 && !eightBallPotted) {
+    // v1.3.18：犯规时若同帧打进合法球（非母球、非黑八），仍计入我方累计比分。
+    // 旧版（v1.3.4 起）只在开球杆（!firstShotPlayed）做这个特例，
+    // 导致用户报告的「进球同时白球（母球）也进了，进球数未递增」bug。
+    // 现统一为「任何犯规都保留本杆合法进球」，仅排除母球（犯规代价）和黑八
+    // （早进黑八已由 respotEightBallFoul 分支单独处理）。
+    const foulScoredPots = pots.filter(
+      (b) => b !== cueball && b.label !== 8
+    )
+    if (foulScoredPots.length > 0) {
       const session = Session.getInstance()
-      session.addMyScore(pots.length)
+      session.addMyScore(foulScoredPots.length)
       const { p1: s1, p2: s2 } = session.orderedScoresForHud()
       this.container.sendScoreUpdate(s1, s2, this.currentBreak)
     }

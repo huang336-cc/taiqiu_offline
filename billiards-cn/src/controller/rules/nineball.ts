@@ -102,6 +102,18 @@ export class NineBall implements Rules {
     const nineBallPotted = pots.includes(this.container.table.balls[9])
     const cueball = this.container.table.cueball
 
+    // v1.3.18：犯规时若同帧打进合法球（非母球、非九号），仍计入我方累计比分。
+    // 修复「进球同时白球（母球）也进了，进球数未递增」bug。
+    // 九号球已在 respotAndBroadcastNineBall 中处理（重新摆回桌面，不算分）。
+    const nineBall = this.container.table.balls[9]
+    const foulScoredPots = pots.filter((b) => b !== cueball && b !== nineBall)
+    if (foulScoredPots.length > 0) {
+      const session = Session.getInstance()
+      session.addMyScore(foulScoredPots.length)
+      const { p1: s1, p2: s2 } = session.orderedScoresForHud()
+      this.container.sendScoreUpdate(s1, s2, this.currentBreak)
+    }
+
     if (nineBallPotted) {
       this.respotAndBroadcastNineBall(outcome)
     }
