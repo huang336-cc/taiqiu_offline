@@ -516,187 +516,154 @@ html.in-app .app {
 }
 
 /* ==========================================================================
-   v1.3.11：网页端（html:not(.in-app)）单独优化铺满
+   v1.3.16：网页端移动横屏 flex 自适应重构（只作用于 html:not(.in-app)）
 
-   - 外观定制默认打开（HTML <details ... open>；APP 端由 JS 强行收回 false）。
-   - sec-mode 用 flex:1 撑满"4 张卡"区域的高度，配合 grid-auto-rows:1fr
-     让每张卡自然均分多余空间、消除中段"外观定制与开始游戏之间" 留白。
-   - actions 普通块（btn-start + actions-row 两行）保持 v1.3.6 baseline；
-     margin-top:auto 让 actions 仍紧贴底（不受中段变化影响）。
-   - 安全阀：高宽比 16:9 及以上（如 1920×1080）max-height:60vh 防卡片过高；
-     高宽比 ≤ 9:14（如 iPhone 移动浏览器 portrait）退回自然高度，避免单卡过高。
+   用户诉求：横向组件内元素均分宽度、百分比/vh 自适应浏览器窗口、禁止固定
+   像素切割布局；完整保留 5 大功能区块（①顶部 4 球型卡 ②难度选择
+   ③外观定制三栏 ④开始游戏 ⑤底部 3 按钮）与原有配色/圆角/发光美术效果。
+
+   设计：删除 v1.3.11~v1.3.15 全部以固定 px 硬切的横屏档（max-height:450/500、
+   16:9/9:14、orientation:landscape 三套互相覆盖），改用一套干净的 flex 比例 +
+   grid fr + % / vh(clamp) 自适应。APP 端（html.in-app）走 baseline，零改动。
+   特异性：本块所有规则带 html:not(.in-app) 前缀，高于 L1158/L1209 的 baseline
+   横屏固定 px 规则，自动覆盖之。
    ========================================================================== */
-html:not(.in-app) #screen-home {
-  height: 100%; /* v1.3.11-fix：给 #screen-home 显式高度，sec-mode 的 flex:1 才能 grow 出 free space */
-  justify-content: flex-start; /* 覆盖父级 v1.3.6 baseline 的 center，让 sec-mode flex:1 grow 起作用 */
-  gap: 10px; /* 视觉比 APP 端略宽，与"撑大版"信息密度更匹配 */
-}
-html:not(.in-app) .sec-mode {
-  flex: 1 1 auto;
-  min-height: 0;
-}
-html:not(.in-app) .sec-mode .mode-grid {
-  flex: 1 1 auto; /* 让 grid 容器撑大，grid-auto-rows:1fr 才能把 cards stretch 到整行 */
-  grid-auto-rows: 1fr; /* grid 行均分 mode-grid 容器高度 */
-}
-html:not(.in-app) .sec-mode .mode-card {
-  min-height: 0; /* 解除 v1.3.6 130px 下限，让 flex 撑大起作用 */
-  padding: 14px 6px 16px;
-  gap: 8px;
-}
-html:not(.in-app) .sec-mode .mode-icon {
-  width: 72px;
-  height: 72px;
-}
-html:not(.in-app) .sec-mode .mode-name {
-  font-size: 17px;
-}
-
-/* 安全阀：超高宽比（1920×1080 等桌面宽屏）防 sec-mode 过高失真 */
-@media (min-aspect-ratio: 16/9) {
-  html:not(.in-app) .sec-mode {
-    max-height: 60vh;
-  }
-}
-/* 安全阀：移动竖屏（iPhone Safari 访问网页版）不撑大，避免单卡过高 */
-@media (max-aspect-ratio: 9/14) {
-  html:not(.in-app) .sec-mode {
-    flex: 0 0 auto;
-  }
-  html:not(.in-app) .sec-mode .mode-card {
-    min-height: 130px;
-  }
-  html:not(.in-app) .sec-mode .mode-icon {
-    width: 60px;
-    height: 60px;
-  }
-  html:not(.in-app) .sec-mode .mode-name {
-    font-size: 15px;
-  }
-}
-
-/* v1.3.13-fix：网页端横屏矮视口安全阀。
-   现象：手机横屏 vh ≈ 300 时，sec-mode 的 flex:1 + min-height:0 会把它压成 h=0，
-         mode-card overflow:hidden 把 72px mode-icon 切成只剩一窄条，
-         跟下面的 sec-opponent / sec-custom 撞在一起，视觉上"重叠挤压"。
-   修复：横屏 + max-height:500px 时 sec-mode 改为自然高度，缩小 mode-icon / 字号，
-         让 4 张卡片有合理可读高度（≈80-110px）且与下方有视觉间距。 */
-@media (max-height: 500px) and (orientation: landscape) {
-  html:not(.in-app) #screen-home { gap: 8px; }
-  html:not(.in-app) .sec-mode {
-    flex: 0 0 auto;
-    min-height: 0;
-  }
-  html:not(.in-app) .sec-mode .mode-grid {
-    flex: 0 0 auto;
-    grid-auto-rows: auto;
-  }
-  html:not(.in-app) .sec-mode .mode-card {
-    min-height: 0;
-    padding: 8px 5px 9px;
-    gap: 4px;
-  }
-  html:not(.in-app) .sec-mode .mode-icon {
-    width: 48px;
-    height: 48px;
-    margin: 4px 0 0;
-  }
-  html:not(.in-app) .sec-mode .mode-name {
-    font-size: 13px;
-    margin-top: 0;
-  }
-  html:not(.in-app) .sec-mode .mode-meta {
-    font-size: 10px;
-    line-height: 1.2;
-  }
-}
-
-/* v1.3.14-fix：横屏矮视口更紧凑（max-height ≤ 450）—— 修复 v1.3.13 修复后仍
-   内容溢出 #screen-home 高度的问题。
-   实测 814×358（vh=271）：scn-mode 94 + 对手 30 + 外观定制 163 + actions 73 ≈ 384，
-   超出 vh 271 约 113px，.actions { margin-top:auto } 把它推到 vh 下不可见，
-   截图下方那块黑就是被 overflow-y:auto 隐藏的部分。
-   修复：vh ≤ 450 且 landscape 时进一步紧凑全局 gap + 外观定制 + actions。
-   说明：v1.3.13 的 @media (max-height:500) 已经把 sec-mode 缩到 ~94px（在更高视口
-   如 vh=470 仍能容纳），所以 v1.3.14 仅在更窄（≤ 450）的横屏下进一步压缩
-   外观定制 3 块按钮 + actions padding。 */
-@media (max-height: 450px) and (orientation: landscape) {
-  html:not(.in-app) #screen-home {
-    gap: 4px;
-    padding: 2px 0 0;
-  }
-  /* 紧凑 sec-mode：覆盖 v1.3.13 max-height:500 的尺寸（更激进） */
-  html:not(.in-app) .sec-mode { min-height: 0; }
-  html:not(.in-app) .sec-mode .mode-grid { flex: 0 0 auto; grid-auto-rows: auto; }
-  html:not(.in-app) .sec-mode .mode-card {
-    min-height: 0;
-    padding: 2px 3px 3px;
-    gap: 2px;
-  }
-  html:not(.in-app) .sec-mode .mode-icon {
-    width: 30px;
-    height: 30px;
-    margin: 0;
-  }
-  html:not(.in-app) .sec-mode .mode-name {
-    font-size: 11px;
-    margin-top: 0;
-  }
-  html:not(.in-app) .sec-mode .mode-meta {
-    font-size: 9px;
-    line-height: 1.05;
-  }
-  /* 对手选择紧靠 */
-  html:not(.in-app) .sec-opponent { margin-bottom: 0; padding: 0; }
-  /* 紧凑外观定制：3 块图卡缩 */
-  html:not(.in-app) .sec-custom { padding: 1px 4px; }
-  html:not(.in-app) .sec-custom-title { margin: 0 0 2px; font-size: 11px; }
-  html:not(.in-app) .sec-custom .menu-tiles { gap: 3px; margin-top: 0; }
-  html:not(.in-app) .sec-custom .menu-row { padding: 2px 2px 3px; gap: 2px; }
-  html:not(.in-app) .sec-custom .menu-thumb { height: 24px; border-radius: 5px; }
-  html:not(.in-app) .sec-custom .menu-row-title { font-size: 10px; }
-  html:not(.in-app) .sec-custom .menu-row-val { font-size: 9px; }
-  /* actions 紧凑 padding 留给下方 @media (orientation:landscape) 统一处理 sticky 兜底 */
-}
-
-.sec-opponent {
-  flex: 0 0 auto;
-}
-
-/* v1.3.15：所有横屏（不限 vh）网页端 sec-mode 撑满中段 + actions sticky 兜底贴底，
-   移除 margin-top:auto 推底。根因是 #screen-home{ height:100% } + .actions{ margin-top:auto }
-   的对抗——之前在内容总高 < vh 时 margin-top:auto 会在 customSection 与 actions 之间
-   制造出 flex 真空（用户实拍"操作介绍 一排下方一大片空黑"就是这个）。本规则双管齐下：
-   ① 让 .sec-mode 强制 flex:1 吃满剩余中段；② 让 .actions 用 sticky bottom:0 兜底，
-   即使 450/500 紧凑段把它再压回自然高度也不留白。APP 端不命中此规则，
-   html.in-app 系列行动保持 v1.3.4 baseline 的 margin-top:auto 推底。 */
 @media (orientation: landscape) {
+  /* 消除 web 端 .app 过度预留的 72px 底部（那是给 APP 地址栏的，web 端无此 UI，
+     否则横屏下底部凭空多一条黑）。保留安全区 + 8px 边距即可。 */
+  html:not(.in-app) .app {
+    padding-bottom: calc(var(--safe-bottom, 0px) + 8px);
+  }
+
+  /* #screen-home：全高 flex 列，5 大区块按 flex 比例分配高度，不溢出滚动 */
   html:not(.in-app) #screen-home {
     height: 100%;
+    display: flex;
+    flex-direction: column;
     justify-content: flex-start;
-    gap: 10px;
+    gap: 1.4vh;
+    overflow: hidden;
+    padding-top: 0.5vh;
   }
-  html:not(.in-app) .sec-mode {
-    flex: 1 1 auto;
-    min-height: 0;
+  /* 中段由 mode 与 custom 按 3:2 比例吃掉，opponent/actions 自然高度贴底 */
+  html:not(.in-app) .sec-mode     { flex: 3 1 0; min-height: 0; }
+  html:not(.in-app) .sec-opponent { flex: 0 0 auto; }
+  html:not(.in-app) .sec-custom   { flex: 2 1 0; min-height: 0; display: flex; flex-direction: column; }
+  html:not(.in-app) #screen-home .actions {
+    flex: 0 0 auto;
+    margin-top: 0;
+    padding-top: 0;
   }
+
+  /* ① 顶部 4 球型卡：grid 4 列 fr 均分宽度（自适应，非固定 px） */
   html:not(.in-app) .sec-mode .mode-grid {
-    flex: 1 1 auto;
-    grid-auto-rows: 1fr;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    flex: 1 1 0;
+    min-height: 0;
+    gap: 1vw;
     align-content: stretch;
   }
   html:not(.in-app) .sec-mode .mode-card {
     min-height: 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.8vh;
+    padding: 1vh 0.4vw;
+    overflow: hidden;
   }
-  html:not(.in-app) #screen-home .actions {
-    margin-top: 0;
-    padding-top: 2px;
+  /* mode-icon：百分比宽 + 保持方形，禁止固定 px 宽高（覆盖 baseline 56/40px） */
+  html:not(.in-app) .sec-mode .mode-icon {
+    width: auto;
+    height: auto;
+    max-height: 48%;
+    max-width: 48%;
+    aspect-ratio: 1 / 1;
+    object-fit: contain;
+    margin: 0;
     flex: 0 0 auto;
-    position: sticky;
-    bottom: 0;
-    z-index: 5;
-    background: transparent;
   }
+  html:not(.in-app) .sec-mode .mode-name {
+    font-size: clamp(11px, 2.2vh, 17px);
+    margin-top: 0;
+    flex: 0 0 auto;
+  }
+  html:not(.in-app) .sec-mode .mode-rule {
+    font-size: clamp(9px, 1.6vh, 12px);
+  }
+
+  /* ② 难度选择：.seg 已是 flex 均分 3 个 btn，仅自适应字号/间距 */
+  html:not(.in-app) .sec-opponent .seg {
+    gap: 1vw;
+    padding: 0.4vh;
+  }
+  html:not(.in-app) .sec-opponent .seg-btn {
+    font-size: clamp(11px, 2vh, 16px);
+    padding: 0.6vh 0.4vw;
+  }
+  html:not(.in-app) .sec-opponent .seg-hint {
+    font-size: clamp(8px, 1.4vh, 11px);
+  }
+
+  /* ③ 外观定制三栏：menu-tiles flex 行均分 3 栏，thumb 吃掉 menu-row 剩余高度。
+     注意：HTML 上是 <div class="menu-rows menu-tiles">，基线 .menu-rows 强制
+     flex-direction:column（特定性 0,1,0），本块用 (0,3,0) 重置为 row 让 3 栏横向并排。 */
+  html:not(.in-app) .sec-custom .menu-tiles {
+    display: flex;
+    flex-direction: row;          /* 覆盖 .menu-rows 的 column */
+    flex: 1 1 0;
+    min-height: 0;
+    gap: 1vw;
+    margin-top: 0.5vh;
+    flex-wrap: nowrap;
+  }
+  html:not(.in-app) .sec-custom .menu-row {
+    flex: 1 1 0;
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.4vh;
+    padding: 0.6vh 0.6vw;
+  }
+  html:not(.in-app) .sec-custom .menu-thumb {
+    flex: 1 1 auto; /* 吃掉 menu-row 剩余高度，自适配，不固定 px（覆盖 baseline 24/64px） */
+    width: 100%;
+    min-height: 0;
+    height: auto;
+    object-fit: cover;
+    border-radius: var(--radius);
+  }
+  html:not(.in-app) .sec-custom .sec-custom-title {
+    font-size: clamp(10px, 1.8vh, 14px);
+    margin-bottom: 0.4vh;
+  }
+  html:not(.in-app) .sec-custom .menu-row-title { font-size: clamp(10px, 1.8vh, 14px); }
+  html:not(.in-app) .sec-custom .menu-row-val   { font-size: clamp(9px, 1.5vh, 12px); }
+
+  /* ④ 开始游戏 + 底部 3 功能按钮：actions-row flex 均分 3 个 btn */
+  html:not(.in-app) #screen-home .actions-row {
+    display: flex;
+    gap: 1vw;
+  }
+  html:not(.in-app) #screen-home .actions .btn-ghost {
+    flex: 1 1 0;
+    min-width: 0;
+    font-size: clamp(11px, 2vh, 15px);
+    padding: 0.8vh 0.4vw;
+  }
+  html:not(.in-app) #screen-home .btn-start {
+    font-size: clamp(13px, 2.6vh, 20px);
+    padding: 1vh 0.6vw;
+  }
+}
+
+.sec-opponent {
+  flex: 0 0 auto;
 }
 
 /* v1.3.14：删除外观定制折叠机制。
