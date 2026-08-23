@@ -545,8 +545,10 @@ html.in-app .app {
     overflow: hidden;
     padding-top: 0.5vh;
   }
-  /* 中段由 mode 与 custom 按 3:2 比例吃掉，opponent/actions 自然高度贴底 */
-  html:not(.in-app) .sec-mode     { flex: 3 1 0; min-height: 0; }
+  /* v1.3.17：mode 区改自然高度（不再 3:2 强占），custom 吸收剩余，actions 贴底。
+     mode-card 内容改为顶部对齐，避免卡片内居中产生大片空白。
+     APP 端（html.in-app）零改动。 */
+  html:not(.in-app) .sec-mode     { flex: 0 0 auto; min-height: 0; }
   html:not(.in-app) .sec-opponent { flex: 0 0 auto; }
   html:not(.in-app) .sec-custom   { flex: 2 1 0; min-height: 0; display: flex; flex-direction: column; }
   html:not(.in-app) #screen-home .actions {
@@ -559,7 +561,7 @@ html.in-app .app {
   html:not(.in-app) .sec-mode .mode-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    flex: 1 1 0;
+    flex: 0 0 auto;     /* v1.3.17：随 .sec-mode 自然高度 */
     min-height: 0;
     gap: 1vw;
     align-content: stretch;
@@ -570,17 +572,17 @@ html.in-app .app {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 0.8vh;
-    padding: 1vh 0.4vw;
+    justify-content: flex-start;   /* v1.3.17：内容顶部对齐 */
+    gap: 0.5vh;                    /* v1.3.17：缩 0.8→0.5vh，更紧凑 */
+    padding: 0.6vh 0.4vw;          /* v1.3.17：缩 1→0.6vh，更紧凑 */
     overflow: hidden;
   }
   /* mode-icon：百分比宽 + 保持方形，禁止固定 px 宽高（覆盖 baseline 56/40px） */
   html:not(.in-app) .sec-mode .mode-icon {
     width: auto;
     height: auto;
-    max-height: 48%;
-    max-width: 48%;
+    max-height: 40%;     /* v1.3.17：缩 48%→40%，让卡片高度更紧凑 */
+    max-width: 40%;
     aspect-ratio: 1 / 1;
     object-fit: contain;
     margin: 0;
