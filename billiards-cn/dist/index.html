@@ -1,510 +1,86 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
-  <head>
-    <!-- v1.3.19：直接打开站点根（无任何游戏/回放参数）时进入发布页 download.html，
-         而非用默认九球规则自动开局或停留菜单。发布页提供下载/在线玩/功能菜单入口；
-         菜单"开始游戏"会带 ruletype= 等参数、回放会带 state=/replayId= 参数，
-         这些合法入口不受影响。 -->
-    <script>
-      (function () {
-        var q = location.search || "";
-        if (q.replace("?", "").length === 0) location.replace("download.html");
-      })();
-    </script>
-    <title>奥特曼的台球 · 离线版</title>
-    <link rel="icon" type="image/png" href="favicon.png" />
-    <meta charset="UTF-8" />
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-    <meta name="description" content="真实物理引擎的单机离线台球游戏" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover"
-    />
-    <!-- v1.3.3：iOS Safari 底部地址栏/工具栏常以 overlay 形式遮挡游戏底部操作栏。
-         通过 window.visualViewport 实时计算底部被遮挡高度并写入 --vv-bottom，CSS 用它把
-         .panel、回放进度条、白球操作弹窗整体上移。针对 iOS Safari 增加 50px 兜底偏移，
-         避免 visualViewport 在地址栏收起/展开过程中返回 0 导致按钮被压住。 -->
-    <script>
-      (function () {
-        var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-        var isSafari = /Safari/.test(navigator.userAgent) && !/Chrome|CriOS/.test(navigator.userAgent);
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>台球大师·中文离线版 v1.3.19</title>
+<style>
+  :root { --green:#0b6e3b; --green2:#0f8a4a; --felt:#0e7a43; --ink:#10241a; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", Roboto, sans-serif;
+    background: radial-gradient(120% 90% at 50% 0%, #14543a 0%, #0c3a27 55%, #07251a 100%);
+    color:#eafaf0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    padding:24px;
+  }
+  .card {
+    width:100%; max-width:460px; background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.14); border-radius:22px;
+    padding:32px 28px 26px; backdrop-filter: blur(8px);
+    box-shadow:0 18px 50px rgba(0,0,0,.4);
+  }
+  .logo { font-size:15px; letter-spacing:2px; color:#9fe7bd; text-transform:uppercase; }
+  h1 { margin:6px 0 2px; font-size:27px; font-weight:800; }
+  .ver { display:inline-block; margin:8px 0 20px; padding:5px 12px; border-radius:999px;
+         background:rgba(15,138,74,.25); border:1px solid rgba(159,231,189,.4);
+         font-size:14px; font-weight:700; color:#bff3d4; }
+  .btn {
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    width:100%; padding:16px; border-radius:14px; border:none; cursor:pointer;
+    font-size:17px; font-weight:800; text-decoration:none; color:#06251a;
+    background:linear-gradient(180deg,#37e08a,#0f8a4a); box-shadow:0 8px 20px rgba(15,138,74,.45);
+    transition:transform .08s ease;
+  }
+  .btn.secondary { background:linear-gradient(180deg,#7fd0ff,#2f8fd8); color:#04243a; box-shadow:0 8px 20px rgba(47,143,216,.4); }
+  .btn:active { transform:translateY(1px) scale(.99); }
+  .btn small { font-weight:600; opacity:.82; }
+  .sep { margin:16px 0 4px; text-align:center; font-size:12px; letter-spacing:1px; color:#8fc4a8; }
+  .row { margin-top:14px; display:flex; gap:12px; }
+  .ghost { flex:1; text-align:center; padding:13px; border-radius:12px; text-decoration:none;
+           color:#cdeede; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.16);
+           font-size:14px; font-weight:700; }
+  .notes { margin-top:22px; font-size:13px; line-height:1.7; color:#bfe3cf; }
+  .notes b { color:#eafaf0; }
+  ul { margin:8px 0 0; padding-left:18px; }
+  .foot { margin-top:18px; font-size:12px; color:#8fc4a8; text-align:center; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">台球大师 · 中文离线版</div>
+    <h1>真实物理引擎台球</h1>
+    <div class="ver">v1.3.19 · 单机离线 · 零权限</div>
 
-        function updateViewportFit() {
-          var vv = window.visualViewport;
-          var bottom = 0;
-          if (vv) {
-            bottom = Math.max(0, Math.round(window.innerHeight - vv.height));
-          }
-          // iOS Safari 兜底：地址栏/工具栏 overlay 时 visualViewport 可能晚于 UI 出现，
-          // 给足 50px 底部偏移，确保“击球/力度/视角”按钮不被压住。
-          if (isIOS && isSafari) {
-            bottom = Math.max(bottom, 50);
-          }
-          var injected = parseInt(
-            getComputedStyle(document.documentElement).getPropertyValue("--vv-bottom") || "0",
-            10
-          );
-          bottom = Math.max(bottom, injected || 0);
-          document.documentElement.style.setProperty("--vv-bottom", bottom + "px");
-        }
+    <!-- 在线模式：直接进入网页版游戏 -->
+    <a class="btn" href="play.html?ruletype=nineball">▶ 在线模式（网页直接玩）</a>
 
-        updateViewportFit();
-        var vv = window.visualViewport;
-        if (vv && typeof vv.addEventListener === "function") {
-          vv.addEventListener("resize", updateViewportFit);
-          vv.addEventListener("scroll", updateViewportFit);
-        }
-        window.addEventListener("resize", updateViewportFit);
-        window.addEventListener("orientationchange", updateViewportFit);
-        // iOS Safari 地址栏高度在页面加载后仍可能变化，延迟再算几次
-        setTimeout(updateViewportFit, 100);
-        setTimeout(updateViewportFit, 500);
-        setTimeout(updateViewportFit, 1000);
-      })();
-    </script>
-    <link rel="stylesheet" type="text/css" href="css/fonts.css" />
-    <link rel="stylesheet" type="text/css" href="css/index.css" />
-    <link rel="stylesheet" type="text/css" href="css/aiminputs.css" />
-    <link rel="stylesheet" type="text/css" href="css/powerinput.css" />
-    <link rel="stylesheet" type="text/css" href="css/notification.css" />
-    <link rel="stylesheet" type="text/css" href="css/chat.css" />
-    <link rel="stylesheet" type="text/css" href="css/menu.css" />
-    <link rel="stylesheet" type="text/css" href="css/wood.css" />
-    <link rel="stylesheet" type="text/css" href="css/ingame-cn.css" />
-    <!-- v1.1.16: 底部栏改版 + 设置按钮右上角 -->
-    <link rel="stylesheet" type="text/css" href="css/bottombar-v2.css?v=1.2.20" />
-    <!-- v1.1.18: 顶部计分板卡片（参考图2） -->
-    <link rel="stylesheet" type="text/css" href="css/scoreboard-v2.css?v=1.2.20" />
-    <!-- v1.2.9 #F5：回放进度条（可滑动 + 进球吸附点） -->
-    <link rel="stylesheet" type="text/css" href="css/replay-seek.css?v=1.2.20" />
-  </head>
+    <!-- 安卓 APK 下载 -->
+    <a class="btn secondary" href="billiards-cn.apk" download style="margin-top:14px;">
+      ⬇ 下载安卓 APK
+      <small>(约 1.8&nbsp;MB)</small>
+    </a>
 
-  <body>
-    <h1 hidden>奥特曼的台球 单机离线版</h1>
+    <div class="sep">— 或获取完整发布包 —</div>
 
-    <!-- v1.2.31：在线游戏模式横屏锁定。竖屏（移动端）时全屏覆盖「请横屏」遮罩，
-         屏蔽竖屏游玩，仅横屏模式可进入游戏；桌面/大屏（宽度 > 1024px）不触发。
-         显示/隐藏完全由 css/index.css 的 @media (orientation: portrait) 控制。 -->
-    <div id="rotateOverlay" class="rotate-overlay" aria-hidden="true">
-      <div class="rotate-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="7" y="2.5" width="10" height="19" rx="2.2" />
-          <line x1="11" y1="18.6" x2="13" y2="18.6" />
-          <path d="M4.6 9.6a4.4 4.4 0 0 1 4.4-4.4" />
-          <polyline points="4 6 4.6 9.6 8.2 9.2" />
-        </svg>
-      </div>
-      <p class="rotate-text">请横屏使用</p>
-      <p class="rotate-sub">为获得最佳台球体验，请将手机旋转至横屏模式</p>
+    <!-- 压缩包：含源码 / SDK / 仓库 -->
+    <div class="row">
+      <a class="ghost" href="taiqiu-v1.3.19-release.zip" download>⬇ 完整压缩包</a>
+      <a class="ghost" href="menu.html">☰ 功能菜单</a>
     </div>
 
-    <div id="viewP1" class="view3d">
-      <!-- v1.1.10：资源异步加载期间的 Loading 覆盖层，避免几百毫秒黑屏 -->
-      <div class="view3d-loading" id="view3dLoading">
-        <div class="view3d-loading-spinner"></div>
-        <div class="view3d-loading-text">加载中…</div>
-      </div>
-      <div id="notificationOverlay">
-        <div id="notification" aria-live="assertive" role="alert"></div>
-      </div>
-      <div id="helpOverlay" hidden>
-        <iframe title="游戏菜单"></iframe>
-        <div class="help-footer">
-          <button class="lobby-btn" id="backToMenu">返回主菜单</button>
-          <button class="lobby-btn" id="restartGame">再来一局</button>
-          <button id="helpClose">关闭</button>
-        </div>
-      </div>
-      <div class="chatarea">
-        <div id="chatoutput" class="chatoutput"></div>
-      </div>
-    </div>
-    <!-- v1.1.17: 设置按钮（原 #menu）屏幕右上角，仅金色齿轮，无文字 -->
-    <button
-      class="menuButton"
-      title="设置"
-      id="menu"
-      type="submit"
-      aria-label="设置"
-    >
-      <span class="gear" aria-hidden="true">
-        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-          <path d="M19.14 12.94c0.04-0.3 0.06-0.61 0.06-0.94 0-0.32-0.02-0.64-0.07-0.94l2.03-1.58a0.49 0.49 0 0 0 0.12-0.61l-1.92-3.32a0.488 0.488 0 0 0-0.59-0.22l-2.39 0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4 2.81a0.5 0.5 0 0 0-0.48-0.41h-3.84a0.5 0.5 0 0 0-0.48 0.41L9.25 5.35C8.66 5.59 8.12 5.92 7.63 6.29L5.24 5.33a0.5 0.5 0 0 0-0.59 0.22L2.74 8.87a0.5 0.5 0 0 0 0.12 0.61l2.03 1.58c-0.05 0.3-0.07 0.62-0.07 0.94 0 0.32 0.02 0.64 0.07 0.94L2.86 14.52a0.49 0.49 0 0 0-0.12 0.61l1.92 3.32c0.12 0.22 0.37 0.29 0.59 0.22l2.39-0.96c0.5 0.38 1.03 0.7 1.62 0.94l0.36 2.54a0.5 0.5 0 0 0 0.48 0.41h3.84c0.24 0 0.45-0.17 0.48-0.41l0.36-2.54c0.59-0.24 1.13-0.56 1.62-0.94l2.39 0.96c0.22 0.08 0.47 0 0.59-0.22l1.92-3.32a0.49 0.49 0 0 0-0.12-0.61l-2.03-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
-        </svg>
-      </span>
-    </button>
-
-    <!-- v1.1.17: 底部操作栏 5 段固定顺序 ① 摆球/击球 · ② 白球击球点 · ③ 视角 · ④ 力度 · ⑤ 细微瞄准 -->
-    <div id="panel" class="panel wood-texture">
-      <div class="bottom-bar">
-        <!-- ① 摆球 / 击球（cueHit）：统一木纹金边按钮，含倒计时扫光 -->
-        <div class="bb-seg bb-seg-cuehit">
-          <button
-            class="seg-trigger timeout-btn"
-            id="cueHit"
-            type="button"
-            aria-label="摆球 / 击球"
-          >
-            <span class="seg-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/>
-                <path d="M12 12 L12 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                <path d="M12 12 L19 16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              </svg>
-            </span>
-            <span class="seg-label">击球</span>
-          </button>
-        </div>
-
-        <!-- ② 白球击球点（cueBallTrigger）：点开后上方悬浮紧凑面板 -->
-        <div class="bb-seg bb-seg-cueball">
-          <button
-            class="seg-trigger"
-            id="cueBallTrigger"
-            type="button"
-            aria-haspopup="true"
-            aria-expanded="false"
-            aria-label="白球击球点"
-          >
-            <span class="seg-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/>
-                <circle cx="12" cy="12" r="2.4" fill="currentColor"/>
-              </svg>
-            </span>
-          </button>
-        </div>
-
-        <!-- ③ 视角（camera）：统一木纹金边按钮 -->
-        <div class="bb-seg bb-seg-camera">
-          <button
-            class="menuButton aim"
-            title="切换视角"
-            id="camera"
-            type="submit"
-            aria-label="切换视角"
-          >
-            <span class="cam-row" aria-hidden="true">
-              <span class="seg-icon cam-icon">
-                <svg viewBox="0 0 36 28" xmlns="http://www.w3.org/2000/svg">
-                  <rect x="2" y="6" width="32" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/>
-                  <path d="M12 6 L14 2 H22 L24 6 Z" fill="currentColor" stroke="none"/>
-                  <circle cx="18" cy="15" r="6" fill="none" stroke="currentColor" stroke-width="2.5"/>
-                </svg>
-              </span>
-              <span class="cam-mode"></span>
-            </span>
-            <span class="seg-label" hidden>视角</span>
-          </button>
-        </div>
-
-        <!-- ④ 击球力度条（v1.1.35：完全按图 2 重做 — 白色胶囊外壳 + 大号百分比 + 凹陷药丸轨道 + 橙红渐变填充 + 黑色 8 球滑块） -->
-        <div class="bb-seg bb-seg-power">
-          <div id="powerSliderContainer" class="powerSliderContainer">
-            <span id="powerPercent" class="powerPercent">65%</span>
-            <!-- v1.1.49：黄色 track 容器 fill:100% 真正撑满 .powerSliderContainer 的内容宽度，
-                 橙色 fill 和黑 8 球重新挂回 track 内（width/left:var(--p) 都以 track 宽度为基准），
-                 这样橙条天然不超出黄色 track，track 也彻底填满右侧空白 → 红圈段填满 + 不越界。 -->
-            <div class="power-track" aria-hidden="true">
-              <div class="power-fill"></div>
-              <div class="power-ball">8</div>
-            </div>
-            <input
-              class="powerSlider"
-              type="range"
-              min="0"
-              max="1"
-              step="0.01"
-              value="0.65"
-              id="cuePower"
-              aria-label="击球力度"
-            />
-          </div>
-        </div>
-
-        <!-- ⑤ 细微瞄准条（缩短） -->
-        <div class="bb-seg bb-seg-aim">
-          <div id="aimAngleBar" class="aim-angle-bar" hidden>
-            <div class="aim-angle-track" id="aim-angle-track">
-              <span class="aim-angle-center"></span>
-              <input
-                type="range"
-                id="aimAngle"
-                class="aim-angle-slider"
-                min="-1"
-                max="1"
-                step="0.0005"
-                value="0"
-                aria-label="横向瞄准角度"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
+    <div class="notes">
+      <b>完整压缩包内含</b>
+      <ul>
+        <li><b>billiards-cn.apk</b>：安卓安装包（零权限，versionCode 26082419）</li>
+        <li><b>source-v1.3.19.tar.gz</b>：完整源码（含已构建 dist/）</li>
+        <li><b>sdk.tar.gz</b>：Android 构建工具链</li>
+        <li><b>repo-v1.3.19.bundle</b>：完整 git 仓库包（含全部历史与 tag）</li>
+      </ul>
+      <p style="margin:10px 0 0;color:#a9d8c1;">解压后按包内 <b>README.md</b> 执行即可自行发布到 GitHub。</p>
     </div>
 
-    <template id="angle-input-template">
-      <div class="area" id="area">
-        <div class="ball"></div>
-        <div class="rotator" id="rot">
-          <div class="stick">
-            <div class="tip"></div>
-            <div class="ferrule"></div>
-            <div class="shaft"></div>
-            <div class="butt"></div>
-          </div>
-        </div>
-      </div>
-    </template>
-
-    <!-- v1.2.6：比分栏改为「两列分列展示」：左侧玩家 / 右侧对手（含电脑），各自显示
-         玩家名 + 大号进球数 + 进球的整颗球颜色；时间统一放在最底下。
-         玩家名固定为「玩家」（vs-bot 对方显示「电脑」，其他模式显示「对手」）。 -->
-    <div id="scoreCard" class="score-card v2">
-      <div class="sc-players">
-        <div class="sc-player" data-player="1">
-          <div class="sc-player-head">
-            <span class="sc-player-label" id="scP1Label">玩家</span>
-            <span class="sc-player-score" id="p1Score">0</span>
-          </div>
-          <div class="sc-player-balls" id="p1Balls"></div>
-        </div>
-        <div class="sc-player" data-player="2">
-          <div class="sc-player-head">
-            <span class="sc-player-label" id="scP2Label">对手</span>
-            <span class="sc-player-score" id="p2Score">0</span>
-          </div>
-          <div class="sc-player-balls" id="p2Balls"></div>
-        </div>
-      </div>
-      <div class="sc-meta" id="scMeta">
-        <div class="sc-time" id="scTime">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/>
-            <path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-          <span id="scTimeText">00:00</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- v1.2.9 #F5：回放进度条（仅回放模式显示）。可拖动时间点到本杆任意时刻，
-         并带「进球前时间点」吸附点（红球亮点），滑动到附近自动吸附，直觉察觉进球。 -->
-    <div id="replaySeekBar" class="replay-seek-bar" hidden>
-      <span class="replay-seek-label">回放</span>
-      <div class="replay-seek-wrap">
-        <input
-          id="replaySeek"
-          type="range"
-          min="0"
-          max="1000"
-          step="1"
-          value="0"
-          aria-label="回放进度"
-        />
-        <div id="replaySeekSnaps" class="replay-seek-snaps" aria-hidden="true"></div>
-      </div>
-      <!-- v1.2.17 #4：全局倍速按钮（回放模式常驻），在 0.5x/1x/2x/4x 间循环，
-           不自动按击球/进球提速，完全由用户选择，保证击球到进球的真实时间间隔。 -->
-      <button id="replaySpeedBtn" class="replay-speed-btn" type="button">1x</button>
-      <!-- v1.2.26：视角切换按钮（固定/俯视），默认「固定」侧后视角（击球后不切俯视、
-           不跟随）；点击在固定侧后视角与固定俯视全局视角之间切换。 -->
-      <button id="replayCamBtn" class="replay-cam-btn" type="button">固定</button>
-      <button id="replayExitBtn" class="replay-exit-btn" type="button" hidden>退出回放</button>
-    </div>
-
-    <!-- v1.2.5：白球操作弹窗移到 body 直接子级，脱离底部栏的层叠/变形上下文，
-         使 position:fixed 稳定相对视口定位；具体 left/bottom 由 aiminputs.ts 的
-         positionCueBallPopup() 依据触发按钮实时计算并夹紧在视口内（规避小米 13 等
-         WebView 下 fixed 退化为相对祖先定位而溢出屏幕的 bug）。 -->
-    <div id="cueballPopup" class="cueball-popup" hidden role="dialog" aria-label="白球操作设置">
-      <div class="cueball-popup-body">
-        <div class="cb-area cb-disc-area">
-          <div class="cb-area-head">
-            <div class="cb-area-title">白球击球点</div>
-            <div class="cb-area-desc">点击白球设置击球位置</div>
-          </div>
-          <div id="ballContainerWrapper" class="ballContainerWrapper">
-            <div id="ballContainer" class="ballContainer">
-              <div id="objectBall" class="objectBall"></div>
-              <div id="cueBall" class="cueBall">
-                <div id="cueTip" class="cueTip"></div>
-              </div>
-            </div>
-          </div>
-          <button id="resetSpin" class="resetSpin" aria-label="加塞复位" type="button">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-              <polyline points="21 3 21 9 15 9" />
-            </svg>
-          </button>
-        </div>
-        <div class="cb-area cb-tilt-area">
-          <div class="cb-area-head">
-            <div class="cb-area-title">抬杆高度</div>
-            <div class="cb-area-desc">拖动球杆调整抬杆高度</div>
-          </div>
-          <angle-input id="cueTilt" aria-label="抬杆角度"></angle-input>
-        </div>
-      </div>
-      <span class="cueball-popup-arrow" aria-hidden="true"></span>
-    </div>
-
-    <script defer src="three_core.js"></script>
-    <script defer src="three_module.js"></script>
-    <script defer src="three_examples.js"></script>
-    <script defer src="index.js"></script>
-    <script defer src="back-confirm-cn.js"></script>
-
-    <!-- v1.3.19：游戏内界面语言（读取与主菜单共用的 localStorage，并监听设置覆盖层发来的切换） -->
-    <script>
-      ;(function () {
-        "use strict"
-        var STORAGE_KEY = "billiards_cn_settings_v1"
-        // 中文 -> 英文（仅覆盖可见文本节点与 title/aria-label/placeholder/alt 属性；
-        // 注释与画质档位等动态内容不在此处理，交由各自页面脚本）
-        var TX = {
-          "请横屏使用": "Please use landscape",
-          "为获得最佳台球体验，请将手机旋转至横屏模式":
-            "For the best billiards experience, rotate your phone to landscape mode",
-          "加载中…": "Loading…",
-          "返回主菜单": "Back to Menu",
-          "再来一局": "Play Again",
-          "关闭": "Close",
-          "设置": "Settings",
-          "击球": "Shoot",
-          "摆球 / 击球": "Place / Shoot",
-          "切换视角": "Switch View",
-          "视角": "Camera",
-          "玩家": "You",
-          "对手": "Opponent",
-          "电脑": "CPU",
-          "回放": "Replay",
-          "固定": "Fixed",
-          "退出回放": "Exit Replay",
-          "白球击球点": "Cue Ball Contact",
-          "点击白球设置击球位置": "Tap the cue ball to set the contact point",
-          "加塞复位": "Reset Spin",
-          "抬杆高度": "Cue Elevation",
-          "拖动球杆调整抬杆高度": "Drag the cue to adjust elevation",
-          "抬杆角度": "Cue angle",
-          "横向瞄准角度": "Fine aim angle",
-          "击球力度": "Shot power",
-          "回放进度": "Replay progress",
-          "游戏菜单": "Game Menu",
-        }
-
-        function curLang() {
-          try {
-            var raw = localStorage.getItem(STORAGE_KEY)
-            if (raw) {
-              var s = JSON.parse(raw)
-              if (s && (s.language === "en" || s.language === "zh")) return s.language
-            }
-          } catch (e) {}
-          return "zh"
-        }
-
-        function localize(root, toLang) {
-          root = root || document
-          try {
-            document.documentElement.lang = toLang === "en" ? "en" : "zh-CN"
-          } catch (e) {}
-          if (!root.querySelectorAll) return
-          var walker
-          try {
-            walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null)
-          } catch (e) {
-            return
-          }
-          var texts = []
-          var n
-          while ((n = walker.nextNode())) texts.push(n)
-          for (var i = 0; i < texts.length; i++) {
-            var node = texts[i]
-            if (node.nodeValue == null) continue
-            if (toLang === "en") {
-              var key = node.nodeValue.trim()
-              if (TX[key] != null) {
-                node.__zh = key
-                node.nodeValue = TX[key]
-              }
-            } else if (node.__zh != null) {
-              node.nodeValue = node.__zh
-            }
-          }
-          var attrs = ["title", "aria-label", "placeholder", "alt"]
-          var els = root.querySelectorAll("*")
-          for (var j = 0; j < els.length; j++) {
-            var el = els[j]
-            for (var k = 0; k < attrs.length; k++) {
-              var an = attrs[k]
-              var v = el.getAttribute(an)
-              if (v == null) continue
-              if (toLang === "en") {
-                if (TX[v] != null) {
-                  if (el["__zh_" + an] == null) el["__zh_" + an] = v
-                  el.setAttribute(an, TX[v])
-                }
-              } else if (el["__zh_" + an] != null) {
-                el.setAttribute(an, el["__zh_" + an])
-              }
-            }
-          }
-        }
-
-        // 比分栏标签由 hud.ts 在运行时写入（固定 玩家 / 对手 / 电脑），
-        // 需在其之后覆盖，故在 load 事件与语言切换消息里处理。
-        function applyScoreLabels(l) {
-          var p1 = document.getElementById("scP1Label")
-          var p2 = document.getElementById("scP2Label")
-          var isBot = /[?&]bot=/.test(location.search)
-          if (p1) p1.textContent = l === "en" ? "You" : "玩家"
-          if (p2)
-            p2.textContent =
-              l === "en" ? (isBot ? "CPU" : "Opponent") : isBot ? "电脑" : "对手"
-        }
-
-        function applyIndexLang(l) {
-          localize(document, l)
-          applyScoreLabels(l)
-        }
-
-        // 进入对局加载完成后应用（此时 hud 已写好默认比分标签）
-        window.addEventListener("load", function () {
-          applyIndexLang(curLang())
-        })
-
-        // 兜底：hud.ts 在「对局开始」时才把 #scP1Label/#scP2Label 写入中文，
-        // 晚于上面的 load 事件，故轮询检测这两个节点出现即套用语言，
-        // 确保比分栏（玩家/对手/电脑 -> You/Opponent/CPU）始终跟随当前语言。
-        // 值未变则跳过写入，避免无意义的 DOM 操作。
-        var __lastSc = ""
-        function watchScoreLabels() {
-          var p1 = document.getElementById("scP1Label")
-          var p2 = document.getElementById("scP2Label")
-          if (p1 || p2) {
-            applyScoreLabels(curLang())
-            var sig = (p1 ? p1.textContent : "") + "|" + (p2 ? p2.textContent : "")
-            if (sig === __lastSc) return // 已稳定，停止轮询
-            __lastSc = sig
-          }
-          setTimeout(watchScoreLabels, 400)
-        }
-        watchScoreLabels()
-
-        // 监听游戏内设置覆盖层（help iframe）发来的语言切换
-        window.addEventListener("message", function (e) {
-          var d = e.data
-          if (
-            d &&
-            d.type === "billiards-language" &&
-            (d.language === "en" || d.language === "zh")
-          ) {
-            applyIndexLang(d.language)
-          }
-        })
-      })()
-    </script>
-  </body>
+    <div class="foot">台球大师·中文离线版 · 自签名分发 · 仅供个人使用</div>
+  </div>
+</body>
 </html>

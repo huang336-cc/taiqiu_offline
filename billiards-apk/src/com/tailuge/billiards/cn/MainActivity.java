@@ -267,10 +267,10 @@ public class MainActivity extends Activity {
             super.onBackPressed();
             return;
         }
-        // 游戏内页面（index.html）由 JS 自己弹"继续游戏 / 返回主菜单"二次确认；
+        // 游戏内页面（play.html）由 JS 自己弹"继续游戏 / 返回主菜单"二次确认；
         // 不再走 goBack，避免直接丢掉本局进度。
         String url = webView.getUrl();
-        if (url != null && url.contains("/index.html")) {
+        if (url != null && url.contains("/play.html")) {
             softEvaluate(
                 "(function(){try{return !!window.__onAndroidBack&&(window.__onAndroidBack(),true)}catch(e){return false}})()"
             );

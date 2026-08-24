@@ -23,7 +23,7 @@ export function storeReplayAndNavigate(
   } catch (e) {
     console.error("[replay-nav] sessionStorage 写入失败", e)
   }
-  const url = `index.html?replayId=${encodeURIComponent(
+  const url = `play.html?replayId=${encodeURIComponent(
     id
   )}&ruletype=${encodeURIComponent(ruletype)}`
   globalThis.location.href = url

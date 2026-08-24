@@ -1233,7 +1233,7 @@
     if (!settings.seenGuide) {
       params.push("tutorial=1")
     }
-    location.href = "index.html?" + params.join("&")
+    location.href = "play.html?" + params.join("&")
   }
 
   /** 轻量 toast 提示（不依赖外部库） */
@@ -1675,7 +1675,7 @@
       console.error("replay sessionStorage 写入失败", e)
     }
     location.href =
-      "index.html?replayId=" +
+      "play.html?replayId=" +
       encodeURIComponent(id) +
       "&ruletype=" +
       encodeURIComponent(rule || "nineball")

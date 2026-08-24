@@ -78,8 +78,8 @@ export class ShotStartUtils {
   static buildRecreateUrl(conditions?: ShotStartConditions): string {
     if (!conditions) return ""
     const c = conditions
-    const pageBase = (globalThis.location?.href ?? "index.html").split("?")[0]
-    const base = c.baseUrl ?? pageBase ?? "index.html"
+    const pageBase = (globalThis.location?.href ?? "play.html").split("?")[0]
+    const base = c.baseUrl ?? pageBase ?? "play.html"
     const pageParams = new URLSearchParams(globalThis.location?.search ?? "")
     const rulename = c.rulename ?? pageParams.get("ruletype") ?? "nineball"
     const cushionModelName =
