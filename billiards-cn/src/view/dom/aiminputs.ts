@@ -308,6 +308,16 @@ export class AimInputs {
     return this.controlsDisabled
   }
 
+  /**
+   * 白球击球点展开面板（cueballPopup）当前是否处于展开状态。
+   * 展开期间屏蔽画布拖拽 / 点球瞄准，避免用户滑动屏幕调整打点时
+   * 误触旋转瞄准方向；只有收起面板后才能重新滑动屏幕瞄准。
+   */
+  isCueBallPopupOpen(): boolean {
+    const popup = id("cueballPopup") as HTMLElement | null
+    return !!popup && !popup.hidden
+  }
+
   /** item 1：标记「正在瞄准」开始（按住滑条）。 */
   private beginAim = () => {
     this.container.table.cue.beginAimInteraction()

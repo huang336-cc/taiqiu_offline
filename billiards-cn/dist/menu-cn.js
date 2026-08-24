@@ -492,6 +492,7 @@
     eightball:    { tint: "#3aa3ff", icon: "assets/eightball.png",    name: "八球" },
     snooker:      { tint: "#e85a5a", icon: "assets/snooker.png",      name: "斯诺克" },
     threecushion: { tint: "#7e5ad6", icon: "assets/threecushion.png", name: "三库开伦" },
+    professional: { tint: "#c81f1f", icon: "assets/nineball.png",     name: "专业" },
   }
 
   function getModeMeta(rule) {

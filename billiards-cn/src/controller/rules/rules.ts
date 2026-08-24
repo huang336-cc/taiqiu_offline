@@ -9,6 +9,8 @@ export interface Rules {
   currentBreak: number
   previousBreak: number
   rulename: string
+  /** AI 瞄准噪声缩放：<1 让电脑更精准（专业/更困难模式用）。默认 1。 */
+  aiNoiseScale?: number
   readonly asset: string
   update(outcome: Outcome[]): Controller
   rack(): Ball[]

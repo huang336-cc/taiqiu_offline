@@ -93,6 +93,14 @@ function build(themeId: string): Texture | null {
       return buildPeppa()
     case "qilin":
       return buildQilin()
+    case "ultraman":
+      return buildUltraman()
+    case "neon":
+      return buildNeon()
+    case "bamboo":
+      return buildBamboo()
+    case "jade":
+      return buildJade()
     default:
       return null
   }
@@ -240,6 +248,159 @@ function buildQilin(): Texture {
     ctx.fill()
   }
   ctx.fillStyle = "#ffd24a"
+  ctx.fillRect(0, H - 60, W, 60)
+  return toTexture(cv)
+}
+
+/** 奥特曼：银色金属底 + 红色能量条纹 + 六边形护甲块（原创意象，红银配色致敬） */
+function buildUltraman(): Texture {
+  const { cv, ctx } = newCanvas()
+  const g = ctx.createLinearGradient(0, 0, 0, H)
+  g.addColorStop(0, "#e8eef2")
+  g.addColorStop(0.5, "#b9c4cc")
+  g.addColorStop(1, "#8c98a2")
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, W, H)
+  // 金属高光竖纹
+  ctx.strokeStyle = "rgba(255,255,255,0.45)"
+  ctx.lineWidth = 3
+  for (let i = 0; i < W; i += 24) {
+    ctx.beginPath()
+    ctx.moveTo(i, 0)
+    ctx.lineTo(i + 8, H)
+    ctx.stroke()
+  }
+  // 红色能量环带
+  ctx.fillStyle = "#c81f1f"
+  ctx.fillRect(0, H * 0.22, W, H * 0.05)
+  ctx.fillRect(0, H * 0.62, W, H * 0.05)
+  // 六边形护甲块
+  const hex = (cx: number, cy: number, r: number) => {
+    ctx.beginPath()
+    for (let k = 0; k < 6; k++) {
+      const a = (Math.PI / 3) * k - Math.PI / 6
+      const x = cx + r * Math.cos(a)
+      const y = cy + r * Math.sin(a)
+      k === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+    }
+    ctx.closePath()
+    ctx.fillStyle = "#d7dde2"
+    ctx.fill()
+    ctx.strokeStyle = "#9aa6ae"
+    ctx.lineWidth = 2
+    ctx.stroke()
+  }
+  for (let r = 0; r < H; r += 150) {
+    hex(W * 0.3, r + 40, 26)
+    hex(W * 0.7, r + 110, 26)
+  }
+  // 尾部红银金箍
+  ctx.fillStyle = "#c81f1f"
+  ctx.fillRect(0, H - 60, W, 60)
+  return toTexture(cv)
+}
+
+/** 霓虹脉冲：深黑底 + 品红/青色发光脉冲波（赛博朋克） */
+function buildNeon(): Texture {
+  const { cv, ctx } = newCanvas()
+  ctx.fillStyle = "#05060a"
+  ctx.fillRect(0, 0, W, H)
+  // 脉冲波（品红 → 青 渐变描边）
+  for (let i = 0; i < 14; i++) {
+    const cx = (i * 97) % W
+    const cy = (i * 173) % H
+    const rad = 30 + (i % 4) * 18
+    const grd = ctx.createRadialGradient(cx, cy, 2, cx, cy, rad)
+    grd.addColorStop(0, "rgba(255,43,214,0.9)")
+    grd.addColorStop(0.6, "rgba(19,230,255,0.5)")
+    grd.addColorStop(1, "rgba(19,230,255,0)")
+    ctx.fillStyle = grd
+    ctx.beginPath()
+    ctx.arc(cx, cy, rad, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  // 横向霓虹流光线
+  ctx.strokeStyle = "rgba(255,43,214,0.85)"
+  ctx.lineWidth = 5
+  ctx.shadowColor = "#ff2bd6"
+  ctx.shadowBlur = 14
+  for (let i = 0; i < 5; i++) {
+    const y = (i + 0.5) * (H / 5)
+    ctx.beginPath()
+    ctx.moveTo(0, y)
+    ctx.lineTo(W, y + (i % 2 ? 30 : -30))
+    ctx.stroke()
+  }
+  ctx.shadowBlur = 0
+  ctx.fillStyle = "#0a0f16"
+  ctx.fillRect(0, H - 60, W, 60)
+  return toTexture(cv)
+}
+
+/** 青竹：竹青渐变 + 竹节环纹 + 竖纤维 */
+function buildBamboo(): Texture {
+  const { cv, ctx } = newCanvas()
+  const g = ctx.createLinearGradient(0, 0, 0, H)
+  g.addColorStop(0, "#9fd67a")
+  g.addColorStop(0.5, "#5fa83f")
+  g.addColorStop(1, "#3f7d2f")
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, W, H)
+  // 竹节环纹
+  ctx.strokeStyle = "rgba(30,70,20,0.7)"
+  ctx.lineWidth = 10
+  for (let y = 0; y < H; y += 110) {
+    ctx.beginPath()
+    ctx.moveTo(0, y)
+    ctx.lineTo(W, y)
+    ctx.stroke()
+  }
+  // 竖纤维高光
+  ctx.strokeStyle = "rgba(220,255,200,0.4)"
+  ctx.lineWidth = 2
+  for (let i = 8; i < W; i += 16) {
+    ctx.beginPath()
+    ctx.moveTo(i, 0)
+    ctx.lineTo(i, H)
+    ctx.stroke()
+  }
+  ctx.fillStyle = "#356b27"
+  ctx.fillRect(0, H - 60, W, 60)
+  return toTexture(cv)
+}
+
+/** 墨玉：墨黑/墨绿底 + 玉色光泽 + 暗云纹 */
+function buildJade(): Texture {
+  const { cv, ctx } = newCanvas()
+  const g = ctx.createLinearGradient(0, 0, 0, H)
+  g.addColorStop(0, "#1c2b22")
+  g.addColorStop(0.5, "#101a14")
+  g.addColorStop(1, "#0a0f0c")
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, W, H)
+  // 玉色流动光斑
+  for (let i = 0; i < 16; i++) {
+    const cx = (i * 71) % W
+    const cy = (i * 151) % H
+    const rad = 24 + (i % 3) * 14
+    const grd = ctx.createRadialGradient(cx, cy, 2, cx, cy, rad)
+    grd.addColorStop(0, "rgba(80,180,140,0.55)")
+    grd.addColorStop(1, "rgba(80,180,140,0)")
+    ctx.fillStyle = grd
+    ctx.beginPath()
+    ctx.arc(cx, cy, rad, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  // 暗云纹
+  ctx.strokeStyle = "rgba(120,200,160,0.18)"
+  ctx.lineWidth = 3
+  ctx.beginPath()
+  ctx.moveTo(0, H * 0.3)
+  ctx.bezierCurveTo(W * 0.4, H * 0.25, W * 0.6, H * 0.4, W, H * 0.32)
+  ctx.moveTo(0, H * 0.7)
+  ctx.bezierCurveTo(W * 0.5, H * 0.62, W * 0.7, H * 0.78, W, H * 0.7)
+  ctx.stroke()
+  ctx.fillStyle = "#0d1a14"
   ctx.fillRect(0, H - 60, W, 60)
   return toTexture(cv)
 }

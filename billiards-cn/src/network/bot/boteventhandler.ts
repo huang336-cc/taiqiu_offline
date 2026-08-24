@@ -62,7 +62,7 @@ export class BotEventHandler {
     this.container = container
     this.publishSequenceToPlayer = publishSequenceToPlayer
     this.enqueueMessage = enqueueMessage
-    this.calculator = new AimCalculator()
+    this.calculator = new AimCalculator(container.rules?.aiNoiseScale ?? 1)
     const botName =
       new URLSearchParams(globalThis.location.search).get("bot") ?? "ClawBreak"
     this.strategy = botName === "TheFarJaw" ? new TheFarJaw() : new ClawBreak()

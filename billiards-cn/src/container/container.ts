@@ -148,6 +148,9 @@ try {
       keyboard.onDragStart = () => {
         const cue = this.table.cue
         if (!cue.aimInputs || cue.aimInputs.isDisabled()) return
+        // v1.3.20：白球击球点展开面板打开时，屏蔽画布拖拽瞄准，
+        // 防止调整打点时滑动屏幕误触旋转瞄准方向。
+        if (cue.aimInputs.isCueBallPopupOpen()) return
         cue.beginAimInteraction()
       }
       keyboard.onDragEnd = () => {
@@ -170,6 +173,8 @@ try {
     this.view.onBallTap = (ball) => {
       const cue = this.table.cue
       if (!cue.aimInputs || cue.aimInputs.isDisabled()) return
+      // v1.3.20：白球击球点展开面板打开时，屏蔽点球瞄准（同拖拽瞄准互斥）。
+      if (cue.aimInputs.isCueBallPopupOpen()) return
       cue.aimAtNext(this.table.cueball, ball)
       // 点球对准是瞬时操作，没有松手事件，给一个短暂的辅助线可见窗口
       cue.flashAimInteraction()
@@ -372,6 +377,8 @@ try {
       this.eventQueue.push(new StationaryEvent())
       this.table.cue.hittingAnimation = false
     }
+    // v1.3.20：每帧把监听者同步到相机，实现 3D 空间音频随视角变化
+    this.sound.updateListener(this.view.camera?.camera)
     this.sound.processOutcomes(this.table.outcome)
 
     // v1.2.9 #F5：回放每帧刷新进度条 UI（仅回放模式、由 Replay 控制器提供回调）

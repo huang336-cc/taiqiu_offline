@@ -155,7 +155,17 @@ export function getSkin(id: string): SkinDef {
 export interface CueThemeDef {
   id: string
   name: string
-  kind: "auto" | "dragon" | "azure" | "minions" | "peppa" | "qilin"
+  kind:
+    | "auto"
+    | "dragon"
+    | "azure"
+    | "minions"
+    | "peppa"
+    | "qilin"
+    | "ultraman"
+    | "neon"
+    | "bamboo"
+    | "jade"
   /** UI 色块渐变（左=杆身，右=杆尾） */
   swatch: string
   accent: number
@@ -203,6 +213,34 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "qilin",
     swatch: "linear-gradient(135deg,#ffd24a 0%,#d8320a 100%)",
     accent: 0xff7a1f,
+  },
+  {
+    id: "ultraman",
+    name: "奥特曼",
+    kind: "ultraman",
+    swatch: "linear-gradient(135deg,#e8eef2 0%,#c81f1f 100%)",
+    accent: 0xe8eef2,
+  },
+  {
+    id: "neon",
+    name: "霓虹脉冲",
+    kind: "neon",
+    swatch: "linear-gradient(135deg,#ff2bd6 0%,#13e6ff 100%)",
+    accent: 0xff2bd6,
+  },
+  {
+    id: "bamboo",
+    name: "青竹",
+    kind: "bamboo",
+    swatch: "linear-gradient(135deg,#9fd67a 0%,#3f7d2f 100%)",
+    accent: 0x9fd67a,
+  },
+  {
+    id: "jade",
+    name: "墨玉",
+    kind: "jade",
+    swatch: "linear-gradient(135deg,#1c2b22 0%,#0a0f0c 100%)",
+    accent: 0x2f5d4a,
   },
 ]
 

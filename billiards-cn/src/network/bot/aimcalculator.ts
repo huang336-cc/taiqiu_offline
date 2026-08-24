@@ -23,8 +23,11 @@ export class AimCalculator {
   static readonly MAX_SHOT_POWER = 110 * R
   public readonly pockets: Vector3[]
   public readonly knuckles: Vector3[]
+  /** AI 瞄准噪声缩放：<1 让电脑更精准（专业/更困难模式用）。默认 1。 */
+  private readonly noiseScale: number
 
-  constructor() {
+  constructor(noiseScale = 1) {
+    this.noiseScale = noiseScale
     this.pockets = this.extractPocketPositions(PocketGeometry.pocketCenters)
     this.knuckles = this.extractPocketKnucklePositions(PocketGeometry.knuckles)
   }
@@ -88,7 +91,7 @@ export class AimCalculator {
     aim.i = balls.indexOf(cueball)
 
     const lineTo = targetPos.clone().sub(cueball.pos)
-    aim.angle = atan2(lineTo.y, lineTo.x) + (Math.random() - 0.5) * noise
+    aim.angle = atan2(lineTo.y, lineTo.x) + (Math.random() - 0.5) * noise * this.noiseScale
     aim.power = power
     aim.offset = spinOffset
 

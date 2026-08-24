@@ -30,6 +30,8 @@ export class NineBall implements Rules {
   currentBreak = 0
   previousBreak = 0
   rulename = "nineball"
+  /** AI 难度旋钮：默认 1；专业模式覆盖为更小值让电脑更精准。 */
+  aiNoiseScale = 1
 
   constructor(container: Container) {
     this.container = container
