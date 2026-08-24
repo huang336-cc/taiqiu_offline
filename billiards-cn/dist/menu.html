@@ -348,6 +348,18 @@
       <section id="screen-settings" class="screen">
         <h2 class="screen-title">游戏设置</h2>
         <div class="scroll">
+          <!-- v1.3.19：语言设置（中文 / English），持久化到 localStorage -->
+          <div class="setting-group">
+            <h3>语言</h3>
+            <div class="setting-row">
+              <span>界面语言</span>
+              <div class="seg" id="langSeg" role="tablist">
+                <button class="seg-btn" data-lang="zh">中文</button>
+                <button class="seg-btn" data-lang="en">English</button>
+              </div>
+            </div>
+          </div>
+
           <div class="setting-group">
             <h3>画面</h3>
             <div class="setting-row">
@@ -511,7 +523,7 @@
             </p>
             <table class="key-table">
               <tr><td>开发者</td><td>huang336</td></tr>
-              <tr><td>版本</td><td id="versionCell">1.3.18</td></tr>
+              <tr><td>版本</td><td id="versionCell">1.3.19</td></tr>
               <tr><td>协议</td><td>GNU GPL v3.0</td></tr>
               <tr>
                 <td>项目源码</td>
@@ -695,6 +707,14 @@
           <p class="about-text dim">
             本应用自 v1.0.4（2026-08-03）起的全部版本变更记录，新版本置顶。详细条目可在每个版本下展开。
           </p>
+
+          <div class="setting-group">
+            <h3>v1.3.19 · 2026-08-24 10:10:00</h3>
+            <p class="about-text dim"><b>1 项新功能（设置中增加语言切换，新增英文界面）：</b></p>
+            <ul class="changelog-list">
+              <li><b>设置中新增「界面语言」切换（中文 / English）</b>，可在主菜单「设置」面板与游戏内「设置」覆盖层（help.html）中切换，选择持久化到 localStorage（沿用 <code>billiards_cn_settings_v1</code>）。<b>中英文案全面覆盖</b>：主菜单全部可见文本（含画质档位 / 辅助线档位 / 各模式规则弹窗 / 外观定制皮肤·球杆·场景名 / 设置联动提示 / 操作反馈 toast）、游戏内设置覆盖层、以及游戏内 HUD 比分栏（「玩家 / 对手 / 电脑」、「击球 / 摆球 / 切换视角 / 设置」等按钮、「白球击球点 / 击球力度 / 回放进度」等标签）均支持中英切换。实现采用全局中文→英文文本映射字典 + <code>localize(root)</code> 树遍历翻译，缺失项优雅降级保持中文；皮肤 / 球杆 / 场景名通过卡片 <code>.skin-name</code> 文本读取，故 <code>localize</code> 在 <code>refreshCustomRows</code> 之前执行以保证先翻译。游戏内比分栏随语言即时变更（监听 <code>postMessage({type:"billiards-language"})</code>），对战 bot 时「电脑」译为「CPU」。<b>双端一致</b>：语言设置对所有端一致呈现，纯文案 / 逻辑层改造，不改动任何布局；APP 端通过 APK 重签打包 v1.3.19 一并生效。</li>
+            </ul>
+          </div>
 
           <div class="setting-group">
             <h3>v1.3.18 · 2026-08-24 18:20:00</h3>
@@ -2032,7 +2052,7 @@
     </div>
 
     <script>
-      window.__BILLIARDS_VERSION__ = "1.3.18-2608241820";
+      window.__BILLIARDS_VERSION__ = "1.3.19-2608241010";
     </script>
     <script src="menu-cn.js"></script>
     <script>

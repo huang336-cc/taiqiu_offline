@@ -1,13 +1,14 @@
 <!doctype html>
 <html lang="zh-CN">
   <head>
-    <!-- v1.2.29：直接打开站点根（无任何游戏/回放参数）时停留在主菜单，
-         而非用默认九球规则自动开局。菜单"开始游戏"会带 ruletype= 等参数、
-         回放会带 state=/replayId= 参数，这些合法入口不受影响。 -->
+    <!-- v1.3.19：直接打开站点根（无任何游戏/回放参数）时进入发布页 download.html，
+         而非用默认九球规则自动开局或停留菜单。发布页提供下载/在线玩/功能菜单入口；
+         菜单"开始游戏"会带 ruletype= 等参数、回放会带 state=/replayId= 参数，
+         这些合法入口不受影响。 -->
     <script>
       (function () {
         var q = location.search || "";
-        if (q.replace("?", "").length === 0) location.replace("menu.html");
+        if (q.replace("?", "").length === 0) location.replace("download.html");
       })();
     </script>
     <title>奥特曼的台球 · 离线版</title>
@@ -354,5 +355,156 @@
     <script defer src="three_examples.js"></script>
     <script defer src="index.js"></script>
     <script defer src="back-confirm-cn.js"></script>
+
+    <!-- v1.3.19：游戏内界面语言（读取与主菜单共用的 localStorage，并监听设置覆盖层发来的切换） -->
+    <script>
+      ;(function () {
+        "use strict"
+        var STORAGE_KEY = "billiards_cn_settings_v1"
+        // 中文 -> 英文（仅覆盖可见文本节点与 title/aria-label/placeholder/alt 属性；
+        // 注释与画质档位等动态内容不在此处理，交由各自页面脚本）
+        var TX = {
+          "请横屏使用": "Please use landscape",
+          "为获得最佳台球体验，请将手机旋转至横屏模式":
+            "For the best billiards experience, rotate your phone to landscape mode",
+          "加载中…": "Loading…",
+          "返回主菜单": "Back to Menu",
+          "再来一局": "Play Again",
+          "关闭": "Close",
+          "设置": "Settings",
+          "击球": "Shoot",
+          "摆球 / 击球": "Place / Shoot",
+          "切换视角": "Switch View",
+          "视角": "Camera",
+          "玩家": "You",
+          "对手": "Opponent",
+          "电脑": "CPU",
+          "回放": "Replay",
+          "固定": "Fixed",
+          "退出回放": "Exit Replay",
+          "白球击球点": "Cue Ball Contact",
+          "点击白球设置击球位置": "Tap the cue ball to set the contact point",
+          "加塞复位": "Reset Spin",
+          "抬杆高度": "Cue Elevation",
+          "拖动球杆调整抬杆高度": "Drag the cue to adjust elevation",
+          "抬杆角度": "Cue angle",
+          "横向瞄准角度": "Fine aim angle",
+          "击球力度": "Shot power",
+          "回放进度": "Replay progress",
+          "游戏菜单": "Game Menu",
+        }
+
+        function curLang() {
+          try {
+            var raw = localStorage.getItem(STORAGE_KEY)
+            if (raw) {
+              var s = JSON.parse(raw)
+              if (s && (s.language === "en" || s.language === "zh")) return s.language
+            }
+          } catch (e) {}
+          return "zh"
+        }
+
+        function localize(root, toLang) {
+          root = root || document
+          try {
+            document.documentElement.lang = toLang === "en" ? "en" : "zh-CN"
+          } catch (e) {}
+          if (!root.querySelectorAll) return
+          var walker
+          try {
+            walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null)
+          } catch (e) {
+            return
+          }
+          var texts = []
+          var n
+          while ((n = walker.nextNode())) texts.push(n)
+          for (var i = 0; i < texts.length; i++) {
+            var node = texts[i]
+            if (node.nodeValue == null) continue
+            if (toLang === "en") {
+              var key = node.nodeValue.trim()
+              if (TX[key] != null) {
+                node.__zh = key
+                node.nodeValue = TX[key]
+              }
+            } else if (node.__zh != null) {
+              node.nodeValue = node.__zh
+            }
+          }
+          var attrs = ["title", "aria-label", "placeholder", "alt"]
+          var els = root.querySelectorAll("*")
+          for (var j = 0; j < els.length; j++) {
+            var el = els[j]
+            for (var k = 0; k < attrs.length; k++) {
+              var an = attrs[k]
+              var v = el.getAttribute(an)
+              if (v == null) continue
+              if (toLang === "en") {
+                if (TX[v] != null) {
+                  if (el["__zh_" + an] == null) el["__zh_" + an] = v
+                  el.setAttribute(an, TX[v])
+                }
+              } else if (el["__zh_" + an] != null) {
+                el.setAttribute(an, el["__zh_" + an])
+              }
+            }
+          }
+        }
+
+        // 比分栏标签由 hud.ts 在运行时写入（固定 玩家 / 对手 / 电脑），
+        // 需在其之后覆盖，故在 load 事件与语言切换消息里处理。
+        function applyScoreLabels(l) {
+          var p1 = document.getElementById("scP1Label")
+          var p2 = document.getElementById("scP2Label")
+          var isBot = /[?&]bot=/.test(location.search)
+          if (p1) p1.textContent = l === "en" ? "You" : "玩家"
+          if (p2)
+            p2.textContent =
+              l === "en" ? (isBot ? "CPU" : "Opponent") : isBot ? "电脑" : "对手"
+        }
+
+        function applyIndexLang(l) {
+          localize(document, l)
+          applyScoreLabels(l)
+        }
+
+        // 进入对局加载完成后应用（此时 hud 已写好默认比分标签）
+        window.addEventListener("load", function () {
+          applyIndexLang(curLang())
+        })
+
+        // 兜底：hud.ts 在「对局开始」时才把 #scP1Label/#scP2Label 写入中文，
+        // 晚于上面的 load 事件，故轮询检测这两个节点出现即套用语言，
+        // 确保比分栏（玩家/对手/电脑 -> You/Opponent/CPU）始终跟随当前语言。
+        // 值未变则跳过写入，避免无意义的 DOM 操作。
+        var __lastSc = ""
+        function watchScoreLabels() {
+          var p1 = document.getElementById("scP1Label")
+          var p2 = document.getElementById("scP2Label")
+          if (p1 || p2) {
+            applyScoreLabels(curLang())
+            var sig = (p1 ? p1.textContent : "") + "|" + (p2 ? p2.textContent : "")
+            if (sig === __lastSc) return // 已稳定，停止轮询
+            __lastSc = sig
+          }
+          setTimeout(watchScoreLabels, 400)
+        }
+        watchScoreLabels()
+
+        // 监听游戏内设置覆盖层（help iframe）发来的语言切换
+        window.addEventListener("message", function (e) {
+          var d = e.data
+          if (
+            d &&
+            d.type === "billiards-language" &&
+            (d.language === "en" || d.language === "zh")
+          ) {
+            applyIndexLang(d.language)
+          }
+        })
+      })()
+    </script>
   </body>
 </html>

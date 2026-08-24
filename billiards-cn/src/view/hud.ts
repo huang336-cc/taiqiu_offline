@@ -52,9 +52,22 @@ export class Hud {
     this.timeTextElement = id("scTimeText")
 
     // v1.2.6：根据模式设置选手标签：p1 永远是「玩家」，p2 在电脑对战时为「电脑」，其他为「对手」
-    if (this.p1LabelEl) this.p1LabelEl.textContent = "玩家"
+    // v1.3.19：标签随界面语言切换（中文 / English），读取与主菜单共用的 localStorage 设置
+    const isEn = (() => {
+      try {
+        const raw = localStorage.getItem("billiards_cn_settings_v1")
+        if (raw) {
+          const s = JSON.parse(raw)
+          if (s && (s.language === "en" || s.language === "zh")) return s.language === "en"
+        }
+      } catch (_) {}
+      return false
+    })()
+    if (this.p1LabelEl) this.p1LabelEl.textContent = isEn ? "You" : "玩家"
     if (this.p2LabelEl) {
-      this.p2LabelEl.textContent = Session.isBotMode() ? "电脑" : "对手"
+      this.p2LabelEl.textContent = Session.isBotMode()
+        ? (isEn ? "CPU" : "电脑")
+        : (isEn ? "Opponent" : "对手")
     }
 
     // 训练模式 → body.train-mode（CSS 隐藏 p2 列与共享已进球区）

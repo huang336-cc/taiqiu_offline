@@ -38,6 +38,8 @@ export interface GameSettings {
   scene: string
   /** 是否保留三个视角（跟随 / 俯视 / 母球视角），关闭则仅保留前两个 */
   keepAllViews: boolean
+  /** 界面语言：zh=中文，en=英文 */
+  language: "zh" | "en"
 }
 
 const STORAGE_KEY = "billiards_cn_settings_v1"
@@ -65,6 +67,8 @@ const DEFAULTS: GameSettings = {
   scene: "snow",
   // v1.1.8：默认保留三个视角（跟随 / 俯视 / 母球视角）
   keepAllViews: true,
+  // v1.3.19：界面语言默认中文
+  language: "zh",
 }
 
 /** 皮肤列表 */

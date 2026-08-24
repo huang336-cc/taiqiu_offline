@@ -8,26 +8,357 @@
 
   var STORAGE_KEY = "billiards_cn_settings_v1"
 
-  var QUALITY_LABELS = [
-    "极速（像素风，最省电）",
-    "流畅（低配手机推荐）",
-    "标准",
-    "高清（推荐）",
-    "超清（开启抗锯齿）",
-    "极致（高端手机）",
-  ]
+  // ===== v1.3.19 多语言（i18n）=====
+  // 画质档位 / 辅助线档位 / 各玩法规则：按语言分别给出。
+  var I18N = {
+    zh: {
+      quality: [
+        "极速（像素风，最省电）",
+        "流畅（低配手机推荐）",
+        "标准",
+        "高清（推荐）",
+        "超清（开启抗锯齿）",
+        "极致（高端手机）",
+      ],
+      qualityHint: [
+        "以极低分辨率渲染，画面为像素风格，帧率最高、最省电。",
+        "降低渲染分辨率与球体精度，适合入门机型与老旧设备。",
+        "常规画质，多数中端手机可稳定运行。",
+        "较高的渲染分辨率与球体精度，兼顾清晰度与流畅度。",
+        "开启抗锯齿，边缘更平滑，建议中高端机型使用。",
+        "最高渲染精度，仅建议旗舰机型开启，耗电较高。",
+      ],
+      tline: ["关闭", "短", "中", "最长"],
+      modeRules: {
+        nineball: {
+          title: "九球规则",
+          body:
+            '<div class="guide-block"><h3>九球</h3><p>台面上有 1~9 号球。每次击球必须先碰到台面上号码最小的球，任何球落袋都算得分并可继续击球。谁先合法打进 9 号球即获胜。</p></div>' +
+            '<div class="guide-block"><h3>犯规</h3><ul class="guide-list"><li>母球落袋</li><li>空杆（未击中任何球）</li><li>首个击中的球不是台面号码最小的球</li><li>击球后无任何球碰库且无球落袋</li></ul><p class="about-text dim">犯规后对手获得自由球，可任意摆放母球。</p></div>',
+        },
+        eightball: {
+          title: "八球规则",
+          body:
+            '<div class="guide-block"><h3>八球</h3><p>开球后由第一颗合法落袋的球确定己方球组（全色 1~7 或花色 9~15）。清完己方球组后，最后打进黑 8 者获胜。黑 8 提前落袋判负。</p></div>' +
+            '<div class="guide-block"><h3>犯规</h3><ul class="guide-list"><li>母球落袋</li><li>空杆（未击中任何球）</li><li>开局先碰黑八，犯规</li><li>先碰到了对方的球</li><li>本方球已清台，必须先碰黑八（否则犯规）</li><li>击球后无任何球碰库且无球落袋</li></ul><p class="about-text dim">犯规后对手获得自由球，可任意摆放母球。</p></div>',
+        },
+        snooker: {
+          title: "斯诺克规则",
+          body:
+            '<div class="guide-block"><h3>斯诺克</h3><p>先打红球（1 分），进袋后再打一颗彩球，交替进行。彩球分值：黄 2、绿 3、棕 4、蓝 5、粉 6、黑 7。红球阶段彩球进袋后需重新摆回原位；红球清完后，按分值从低到高依次清彩球，总分高者获胜。</p></div>' +
+            '<div class="guide-block"><h3>犯规</h3><ul class="guide-list"><li>母球落袋</li><li>空杆（未击中任何球）</li><li>首个击中的球不符合当前阶段（红球阶段碰彩球，或彩球阶段碰红球）</li><li>击球后无任何球碰库且无球落袋</li></ul><p class="about-text dim">犯规后对手获得自由球，可任意摆放母球。</p></div>',
+        },
+        threecushion: {
+          title: "三库开伦规则",
+          body:
+            '<div class="guide-block"><h3>三库开伦</h3><p>无袋球台。母球需先碰到库边至少三次，再撞到另外两颗球，即得 1 分。得分后可继续击球，未得分则换手。</p></div>' +
+            '<div class="guide-block"><h3>犯规</h3><ul class="guide-list"><li>未先碰库边三次即撞到第二颗球</li><li>空杆（未击中任何球）</li></ul><p class="about-text dim">犯规后换手，由对手击球。</p></div>',
+        },
+      },
+    },
+    en: {
+      quality: [
+        "Ultra Lite (pixel art, most power-saving)",
+        "Smooth (for low-end phones)",
+        "Standard",
+        "HD (recommended)",
+        "Sharp (antialiasing on)",
+        "Ultra (high-end phones)",
+      ],
+      qualityHint: [
+        "Renders at very low resolution with a pixel-art look; highest frame rate and lowest power use.",
+        "Lowers render resolution and ball detail; good for entry-level and older devices.",
+        "Standard quality; runs stably on most mid-range phones.",
+        "Higher render resolution and ball detail, balancing clarity and smoothness.",
+        "Enables antialiasing for smoother edges; recommended for mid-to-high-end devices.",
+        "Highest render quality; only recommended for flagship devices, higher power draw.",
+      ],
+      tline: ["Off", "Short", "Medium", "Longest"],
+      modeRules: {
+        nineball: {
+          title: "9-Ball Rules",
+          body:
+            '<div class="guide-block"><h3>9-Ball</h3><p>Balls 1–9 are on the table. You must hit the lowest-numbered ball first; any ball pocketed counts and you keep shooting. Pocket the 9-ball legally to win.</p></div>' +
+            '<div class="guide-block"><h3>Fouls</h3><ul class="guide-list"><li>Cue ball pocketed</li><li>No ball hit</li><li>First ball struck is not the lowest on the table</li><li>After the shot no ball hits a rail and none is pocketed</li></ul><p class="about-text dim">After a foul the opponent gets ball-in-hand and may place the cue ball anywhere.</p></div>',
+        },
+        eightball: {
+          title: "8-Ball Rules",
+          body:
+            '<div class="guide-block"><h3>8-Ball</h3><p>After the break, the first legally pocketed ball decides your group (solids 1–7 or stripes 9–15). Clear your group, then pocket the black 8 to win. Pocketing the 8 early loses.</p></div>' +
+            '<div class="guide-block"><h3>Fouls</h3><ul class="guide-list"><li>Cue ball pocketed</li><li>No ball hit</li><li>First contact is the 8-ball on the break (foul)</li><li>Hit opponent ball first</li><li>After clearing your group you must hit the 8 first (otherwise foul)</li><li>After the shot no ball hits a rail and none is pocketed</li></ul><p class="about-text dim">After a foul the opponent gets ball-in-hand and may place the cue ball anywhere.</p></div>',
+        },
+        snooker: {
+          title: "Snooker Rules",
+          body:
+            '<div class="guide-block"><h3>Snooker</h3><p>Pot a red (1 pt), then a colour, alternating. Colour values: yellow 2, green 3, brown 4, blue 5, pink 6, black 7. Reds stay down; colours are re-spotted until reds are gone, then cleared low to high. Highest total wins.</p></div>' +
+            '<div class="guide-block"><h3>Fouls</h3><ul class="guide-list"><li>Cue ball pocketed</li><li>No ball hit</li><li>First ball struck is wrong for the current phase (red in colour phase, or colour in red phase)</li><li>After the shot no ball hits a rail and none is pocketed</li></ul><p class="about-text dim">After a foul the opponent gets ball-in-hand and may place the cue ball anywhere.</p></div>',
+        },
+        threecushion: {
+          title: "3-Cushion Rules",
+          body:
+            '<div class="guide-block"><h3>3-Cushion</h3><p>No pockets. The cue ball must hit a cushion at least three times before striking the other two balls to score 1 point. Continue after scoring; miss and the turn passes.</p></div>' +
+            '<div class="guide-block"><h3>Fouls</h3><ul class="guide-list"><li>Second ball struck before the cue ball has hit a cushion three times</li><li>No ball hit</li></ul><p class="about-text dim">After a foul the turn passes to the opponent.</p></div>',
+        },
+      },
+    },
+  }
 
-  var QUALITY_HINTS = [
-    "以极低分辨率渲染，画面为像素风格，帧率最高、最省电。",
-    "降低渲染分辨率与球体精度，适合入门机型与老旧设备。",
-    "常规画质，多数中端手机可稳定运行。",
-    "较高的渲染分辨率与球体精度，兼顾清晰度与流畅度。",
-    "开启抗锯齿，边缘更平滑，建议中高端机型使用。",
-    "最高渲染精度，仅建议旗舰机型开启，耗电较高。",
-  ]
+  // 中文 -> 英文 文本映射（同时用于 textContent 与 title/aria-label 等属性）。
+  // 缺失项保持中文（优雅降级），不会报错。
+  var TX = {
+    "九球": "9-Ball",
+    "八球": "8-Ball",
+    "斯诺克": "Snooker",
+    "三库开伦": "3-Cushion",
+    "规则": "Rules",
+    "自己练习": "Practice",
+    "电脑 · 稳健": "CPU · Steady",
+    "电脑 · 激进": "CPU · Aggressive",
+    "外观定制": "Appearance",
+    "环境场景": "Environment",
+    "球杆主题": "Cue Theme",
+    "台球桌颜色": "Table Color",
+    "开始游戏": "Start Game",
+    "操作介绍": "How to Play",
+    "查看回放": "Replays",
+    "游戏设置": "Settings",
+    "室内": "Room",
+    "沙滩": "Beach",
+    "原始森林": "Forest",
+    "雪山": "Snow Mountain",
+    "足球场": "Soccer",
+    "篮球场": "Basketball",
+    "办公室": "Office",
+    "网吧": "Cybercafe",
+    "暂不可用": "Unavailable",
+    "随台面": "Match Table",
+    "屠龙斩": "Dragon Slayer",
+    "青龙": "Azure Dragon",
+    "小黄人": "Minions",
+    "小猪佩奇": "Peppa Pig",
+    "火麒麟": "Fire Qilin",
+    "经典原木": "Classic Wood",
+    "翡翠绿": "Emerald",
+    "赤焰红": "Crimson",
+    "蓝宝石": "Sapphire",
+    "金辉": "Gold",
+    "点击色块即可实时切换球桌周围的背景与氛围光":
+      "Tap a swatch to switch the surroundings and ambient light in real time.",
+    "「随台面」时球杆颜色跟随台球桌颜色；也可单独换成主题贴图":
+      'With "Match Table" the cue colour follows the table; you can also pick a standalone themed texture.',
+    "点击色块即可实时更换球台台呢与球杆外观":
+      "Tap a swatch to change the cloth and cue appearance in real time.",
+    "基本操作": "Basics",
+    "旋转视角：在球桌上单指左右拖动":
+      "Rotate view: drag one finger left/right on the table.",
+    "调整俯仰：单指上下拖动": "Tilt view: drag one finger up/down.",
+    "缩放画面：双指捏合放大 / 缩小":
+      "Zoom: pinch with two fingers to zoom in / out.",
+    "击球：点击右下角的「击球」按钮":
+      'Shoot: tap the "Shoot" button at the bottom-right.',
+    "力度：拖动底部栏的力度条设定击球力量，百分比实时显示；击球后力度条维持设定值，下一杆可直接沿用":
+      "Power: drag the power bar to set strength; the percentage shows live. After shooting, the bar keeps its value for the next shot.",
+    "加塞与杆法": "Spin & Stroke",
+    "击球点：点开底部栏「击球点」展开母球圆盘，在盘上点选落点——偏上为高杆（跟进）、偏下为低杆（缩杆）、左右为左右塞（加塞走位）":
+      "Contact point: open Contact on the bottom bar to reveal the cue-ball disc, then tap a spot — top is follow, bottom is draw, left/right is side spin.",
+    "抬杆角度：点击母球圆盘旁的「+」，可抬高球杆角度，用于跳球或打出弧线":
+      "Elevate cue: tap + next to the disc to raise the cue angle for jump or curve shots.",
+    "复位：双击母球圆盘中心，击球点恢复正中心":
+      "Reset: double-tap the centre of the disc to recentre the contact point.",
+    "摆球（自由球）": "Ball-in-hand",
+    "对手犯规后你将获得自由球，可拖动母球到任意合法位置":
+      "After an opponent foul you get ball-in-hand; drag the cue ball anywhere legal.",
+    "确定位置后点击「击球」进入瞄准":
+      'Once placed, tap "Shoot" to aim.',
+    "视角切换": "Camera",
+    "点击右下角": "Tap the bottom-right",
+    "按钮循环切换：跟随视角 → 俯视全局 → 母球视角":
+      "button to cycle: Follow → Top-down → Cue-ball view.",
+    "俯视视角便于观察整体球型和走位路线":
+      "Top-down helps you read the whole table and plan position.",
+    "小技巧": "Tips",
+    "击球前先切到俯视，规划好下一颗球的走位":
+      "Before shooting, switch to top-down and plan the next ball position.",
+    "低杆可让母球回撤，高杆使其跟进，善用可控制走位":
+      "Draw pulls the cue ball back, follow pushes it forward — use them to control position.",
+    "力度并非越大越好，很多球轻推反而更准":
+      "More power is not always better; many shots are more accurate with a gentle push.",
+    "看完，开始游戏": "Got it, start game",
+    "画面": "Graphics",
+    "画质档位": "Quality",
+    "自动检测推荐画质": "Auto-detect recommended quality",
+    "重新检测": "Re-detect",
+    "声音": "Sound",
+    "音效开关": "Sound on/off",
+    "音量": "Volume",
+    "操作": "Controls",
+    "球杆延长线": "Cue extension line",
+    "进球预测线": "Pot prediction line",
+    "辅助线长度": "Aim line length",
+    "没有正对袋口时辅助线的延伸长度，拖到最左可关闭。":
+      "How far the line extends when no pocket is directly aimed at; drag fully left to turn it off.",
+    "保留三个视角": "Keep three views",
+    "关闭后，": "When off, ",
+    "仅在「跟随 / 俯视」两视角间切换，不再拉远到母球视角。":
+      "only the Follow / Top-down views are kept; it no longer zooms out to the cue-ball view.",
+    "训练": "Tutorial",
+    "安装后首次进入对局（训练或对战）会自动显示一次分步引导，引导你实做「摆白球→瞄准→击球」。 引导走完后不再自动弹出，可随时点击下方按钮重新观看。":
+      "The first time you enter a match (practice or versus) after install, a one-time step guide shows how to place the cue ball, aim and shoot. It will not reappear afterwards; tap the button below to watch it again.",
+    "手动重看引导": "Re-watch guide manually",
+    "重新打开新手引导": "Reopen tutorial",
+    "电脑对战": "Versus CPU",
+    "每回合时间限制": "Turn time limit",
+    "仅在「电脑 / 电脑·激进」模式下生效。超时未击球则本回合判负。":
+      "Only applies in CPU / CPU·Aggressive modes. Running out of time loses the turn.",
+    "关于": "About",
+    "本游戏为完全离线的单机版本，不需要联网、无任何广告、不收集任何个人信息。":
+      "This game is a fully offline single-player version: no internet needed, no ads, and no personal data collected.",
+    "本作品是开源项目 tailuge/billiards 的衍生作品，遵循 GPL-3.0 协议。 物理引擎实现了真实的球体碰撞、旋转、库边反弹与摩擦模型。":
+      "This is a derivative of the open-source project tailuge/billiards under GPL-3.0. The physics engine implements realistic ball collisions, spin, cushion bounce and friction.",
+    "本游戏不申请任何权限，不申请联网、存储、定位等任何敏感权限，因此无法自动检查更新。 如需获取最新版本，请自行前往 GitHub 的 Release 页面下载：":
+      "This game requests no permissions — no network, storage or location — so it cannot auto-check for updates. To get the latest version, download it yourself from the GitHub Releases page:",
+    "查看 GitHub Release 更新": "View GitHub Releases",
+    "打开 GitHub 项目页": "Open GitHub project",
+    "变更履历": "Changelog",
+    "开源许可与致谢": "Open Source License & Credits",
+    "恢复默认设置": "Reset to defaults",
+    "返回": "Back",
+    "原始项目": "Original project",
+    "本作品是开源项目 tailuge/billiards 的衍生作品。":
+      "This work is a derivative of the open-source project tailuge/billiards.",
+    "项目": "Project",
+    "作者": "Author",
+    "协议": "License",
+    "基线": "Base",
+    "物理引擎、渲染管线、规则判定与电脑对手等核心实现均来自该项目， 版权归原作者及其贡献者所有。在此致谢。":
+      "Core implementations — physics, render pipeline, rules and the CPU opponent — all come from that project; copyright belongs to the original authors and contributors. Thanks to them.",
+    "项目地址：": "Project: ",
+    "本衍生版源码：": "This derivative source: ",
+    "修改声明": "Modification notice",
+    "修改者": "Modified by",
+    "衍生版本": "Derivative version",
+    "修改日期": "Modified date",
+    "本作品由 huang336 基于 tailuge/billiards 修改而来。 主要改动：全中文本地化、移除全部联网功能、新增六档画质系统与移动端适配、 新增操作介绍与设置面板、封装为安卓离线应用。":
+      "This derivative was modified by huang336 based on tailuge/billiards. Key changes: full Chinese localization, removal of all networking, a six-tier quality system with mobile optimization, an added how-to-play and settings panel, and packaging as an offline Android app.",
+    "协议义务": "License obligations",
+    "本作品整体依据 GPL-3.0 发布。依据协议第 6 条， 分发二进制形式时须同时提供对应完整源代码， 该源码已随发布页附件一并提供。":
+      "This work is released under GPL-3.0. Per section 6, distributing binaries requires providing the corresponding complete source code, which ships with the release page.",
+    "你有权自由运行、研究、修改和再分发本作品， 但再分发时须遵循同样的 GPL-3.0 条款。 协议全文：gnu.org/licenses/gpl-3.0.html":
+      "You are free to run, study, modify and redistribute this work, but redistributions must follow the same GPL-3.0 terms. Full text: gnu.org/licenses/gpl-3.0.html",
+    "第三方组件": "Third-party components",
+    "以上组件版权归各自作者所有，依 MIT 协议使用。":
+      "The above components are copyrighted by their respective authors and used under the MIT license.",
+    "无担保声明": "No warranty",
+    "本程序不提供任何担保。在适用法律允许的最大范围内， 版权持有者以「原样」提供本程序，不作任何明示或默示的担保， 使用风险由你自行承担。":
+      "This program comes with NO warranty. To the maximum extent permitted by law, the copyright holder provides it as is with no express or implied warranty; use it at your own risk.",
+    "九球规则": "9-Ball Rules",
+    "八球规则": "8-Ball Rules",
+    "斯诺克规则": "Snooker Rules",
+    "三库开伦规则": "3-Cushion Rules",
+    "语言": "Language",
+    "界面语言": "Interface language",
+    "中文": "Chinese",
+    "本应用自 v1.0.4（2026-08-03）起的全部版本变更记录，新版本置顶。详细条目可在每个版本下展开。":
+      "All version changes since v1.0.4 (2026-08-03), newest first. Expand each version for details.",
+  }
 
-  // 辅助线长度滑动条档位文案（0=关，1=短，2=中，3=最长），与游戏内保持一致
-  var TLINE_LABELS = ["关闭", "短", "中", "最长"]
+  function curLang() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY)
+      if (raw) {
+        var s = JSON.parse(raw)
+        if (s && (s.language === "en" || s.language === "zh")) return s.language
+      }
+    } catch (e) {}
+    return "zh"
+  }
+
+  function localePkg() {
+    var l = curLang()
+    return I18N[l] || I18N.zh
+  }
+
+  function QL(i) {
+    var a = localePkg().quality
+    return a[i] != null ? a[i] : I18N.zh.quality[i]
+  }
+  function QH(i) {
+    var a = localePkg().qualityHint
+    return a[i] != null ? a[i] : I18N.zh.qualityHint[i]
+  }
+  function TL(i) {
+    var a = localePkg().tline
+    return a[i] != null ? a[i] : I18N.zh.tline[i]
+  }
+
+  function setLang(l) {
+    if (l !== "en" && l !== "zh") l = "zh"
+    var s = {}
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY)
+      if (raw) s = JSON.parse(raw) || {}
+    } catch (e) {
+      s = {}
+    }
+    s.language = l
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(s))
+    } catch (e) {}
+  }
+
+  // 本地化遍历：toLang==="en" 时按 TX 做中->英并记录原文；toLang==="zh" 时还原。
+  function localize(root, toLang) {
+    root = root || document
+    try {
+      document.documentElement.lang = toLang === "en" ? "en" : "zh-CN"
+    } catch (e) {}
+    if (!root.querySelectorAll) return
+    var walker
+    try {
+      walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null)
+    } catch (e) {
+      return
+    }
+    var texts = []
+    var n
+    while ((n = walker.nextNode())) texts.push(n)
+    for (var i = 0; i < texts.length; i++) {
+      var node = texts[i]
+      if (node.nodeValue == null) continue
+      if (toLang === "en") {
+        var key = node.nodeValue.trim()
+        if (TX[key] != null) {
+          node.__zh = key
+          node.nodeValue = TX[key]
+        }
+      } else if (node.__zh != null) {
+        node.nodeValue = node.__zh
+      }
+    }
+    var attrs = ["title", "aria-label", "placeholder", "alt"]
+    var els = root.querySelectorAll("*")
+    for (var j = 0; j < els.length; j++) {
+      var el = els[j]
+      for (var k = 0; k < attrs.length; k++) {
+        var an = attrs[k]
+        var v = el.getAttribute(an)
+        if (v == null) continue
+        if (toLang === "en") {
+          if (TX[v] != null) {
+            if (el["__zh_" + an] == null) el["__zh_" + an] = v
+            el.setAttribute(an, TX[v])
+          }
+        } else if (el["__zh_" + an] != null) {
+          el.setAttribute(an, el["__zh_" + an])
+        }
+      }
+    }
+  }
+
+  // 兼容旧引用（仅中文默认），实际取值走 QL/QH/TL
+  var QUALITY_LABELS = I18N.zh.quality
+  var QUALITY_HINTS = I18N.zh.qualityHint
+  var TLINE_LABELS = I18N.zh.tline
 
   var DEFAULTS = {
     lod: 3,
@@ -51,6 +382,8 @@
     cueTheme: "auto",
     // v1.1.6：默认且仅启用「雪山」场景
     scene: "snow",
+    // v1.3.19：界面语言默认中文
+    language: "zh",
   }
 
   /* ---------------- 设置存取 ---------------- */
@@ -210,37 +543,14 @@
     })
   }
 
-  /** v1.2.11 #F4：各玩法规则文本（含犯规规则），填充到 #screen-rules */
-  var MODE_RULES = {
-    nineball: {
-      title: "九球规则",
-      body:
-        '<div class="guide-block"><h3>九球</h3><p>台面上有 1~9 号球。每次击球必须先碰到台面上号码最小的球，任何球落袋都算得分并可继续击球。谁先合法打进 9 号球即获胜。</p></div>' +
-        '<div class="guide-block"><h3>犯规</h3><ul class="guide-list"><li>母球落袋</li><li>空杆（未击中任何球）</li><li>首个击中的球不是台面号码最小的球</li><li>击球后无任何球碰库且无球落袋</li></ul><p class="about-text dim">犯规后对手获得自由球，可任意摆放母球。</p></div>',
-    },
-    eightball: {
-      title: "八球规则",
-      body:
-        '<div class="guide-block"><h3>八球</h3><p>开球后由第一颗合法落袋的球确定己方球组（全色 1~7 或花色 9~15）。清完己方球组后，最后打进黑 8 者获胜。黑 8 提前落袋判负。</p></div>' +
-        '<div class="guide-block"><h3>犯规</h3><ul class="guide-list"><li>母球落袋</li><li>空杆（未击中任何球）</li><li>开局先碰黑八，犯规</li><li>先碰到了对方的球</li><li>本方球已清台，必须先碰黑八（否则犯规）</li><li>击球后无任何球碰库且无球落袋</li></ul><p class="about-text dim">犯规后对手获得自由球，可任意摆放母球。</p></div>',
-    },
-    snooker: {
-      title: "斯诺克规则",
-      body:
-        '<div class="guide-block"><h3>斯诺克</h3><p>先打红球（1 分），进袋后再打一颗彩球，交替进行。彩球分值：黄 2、绿 3、棕 4、蓝 5、粉 6、黑 7。红球阶段彩球进袋后需重新摆回原位；红球清完后，按分值从低到高依次清彩球，总分高者获胜。</p></div>' +
-        '<div class="guide-block"><h3>犯规</h3><ul class="guide-list"><li>母球落袋</li><li>空杆（未击中任何球）</li><li>首个击中的球不符合当前阶段（红球阶段碰彩球，或彩球阶段碰红球）</li><li>击球后无任何球碰库且无球落袋</li></ul><p class="about-text dim">犯规后对手获得自由球，可任意摆放母球。</p></div>',
-    },
-    threecushion: {
-      title: "三库开伦规则",
-      body:
-        '<div class="guide-block"><h3>三库开伦</h3><p>无袋球台。母球需先碰到库边至少三次，再撞到另外两颗球，即得 1 分。得分后可继续击球，未得分则换手。</p></div>' +
-        '<div class="guide-block"><h3>犯规</h3><ul class="guide-list"><li>未先碰库边三次即撞到第二颗球</li><li>空杆（未击中任何球）</li></ul><p class="about-text dim">犯规后换手，由对手击球。</p></div>',
-    },
-  }
+  /** v1.2.11 #F4：各玩法规则文本（含犯规规则），填充到 #screen-rules。
+   *  v1.3.19：规则文本改由 I18N[lang].modeRules 提供（见文件顶部），按语言切换。 */
+  var currentRuleForLang = null
 
   function showModeRules(rule) {
-    var info = MODE_RULES[rule]
+    var info = (I18N[curLang()].modeRules || I18N.zh.modeRules)[rule]
     if (!info) return
+    currentRuleForLang = rule
     var titleEl = $("rulesTitle")
     var bodyEl = $("rulesBody")
     if (titleEl) titleEl.textContent = info.title
@@ -304,21 +614,27 @@
 
   /* ---------------- 设置面板 ---------------- */
 
-  function initSettingsPanel() {
+  function renderQualityOptions() {
     var sel = $("setQuality")
-    for (var i = 0; i < QUALITY_LABELS.length; i++) {
+    if (!sel) return
+    sel.innerHTML = ""
+    for (var i = 0; i < 6; i++) {
       var opt = document.createElement("option")
       opt.value = String(i)
-      opt.textContent = QUALITY_LABELS[i]
+      opt.textContent = QL(i)
       sel.appendChild(opt)
     }
+  }
+
+  function initSettingsPanel() {
+    renderQualityOptions()
 
     syncSettingsUI()
 
-    sel.addEventListener("change", function () {
-      settings.lod = parseInt(sel.value, 10)
+    $("setQuality").addEventListener("change", function () {
+      settings.lod = parseInt(this.value, 10)
       saveSettings(settings)
-      $("qualityHint").textContent = QUALITY_HINTS[settings.lod]
+      $("qualityHint").textContent = QH(settings.lod)
     })
 
     $("btnAutoQuality").addEventListener("click", function () {
@@ -351,7 +667,7 @@
 
     $("setTLine").addEventListener("input", function (e) {
       settings.targetLineLength = parseInt(e.target.value, 10)
-      $("setTLineVal").textContent = TLINE_LABELS[settings.targetLineLength] || "中"
+      $("setTLineVal").textContent = TL(settings.targetLineLength) || "中"
       saveSettings(settings)
     })
 
@@ -393,14 +709,14 @@
 
   function syncSettingsUI() {
     $("setQuality").value = String(settings.lod)
-    $("qualityHint").textContent = QUALITY_HINTS[settings.lod]
+    $("qualityHint").textContent = QH(settings.lod)
     $("setSound").checked = !!settings.sound
     $("setVolume").value = String(Math.round(settings.volume * 100))
     $("volumeVal").textContent = Math.round(settings.volume * 100) + "%"
     $("setAim").checked = !!settings.aimAssist
     $("setAimLine").checked = settings.aimLine !== false
     $("setTLine").value = String(settings.targetLineLength || 3)
-    $("setTLineVal").textContent = TLINE_LABELS[settings.targetLineLength || 3] || "中"
+    $("setTLineVal").textContent = TL(settings.targetLineLength || 3) || "中"
     $("setKeepViews").checked = settings.keepAllViews !== false
     $("setSkin").value = settings.skin || "classic"
     $("setCueTheme").value = settings.cueTheme || "auto"
@@ -962,10 +1278,37 @@
 
   /* ---------------- 初始化 ---------------- */
 
+  // v1.3.19：应用界面语言并刷新依赖语言的动态内容
+  function applyLang(l) {
+    setLang(l)
+    localize(document, l)
+    renderQualityOptions()
+    if ($("qualityHint")) $("qualityHint").textContent = QH(settings.lod)
+    if ($("setTLineVal")) $("setTLineVal").textContent = TL(settings.targetLineLength || 3)
+    refreshCustomRows()
+    var seg = $("langSeg")
+    if (seg) {
+      Array.prototype.forEach.call(seg.querySelectorAll(".seg-btn"), function (b) {
+        b.classList.toggle("active", b.getAttribute("data-lang") === l)
+      })
+    }
+    if (currentRuleForLang) showModeRules(currentRuleForLang)
+    // 通知父页面（游戏内覆盖层）语言已变更
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: "billiards-language", language: l }, "*")
+      }
+    } catch (e) {}
+  }
+
   function init() {
     // v1.3.12：外观定制双端均默认展开。
     // HTML 里 <details id="customDetails" open> 已默认展开；不再对 APP 端（html.in-app）
     // 强制收回，用户要求"app 端外观定制不要折叠"。
+
+    // v1.3.19：先用当前语言本地化整页（必须在 refreshCustomRows 之前，
+    // 以便 NAME_OF 读到已翻译的 .skin-name）。
+    localize(document, curLang())
 
     initModes()
     initOpponents()
@@ -1002,6 +1345,18 @@
       syncSettingsUI()
       showScreen("settings")
     })
+
+    // v1.3.19：语言切换分段控件
+    var langSeg = $("langSeg")
+    if (langSeg) {
+      Array.prototype.forEach.call(langSeg.querySelectorAll(".seg-btn"), function (b) {
+        b.classList.toggle("active", b.getAttribute("data-lang") === curLang())
+        b.addEventListener("click", function () {
+          applyLang(b.getAttribute("data-lang"))
+          buzz(10)
+        })
+      })
+    }
 
     var licenseBtn = $("btnLicense")
     if (licenseBtn) {
