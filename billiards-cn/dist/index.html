@@ -1,86 +1,96 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>台球大师·中文离线版 v1.3.19</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>奥特曼的台球 · v1.3.19 发布中心</title>
 <style>
-  :root { --green:#0b6e3b; --green2:#0f8a4a; --felt:#0e7a43; --ink:#10241a; }
   * { box-sizing: border-box; }
-  html, body { margin:0; padding:0; }
-  body {
-    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", Roboto, sans-serif;
-    background: radial-gradient(120% 90% at 50% 0%, #14543a 0%, #0c3a27 55%, #07251a 100%);
-    color:#eafaf0; min-height:100vh; display:flex; align-items:center; justify-content:center;
-    padding:24px;
-  }
-  .card {
-    width:100%; max-width:460px; background:rgba(255,255,255,.06);
-    border:1px solid rgba(255,255,255,.14); border-radius:22px;
-    padding:32px 28px 26px; backdrop-filter: blur(8px);
-    box-shadow:0 18px 50px rgba(0,0,0,.4);
-  }
-  .logo { font-size:15px; letter-spacing:2px; color:#9fe7bd; text-transform:uppercase; }
-  h1 { margin:6px 0 2px; font-size:27px; font-weight:800; }
-  .ver { display:inline-block; margin:8px 0 20px; padding:5px 12px; border-radius:999px;
-         background:rgba(15,138,74,.25); border:1px solid rgba(159,231,189,.4);
-         font-size:14px; font-weight:700; color:#bff3d4; }
-  .btn {
-    display:flex; align-items:center; justify-content:center; gap:10px;
-    width:100%; padding:16px; border-radius:14px; border:none; cursor:pointer;
-    font-size:17px; font-weight:800; text-decoration:none; color:#06251a;
-    background:linear-gradient(180deg,#37e08a,#0f8a4a); box-shadow:0 8px 20px rgba(15,138,74,.45);
-    transition:transform .08s ease;
-  }
-  .btn.secondary { background:linear-gradient(180deg,#7fd0ff,#2f8fd8); color:#04243a; box-shadow:0 8px 20px rgba(47,143,216,.4); }
-  .btn:active { transform:translateY(1px) scale(.99); }
-  .btn small { font-weight:600; opacity:.82; }
-  .sep { margin:16px 0 4px; text-align:center; font-size:12px; letter-spacing:1px; color:#8fc4a8; }
-  .row { margin-top:14px; display:flex; gap:12px; }
-  .ghost { flex:1; text-align:center; padding:13px; border-radius:12px; text-decoration:none;
-           color:#cdeede; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.16);
-           font-size:14px; font-weight:700; }
-  .notes { margin-top:22px; font-size:13px; line-height:1.7; color:#bfe3cf; }
-  .notes b { color:#eafaf0; }
-  ul { margin:8px 0 0; padding-left:18px; }
-  .foot { margin-top:18px; font-size:12px; color:#8fc4a8; text-align:center; }
+  html, body { margin: 0; padding: 0; min-height: 100vh;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(135deg, #0a1f1a, #1a3a2e 60%, #0f2a22); color: #f0e8d0; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 24px 16px 60px; }
+  h1 { margin: 0 0 8px; font-size: 26px; color: #ffd97a; }
+  .ver { display: inline-block; padding: 3px 10px; margin-left: 8px;
+    background: #2d7050; border-radius: 12px; font-size: 13px; color: #fff; }
+  .sub { color: #b0a988; font-size: 13px; margin-bottom: 24px; }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 14px; margin-top: 8px; }
+  @media (min-width: 700px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+  .card { display: flex; flex-direction: column; justify-content: space-between;
+    background: rgba(0,0,0,0.35); border: 1px solid #2d7050; border-radius: 12px;
+    padding: 18px; min-height: 140px; text-decoration: none; color: inherit;
+    transition: transform 0.15s, border-color 0.15s; }
+  .card:hover { transform: translateY(-2px); border-color: #ffd97a; }
+  .card h2 { margin: 0 0 6px; font-size: 17px; color: #ffd97a; }
+  .card p { margin: 0; color: #c0b89a; font-size: 13px; line-height: 1.5; }
+  .card .cta { margin-top: 14px; display: inline-block; align-self: flex-start;
+    padding: 6px 14px; background: #2d7050; color: #fff; border-radius: 6px;
+    font-size: 13px; font-weight: 600; }
+  .card:hover .cta { background: #ffd97a; color: #0a1f1a; }
+  .meta { margin-top: 28px; padding: 14px 16px; background: rgba(0,0,0,0.3);
+    border-radius: 8px; font-size: 12px; color: #8a8268; line-height: 1.7; }
+  .meta b { color: #ffd97a; }
+  code { background: rgba(0,0,0,0.4); padding: 1px 6px; border-radius: 3px; color: #ffd97a; }
 </style>
 </head>
 <body>
-  <div class="card">
-    <div class="logo">台球大师 · 中文离线版</div>
-    <h1>真实物理引擎台球</h1>
-    <div class="ver">v1.3.19 · 单机离线 · 零权限</div>
+<div class="wrap">
+  <h1>奥特曼的台球<span class="ver">v1.3.19</span></h1>
+  <div class="sub">2026-08-24 · 离线单文件 · 三端同步</div>
 
-    <!-- 在线模式：直接进入网页版游戏 -->
-    <a class="btn" href="play.html?ruletype=nineball">▶ 在线模式（网页直接玩）</a>
-
-    <!-- 安卓 APK 下载 -->
-    <a class="btn secondary" href="billiards-cn.apk" download style="margin-top:14px;">
-      ⬇ 下载安卓 APK
-      <small>(约 1.8&nbsp;MB)</small>
+  <div class="grid">
+    <a class="card" href="play.html?ruletype=nineball">
+      <h2>🎱 网页版直接玩</h2>
+      <p>无需下载，打开即玩。<b>v1.3.19 新增</b>：设置中可切换<b>中文 / English</b>界面语言，覆盖主菜单 / 游戏内设置 / 比分栏 / 横屏遮罩；三处界面全部支持中英实时切换。</p>
+      <span class="cta">打开网页</span>
     </a>
-
-    <div class="sep">— 或获取完整发布包 —</div>
-
-    <!-- 压缩包：含源码 / SDK / 仓库 -->
-    <div class="row">
-      <a class="ghost" href="taiqiu-v1.3.19-release.zip" download>⬇ 完整压缩包</a>
-      <a class="ghost" href="menu.html">☰ 功能菜单</a>
-    </div>
-
-    <div class="notes">
-      <b>完整压缩包内含</b>
-      <ul>
-        <li><b>billiards-cn.apk</b>：安卓安装包（零权限，versionCode 26082419）</li>
-        <li><b>source-v1.3.19.tar.gz</b>：完整源码（含已构建 dist/）</li>
-        <li><b>sdk.tar.gz</b>：Android 构建工具链</li>
-        <li><b>repo-v1.3.19.bundle</b>：完整 git 仓库包（含全部历史与 tag）</li>
-      </ul>
-      <p style="margin:10px 0 0;color:#a9d8c1;">解压后按包内 <b>README.md</b> 执行即可自行发布到 GitHub。</p>
-    </div>
-
-    <div class="foot">台球大师·中文离线版 · 自签名分发 · 仅供个人使用</div>
+    <a class="card" href="billiards-cn.apk">
+      <h2>📲 安卓 APK</h2>
+      <p>1.8MB · 零权限 · 支持 Android 7.0+ · 适配沉浸全屏。本版同步支持中英切换。点击下载后到"下载"目录点击安装。</p>
+      <span class="cta">下载 APK</span>
+    </a>
+    <a class="card" href="taiqiu-v1.3.19-release.zip">
+      <h2>📦 完整资源包</h2>
+      <p>含 APK + 仓库 bundle + SDK + 源码包 + 迁移明细 + 发布说明 + GitHub 发布指南。给开发者或想本机构建的人。</p>
+      <span class="cta">下载资源包</span>
+    </a>
+    <a class="card" href="MIGRATION-v1.3.10-to-v1.3.19.md">
+      <h2>📋 迁移明细</h2>
+      <p>v1.3.10 → 最新版全部改动：双端分化策略、逐文件 diff、残留清理、量化验证。升级前必读。</p>
+      <span class="cta">查看明细</span>
+    </a>
+    <a class="card" href="GITHUB-RELEASE-NOTES-v1.3.19.md">
+      <h2>📝 发布说明</h2>
+      <p>GitHub Release 风格说明：变更亮点、下载资源表、验证数据、升级指引。也在资源包内。</p>
+      <span class="cta">查看说明</span>
+    </a>
   </div>
+
+  <div class="meta">
+    <b>v1.3.19 新功能：设置中增加语言切换（中文 / English）</b><br>
+    主菜单「设置」面板与游戏内「设置」覆盖层（help.html）均新增语言分段控件（中文 / English），选择持久化到 localStorage（沿用 <code>billiards_cn_settings_v1</code>）。<br>
+    <br>
+    <b>中英文案全面覆盖</b>：<br>
+    · <b>主菜单</b>：全部可见文本（画质档位 / 辅助线档位 / 各模式规则弹窗 / 外观定制皮肤·球杆·场景名 / 设置联动提示 / 操作反馈 toast）<br>
+    · <b>游戏内设置覆盖层</b>：设置面板全部条目（语言 / 画质 / 辅助线 / 音量 / 操作介绍）<br>
+    · <b>游戏内 HUD</b>：比分栏（玩家 / 对手 / 电脑）、击球 / 摆球 / 切换视角 / 设置按钮、白球击球点 / 击球力度 / 回放进度等标签、横屏遮罩、加载提示<br>
+    实现采用<b>全局中文→英文映射字典 + <code>localize(root)</code> 树遍历翻译</b>，缺失项优雅降级保持中文。<br>
+    <br>
+    <b>比分栏随语言根治</b>：hud.ts 构造函数读取 <code>billiards_cn_settings_v1.language</code> 决定标签写入（玩家/对手/电脑 → You/Opponent/CPU），index.html 内联脚本保留 <code>MutationObserver</code> 兜底监听切换消息，确保对局开始瞬间与对局中切换都即时正确。<br>
+    <br>
+    <b>结构分离</b>：游戏对局页 index.html 更名为 <code>play.html</code>，发布落地页 download.html 更名为 <code>index.html</code>，使站点根 / 直接显示本发布页（含在线模式 / 安卓 APK / 完整资源包 / 迁移明细 / 发布说明五块入口）。游戏内导航全量同步改引用；APP 端 <code>MainActivity.java</code> 游戏内页面返回拦截判断同步改为 <code>/play.html</code>。<br>
+    <br>
+    <b>双端一致</b>：语言设置对所有端一致呈现，纯文案 / 逻辑层改造，<b>未改动任何布局</b>；APP 端通过 APK 重签打 v1.3.19 一并生效。<br>
+    <br>
+    <b>验证</b>（chromium 真实加载 + CDP 驱动，含语言切换 / 比分栏中英 / 落地页五块入口可达性 / APK & 压缩包下载链接 200）：<br>
+    · <b>菜单 / help</b>：zh↔en 可见文本全部正确互换 ✓<br>
+    · <b>游戏内界面</b>：zh↔en bodyText 完美互换，zh 含「九球/八球/斯诺克/三库开伦/开始游戏/玩家/电脑」，en 含「9-Ball/8-Ball/Snooker/3-Cushion/Start Game/You/CPU」✓<br>
+    · <b>比分栏</b>：en+bot → <code>You / CPU</code>；zh+pvp → <code>玩家 / 对手</code>；对局中 <code>postMessage</code> 切换即时覆盖 ✓<br>
+    · <b>落地页</b>：根 <code>/</code> → <code>index.html</code> 发布页，五块入口齐全；<code>billiards-cn.apk</code> / <code>taiqiu-v1.3.19-release.zip</code> / <code>play.html</code> / <code>MIGRATION-*.md</code> / <code>GITHUB-RELEASE-NOTES-*.md</code> 全部 HTTP 200 ✓<br>
+    · <b>APK</b>：重签打包通过（1.8MB，零权限，resources.arsc Stored，4 字节对齐）✓<br>
+    <br>
+    <b>版本信息</b>：versionName 1.3.19 · versionCode 26082419 · git tag v1.3.19
+  </div>
+</div>
 </body>
 </html>
