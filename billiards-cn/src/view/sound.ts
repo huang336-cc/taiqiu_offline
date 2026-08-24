@@ -27,9 +27,14 @@ export class Sound {
   /**
    * v1.2.17：进袋音效的「同球最短间隔」兜底（毫秒）。
    * 即便回放重算 / 重新模拟导致 outcome 数组被整体重建、pottedSoundBalls 被清空，
-   * 同一颗球在 120ms 内的重复进袋音仍会被拦截，彻底杜绝大力进袋时「响很多次」。
+   * 同一颗球在窗口内的重复进袋音仍会被拦截，彻底杜绝大力进袋时「响很多次」。
+   * v1.3.19：由 120ms 放宽到 250ms，并叠加全局「任意球进袋间隔」兜底，
+   * 解决力度 100%（pot_heavy，原素材长达 7s）时，去重集合被回放重算清空后
+   * 仍被反复触发、表现为「长音 + 连续 2~3 次响袋、间隔 2~3 秒」的问题。
    */
   private pottedSoundAt = new Map<number, number>()
+  /** v1.3.19：全局最近一次进袋时间戳（毫秒），任意两颗球的进袋间隔 < 250ms 也拦截。 */
+  private lastAnyPotAt = -1e9
   loadAssets
 
   /** 主增益节点：突破 three.js 单次 Audio 1.0 音量上限，整体提升听感 */
@@ -268,19 +273,28 @@ export class Sound {
       // Pot 事件，这里按球 id 拦截重复播放，保留「每颗球一次」的自然听感。
       const ballId = outcome.ballA?.id
       const now = (typeof performance !== "undefined" ? performance.now() : Date.now())
+      // v1.3.19：全局兜底——任意进袋间隔 < 250ms 直接拦截。
+      // 解决回放重算导致 outcome 数组重建、pottedSoundBalls 被清空后，
+      // 同一颗球（或不同球）在 2~3 秒内被反复触发、叠加 7s 长素材造成的
+      // 「长音 + 连续响袋」问题。
+      if (now - this.lastAnyPotAt < 250) {
+        return
+      }
       if (ballId !== undefined) {
-        // 双保险：本杆去重集合 + 短时间窗兜底，杜绝大力进袋时进袋音重复响。
+        // 双保险：本杆去重集合 + 同球短时间窗兜底，杜绝大力进袋时进袋音重复响。
         const last = this.pottedSoundAt.get(ballId) ?? -1e9
-        if (this.pottedSoundBalls.has(ballId) || now - last < 120) {
+        if (this.pottedSoundBalls.has(ballId) || now - last < 250) {
           return
         }
         this.pottedSoundBalls.add(ballId)
         this.pottedSoundAt.set(ballId, now)
       }
-      // 进袋改用真实录音素材（item 3：替换原先偏弱的合成音）。
-      // 仍按入袋球速分轻/中/重三档，并加随机变调，避免重复感。
-      const pick = this.pickPotBySpeed(outcome.incidentSpeed)
-      this.play(pick.audio, pick.vol, pick.detune + MathUtils.randFloat(-120, 120))
+      this.lastAnyPotAt = now
+      // v1.3.19：进袋音效统一改用纯合成音（playPotSynth）。
+      // 原 ogg 素材（pot / pot_heavy 等）时长异常（6~7s）且含不可控长尾，
+      // 力度 100% 必现「持续长音 + 连续响袋」；合成音为白噪声咔哒 + 三角波咚，
+      // 严格 <0.2s、完全离线、绝无人声，从根上消除长音与偶发杂声。
+      this.playPotSynth(outcome.incidentSpeed)
     }
     if (outcome.type === "Cushion") {
       this.play(this.cushion, outcome.incidentSpeed / 40)
