@@ -8,6 +8,8 @@ export interface BotShotContext {
   cueBall: Ball
   validTargetBalls: Ball[]
   ballInHand: boolean
+  /** 袋口位置（已 inset），供策略评估「最易进袋」目标球 */
+  pockets?: any[]
 }
 
 export interface BotStrategy {

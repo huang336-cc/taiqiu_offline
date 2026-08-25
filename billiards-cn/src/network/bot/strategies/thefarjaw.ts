@@ -71,7 +71,7 @@ export class TheFarJaw implements BotStrategy {
     return [aimEvent, farKnuckleAimEvent, farKnuckleHitEvent]
   }
 
-  private pickTargetBall(context: BotShotContext): Ball | undefined {
+  protected pickTargetBall(context: BotShotContext): Ball | undefined {
     if (context.validTargetBalls.length === 0) {
       return undefined
     }

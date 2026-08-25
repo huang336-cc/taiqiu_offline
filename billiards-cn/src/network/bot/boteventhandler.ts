@@ -14,6 +14,7 @@ import { Ball } from "../../model/ball"
 import { Vector3 } from "three"
 import { Rules } from "../../controller/rules/rules"
 import { RuleFactory } from "../../controller/rules/rulefactory"
+import { Professional } from "./strategies/professional"
 import { TableGeometry } from "../../view/tablegeometry"
 import { Snooker } from "../../controller/rules/snooker"
 import { SnookerUtils } from "../../controller/rules/snookerutils"
@@ -62,10 +63,15 @@ export class BotEventHandler {
     this.container = container
     this.publishSequenceToPlayer = publishSequenceToPlayer
     this.enqueueMessage = enqueueMessage
-    this.calculator = new AimCalculator(container.rules?.aiNoiseScale ?? 1)
+    this.calculator = new AimCalculator()
     const botName =
       new URLSearchParams(globalThis.location.search).get("bot") ?? "ClawBreak"
-    this.strategy = botName === "TheFarJaw" ? new TheFarJaw() : new ClawBreak()
+    this.strategy =
+      botName === "TheFarJaw"
+        ? new TheFarJaw()
+        : botName === "Professional"
+          ? new Professional()
+          : new ClawBreak()
     this.botRules = RuleFactory.create(
       container.rules.rulename,
       new BotContainer(container)
@@ -594,6 +600,7 @@ export class BotEventHandler {
       cueBall,
       validTargetBalls: this.validTargetBalls(),
       ballInHand: false,
+      pockets: this.calculator.pockets,
     }
   }
 }
