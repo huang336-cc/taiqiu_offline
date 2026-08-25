@@ -32,6 +32,19 @@ if [ -z "$VERSION" ]; then
 else
   OUT_APK="billiards-cn-v${VERSION}.apk"
 fi
+
+# 关键：APK 内部版本号（versionName / versionCode）必须随前端版本同步迭代，
+# 否则安卓「设置-应用」里显示的版本会一直停留在某个旧值（曾卡在 1.3.19）。
+# 这里直接从 menu.html 的 __BILLIARDS_VERSION__ 反推，构建时自动改写 AndroidManifest.xml，
+# 不再依赖手动维护 manifest（避免再次遗忘迭代）。
+if [ -n "$VERSION" ]; then
+  PATCH="${VERSION##*.}"                       # 1.3.22 -> 22
+  VC_DATE="$(date +%y%m%d)"                    # 2026-08-25 -> 260825
+  VERSION_CODE="${VC_DATE}${PATCH}"            # -> 26082522
+  echo "[版本] 将 AndroidManifest 的 versionName/versionCode 同步为 $VERSION / $VERSION_CODE"
+  sed -i -E "s/android:versionName=\"[^\"]*\"/android:versionName=\"$VERSION\"/" AndroidManifest.xml
+  sed -i -E "s/android:versionCode=\"[^\"]*\"/android:versionCode=\"$VERSION_CODE\"/" AndroidManifest.xml
+fi
 KEYSTORE="${KEYSTORE:-release.keystore}"
 KS_PASS="${KS_PASS:-android}"
 
