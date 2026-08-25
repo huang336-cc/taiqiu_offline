@@ -318,6 +318,7 @@ html.in-app .app {
 }
 .skin-card {
   flex: 1 1 calc(20% - 7px);
+  max-width: calc(20% - 7px);
   min-width: 60px;
   padding: 8px 6px 10px;
   border: 2px solid var(--border);

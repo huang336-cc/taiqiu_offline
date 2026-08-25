@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>奥特曼的台球 · v1.3.19 发布中心</title>
+<title>奥特曼的台球 · v1.3.21 发布中心</title>
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; min-height: 100vh;
@@ -35,13 +35,13 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>奥特曼的台球<span class="ver">v1.3.19</span></h1>
+  <h1>奥特曼的台球<span class="ver">v1.3.21</span></h1>
   <div class="sub">2026-08-24 · 离线单文件 · 三端同步</div>
 
   <div class="grid">
     <a class="card" href="menu.html">
       <h2>🎱 网页版直接玩</h2>
-      <p>无需下载，进入即玩。点击先进入<b>游戏主菜单</b>，再自选模式开局。<b>v1.3.19 新增</b>：设置中可切换<b>中文 / English</b>界面语言，覆盖主菜单 / 游戏内设置 / 比分栏 / 横屏遮罩；三处界面全部支持中英实时切换。</p>
+      <p>无需下载，进入即玩。点击先进入<b>游戏主菜单</b>，再自选模式开局。<b>v1.3.21 新增</b>：外观定制合并为单一「台球桌外观」(11 款：5 经典原木配色 + 6 特效皮肤)，球杆 auto 跟随台面色；v1.3.20 新增 6 款台球桌特效皮肤；v1.3.19 起支持<b>中文 / English</b>界面语言实时切换。</p>
       <span class="cta">进入主菜单</span>
     </a>
     <a class="card" href="billiards-cn.apk">
@@ -49,17 +49,17 @@
       <p>1.8MB · 零权限 · 支持 Android 7.0+ · 适配沉浸全屏。本版同步支持中英切换。点击下载后到"下载"目录点击安装。</p>
       <span class="cta">下载 APK</span>
     </a>
-    <a class="card" href="taiqiu-v1.3.19-release.zip">
+    <a class="card" href="taiqiu-v1.3.21-release.zip">
       <h2>📦 完整资源包</h2>
       <p>含 APK + 仓库 bundle + SDK + 源码包 + 迁移明细 + 发布说明 + GitHub 发布指南。给开发者或想本机构建的人。</p>
       <span class="cta">下载资源包</span>
     </a>
-    <a class="card" href="MIGRATION-v1.3.10-to-v1.3.19.md">
+    <a class="card" href="MIGRATION-v1.3.10-to-v1.3.21.md">
       <h2>📋 迁移明细</h2>
       <p>v1.3.10 → 最新版全部改动：双端分化策略、逐文件 diff、残留清理、量化验证。升级前必读。</p>
       <span class="cta">查看明细</span>
     </a>
-    <a class="card" href="GITHUB-RELEASE-NOTES-v1.3.19.md">
+    <a class="card" href="GITHUB-RELEASE-NOTES-v1.3.21.md">
       <h2>📝 发布说明</h2>
       <p>GitHub Release 风格说明：变更亮点、下载资源表、验证数据、升级指引。也在资源包内。</p>
       <span class="cta">查看说明</span>
@@ -67,7 +67,7 @@
   </div>
 
   <div class="meta">
-    <b>v1.3.19 新功能：设置中增加语言切换（中文 / English）</b><br>
+    <b>v1.3.21 新功能：台球桌外观合并为单一设置（11 款）+ 球杆 auto 跟随台面色</b><br>
     主菜单「设置」面板与游戏内「设置」覆盖层（help.html）均新增语言分段控件（中文 / English），选择持久化到 localStorage（沿用 <code>billiards_cn_settings_v1</code>）。<br>
     <br>
     <b>中英文案全面覆盖</b>：<br>
@@ -80,16 +80,16 @@
     <br>
     <b>结构分离</b>：游戏对局页 index.html 更名为 <code>play.html</code>，发布落地页 download.html 更名为 <code>index.html</code>，使站点根 / 直接显示本发布页（含在线模式 / 安卓 APK / 完整资源包 / 迁移明细 / 发布说明五块入口）。游戏内导航全量同步改引用；APP 端 <code>MainActivity.java</code> 游戏内页面返回拦截判断同步改为 <code>/play.html</code>。<br>
     <br>
-    <b>双端一致</b>：语言设置对所有端一致呈现，纯文案 / 逻辑层改造，<b>未改动任何布局</b>；APP 端通过 APK 重签打 v1.3.19 一并生效。<br>
+    <b>双端一致</b>：外观 / 语言设置对所有端一致呈现，纯文案 / 逻辑层改造，<b>未改动任何布局</b>；APP 端通过 APK 重签打 v1.3.21 一并生效。<br>
     <br>
     <b>验证</b>（chromium 真实加载 + CDP 驱动，含语言切换 / 比分栏中英 / 落地页五块入口可达性 / APK & 压缩包下载链接 200）：<br>
     · <b>菜单 / help</b>：zh↔en 可见文本全部正确互换 ✓<br>
     · <b>游戏内界面</b>：zh↔en bodyText 完美互换，zh 含「九球/八球/斯诺克/三库开伦/开始游戏/玩家/电脑」，en 含「9-Ball/8-Ball/Snooker/3-Cushion/Start Game/You/CPU」✓<br>
     · <b>比分栏</b>：en+bot → <code>You / CPU</code>；zh+pvp → <code>玩家 / 对手</code>；对局中 <code>postMessage</code> 切换即时覆盖 ✓<br>
-    · <b>落地页</b>：根 <code>/</code> → <code>index.html</code> 发布页，五块入口齐全；<code>billiards-cn.apk</code> / <code>taiqiu-v1.3.19-release.zip</code> / <code>play.html</code> / <code>MIGRATION-*.md</code> / <code>GITHUB-RELEASE-NOTES-*.md</code> 全部 HTTP 200 ✓<br>
+    · <b>落地页</b>：根 <code>/</code> → <code>index.html</code> 发布页，五块入口齐全；<code>billiards-cn.apk</code> / <code>taiqiu-v1.3.21-release.zip</code> / <code>play.html</code> / <code>MIGRATION-*.md</code> / <code>GITHUB-RELEASE-NOTES-*.md</code> 全部 HTTP 200 ✓<br>
     · <b>APK</b>：重签打包通过（1.8MB，零权限，resources.arsc Stored，4 字节对齐）✓<br>
     <br>
-    <b>版本信息</b>：versionName 1.3.19 · versionCode 26082419 · git tag v1.3.19
+    <b>版本信息</b>：versionName 1.3.21 · versionCode 26082421 · git tag v1.3.21
   </div>
 </div>
 </body>
