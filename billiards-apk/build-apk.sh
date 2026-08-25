@@ -22,7 +22,16 @@ PLATFORM="$ANDROID_SDK/platforms/android-34/android.jar"
 PKG_PATH="com/tailuge/billiards/cn"
 WEB_DIST="../billiards-cn/dist"
 
-OUT_APK="billiards-cn.apk"
+# 从前端产物读取版本号（dist/menu.html 的 __BILLIARDS_VERSION__，形如 1.3.21-2608241747），
+# 截掉时间戳后缀得到 1.3.21，输出带版本号的 APK 文件名（如 billiards-cn-v1.3.21.apk）。
+VERSION_RAW="$(grep -oE '__BILLIARDS_VERSION__\s*=\s*"[^"]+"' "$WEB_DIST/menu.html" 2>/dev/null | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
+VERSION="${VERSION_RAW%%-*}"
+if [ -z "$VERSION" ]; then
+  echo "警告：未能从 $WEB_DIST/menu.html 解析版本号，回退使用 billiards-cn.apk"
+  OUT_APK="billiards-cn.apk"
+else
+  OUT_APK="billiards-cn-v${VERSION}.apk"
+fi
 KEYSTORE="${KEYSTORE:-release.keystore}"
 KS_PASS="${KS_PASS:-android}"
 
