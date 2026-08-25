@@ -22,7 +22,7 @@ import { isFirstShot } from "../../utils/utils"
 import { BotShotContext, BotStrategy } from "./botstrategy"
 import { ClawBreak } from "./strategies/clawbreak"
 import { TheFarJaw } from "./strategies/thefarjaw"
-import { T, foulReason as translateFoul } from "../../utils/i18n"
+import { t, foulReason as translateFoul } from "../../utils/i18n"
 import { R } from "../../model/physics/constants"
 
 class BotContainer {
@@ -385,9 +385,9 @@ export class BotEventHandler {
 
     this.container.notify({
       type: "Foul",
-      title: T.foul,
+      title: t("foul"),
       subtext: translateFoul(foulReason),
-      ...(ballInHand ? { extra: T.ballInHand } : {}),
+      ...(ballInHand ? { extra: t("ballInHand") } : {}),
     })
     if (!ballInHand) {
       ;(respottedOverride ?? this.container.rules.respot(outcome)).forEach(

@@ -21,7 +21,7 @@ import { MatchResultHelper } from "../../network/client/matchresult"
 import { Session } from "../../network/client/session"
 import { isFirstShot } from "../../utils/utils"
 import { roundVec } from "../../utils/three-utils"
-import { T, foulReason } from "../../utils/i18n"
+import { t, foulReason } from "../../utils/i18n"
 
 export class NineBall implements Rules {
   readonly container: Container
@@ -93,9 +93,9 @@ export class NineBall implements Rules {
   private handleFoul(outcome: Outcome[], reason: string): Controller {
     this.container.notify({
       type: "Foul",
-      title: T.foul,
+      title: t("foul"),
       subtext: foulReason(reason),
-      extra: T.ballInHand,
+      extra: t("ballInHand"),
     })
     this.startTurn()
     const pots = Outcome.pots(outcome)

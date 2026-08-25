@@ -748,6 +748,14 @@
           </p>
 
           <div class="setting-group">
+            <h3>v1.3.22 · 2026-08-25 14:30:00</h3>
+            <p class="about-text dim"><b>1 项优化（英文版补全未翻译文案）：</b></p>
+            <ul class="changelog-list">
+              <li><b>英文版未翻译文案批量补全</b>：① <b>i18n.ts 升级为双语运行时</b>：原 T 单语表改为 STRINGS 双语表 + <code>t(key)</code> 运行时函数，按 <code>Settings.get().language</code> 取值；aim/placeball/placeallballs/drilloptions/rules/*/boteventhandler/matchresult 等所有渲染文案（击球/摆球/犯规/球局结束/你赢了你输了…）改为 <code>t("...")</code> 调用；旧 <code>T</code> 通过 Proxy 兼容保留为中文；② <b>4 款新球杆主题补 EN 名</b>：奥特曼 / 霓虹脉冲 / 青竹 / 墨玉 → Ultraman / Neon Pulse / Bamboo / Black Jade；③ <b>6 款新桌布补 EN 名</b>：黑曜石黑 / 熔岩裂纹 / 霓虹蓝紫 / 朱红鎏金 / 全息银 / 粉色糖果 → Obsidian Black / Lava Cracks / Neon Blue-Purple / Crimson Gold / Holographic Silver / Pink Candy；④ <b>in-game 帮助页 (help.html) Touch controls / Power & Stroke / Camera 区块补全</b>：被 <code>&lt;b&gt;</code> 拆分的文本节点（左右拖动 / 上下拖动 / 双指捏合 / 击球按钮 / 力度条 / 母球图示 / 「+」按钮 / 复位按钮 / 细微瞄准条 / 视角 / 力度≈60%）逐段加 EN；⑤ <b>主菜单「操作介绍」与「关于」区块补全</b>：基本操作 / 加塞与杆法 / 摆球 / 视角切换 / 小技巧 / 关于 等区块的所有 <code>&lt;b&gt;</code> 片段与表格表头（开发者 / 版本 / 协议 / 项目源码 / 上游项目）逐段加 EN；⑥ <b>SVG 圆盘标签高杆 / 低杆 / 左塞 / 右塞 与示意图「力度 ≈ 60%」</b> 同步补 EN。仅文案层改造，<b>未改动任何物理 / 渲染 / 布局</b>。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
             <h3>v1.3.21 · 2026-08-24 17:47:00</h3>
             <p class="about-text dim"><b>2 项优化（台球桌外观设置合并 + 最后一行卡片不再拉伸）：</b></p>
             <ul class="changelog-list">
@@ -2108,7 +2116,7 @@
     </div>
 
     <script>
-      window.__BILLIARDS_VERSION__ = "1.3.21-2608241747";
+      window.__BILLIARDS_VERSION__ = "1.3.22-2608251430";
     </script>
     <script src="menu-cn.js"></script>
     <script>

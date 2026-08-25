@@ -5,7 +5,7 @@ import { PlayShot } from "./playshot"
 import { Replay } from "./replay"
 import { gameOverButtons } from "../utils/gameover"
 import { Settings } from "../utils/settings"
-import { T } from "../utils/i18n"
+import { t } from "../utils/i18n"
 import { Tutorial } from "../view/tutorial"
 
 /**
@@ -65,7 +65,7 @@ export class Aim extends ControllerBase {
   override onFirst() {
     this.container.table.showTraces(false)
     this.container.view.clearLines()
-    this.container.table.cue.aimInputs.setButtonText(T.hitButton)
+    this.container.table.cue.aimInputs.setButtonText(t("hitButton"))
     // 分步实操新手引导：仅首次安装自动显示，或带 tutorial=1 强制显示
     const forceTutorial =
       new URLSearchParams(globalThis.location?.search).get("tutorial") === "1"

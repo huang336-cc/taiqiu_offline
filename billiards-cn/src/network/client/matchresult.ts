@@ -6,7 +6,7 @@ import { Session } from "./session"
 import { gameOverButtons } from "../../utils/gameover"
 import { VERSION } from "../../utils/version"
 import { NotificationHighBreak, NotificationActionHandlers } from "../../view/notification"
-import { T } from "../../utils/i18n"
+import { t } from "../../utils/i18n"
 import { downloadText } from "../../utils/download"
 import { saveReplayToDB } from "../../utils/replay-store"
 import { getUID } from "../../utils/uid"
@@ -107,7 +107,7 @@ export class MatchResultHelper {
     container.notifyLocal(
       {
         type: "GameOver",
-        title: T.youWon,
+        title: t("youWon"),
         subtext: subtext,
         highBreaks: this.getHighBreaks(container),
         icon: "🏆",
@@ -124,7 +124,7 @@ export class MatchResultHelper {
     container.notifyLocal(
       {
         type: "GameOver",
-        title: T.youLost,
+        title: t("youLost"),
         subtext: subtext,
         highBreaks: this.getHighBreaks(container),
         icon: "🥈",
@@ -209,7 +209,7 @@ export class MatchResultHelper {
   private static notifySpectator(container: Container, subtext: string) {
     container.notifyLocal({
       type: "GameOver",
-      title: T.gameOver,
+      title: t("gameOver"),
       subtext: subtext,
       highBreaks: this.getHighBreaks(container),
       icon: "🏆",
@@ -227,7 +227,7 @@ export class MatchResultHelper {
     container.sendEvent(
       new NotificationEvent({
         type: "GameOver",
-        title: T.youLost,
+        title: t("youLost"),
         icon: "🥈",
         extraClass: "is-loser",
         extra: this.getRemoteGameOverButtons(),
@@ -244,7 +244,7 @@ export class MatchResultHelper {
     container.sendEvent(
       new NotificationEvent({
         type: "GameOver",
-        title: T.youWon,
+        title: t("youWon"),
         icon: "🏆",
         extraClass: "is-winner",
         extra: this.getRemoteGameOverButtons(),

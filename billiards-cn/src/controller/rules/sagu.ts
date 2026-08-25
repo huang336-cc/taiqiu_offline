@@ -12,7 +12,7 @@ import { Respot } from "../../utils/respot"
 import { Table } from "../../model/table"
 import { Camera } from "../../view/camera"
 import { isFirstShot } from "../../utils/utils"
-import { T, foulReason } from "../../utils/i18n"
+import { t, foulReason } from "../../utils/i18n"
 
 export class Sagu extends ThreeCushion {
   override rulename = "sagu"
@@ -186,7 +186,7 @@ export class Sagu extends ThreeCushion {
 
       this.container.notify({
         type: "Foul",
-        title: T.foul,
+        title: t("foul"),
         subtext: foulReason(reason),
       })
     }

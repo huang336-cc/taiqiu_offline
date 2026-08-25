@@ -6,7 +6,7 @@ import { R } from "../model/physics/constants"
 import { Vector3, Raycaster, Plane, Vector2 } from "three"
 import { CueMesh } from "../view/cuemesh"
 import { CameraTop } from "../view/cameratop"
-import { T } from "../utils/i18n"
+import { t } from "../utils/i18n"
 
 /**
  * Place cue ball using input events.
@@ -44,7 +44,7 @@ export class PlaceBall extends ControllerBase {
     this.container.table.cue.placeBallMode()
     this.container.table.cue.showHelper(false)
     this.container.table.cue.moveTo(this.container.table.cueball.pos)
-    this.container.table.cue.aimInputs.setButtonText(T.placeBallButton)
+    this.container.table.cue.aimInputs.setButtonText(t("placeBallButton"))
     this.container.table.cue.aimInputs.setDisabled(false)
     this.addTableClickListener()
     if (!this.container.rules.allowsPlaceBall()) {
@@ -174,7 +174,7 @@ export class PlaceBall extends ControllerBase {
     }
     this.cleanupTableClickListener()
     this.container.table.cueball.fround()
-    this.container.table.cue.aimInputs.setButtonText(T.hitButton)
+    this.container.table.cue.aimInputs.setButtonText(t("hitButton"))
     this.container.sendEvent(
       new BreakEvent(this.container.table.shortSerialise())
     )

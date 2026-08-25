@@ -183,6 +183,7 @@
       "Draw pulls the cue ball back, follow pushes it forward — use them to control position.",
     "力度并非越大越好，很多球轻推反而更准":
       "More power is not always better; many shots are more accurate with a gentle push.",
+    "力度 ≈ 60%": "Power ≈ 60%",
     "看完，开始游戏": "Got it, start game",
     "画面": "Graphics",
     "画质档位": "Quality",
@@ -260,6 +261,97 @@
     "中文": "Chinese",
     "本应用自 v1.0.4（2026-08-03）起的全部版本变更记录，新版本置顶。详细条目可在每个版本下展开。":
       "All version changes since v1.0.4 (2026-08-03), newest first. Expand each version for details.",
+
+    // v1.3.21 新增球杆主题 EN 名
+    "奥特曼": "Ultraman",
+    "霓虹脉冲": "Neon Pulse",
+    "青竹": "Bamboo",
+    "墨玉": "Black Jade",
+
+    // v1.3.21 新增桌布 EN 名
+    "黑曜石黑": "Obsidian Black",
+    "熔岩裂纹": "Lava Cracks",
+    "霓虹蓝紫": "Neon Blue-Purple",
+    "朱红鎏金": "Crimson Gold",
+    "全息银": "Holographic Silver",
+    "粉色糖果": "Pink Candy",
+
+    // 操作介绍 / 关于 区块：被 <b> 等标签拆开后的单段片段
+    "旋转视角": "Rotate view",
+    "调整俯仰": "Tilt view",
+    "缩放画面": "Zoom",
+    "击球": "Shoot",
+    "力度": "Power",
+    "击球点": "Contact point",
+    "抬杆角度": "Elevate cue",
+    "复位": "Reset",
+    "高杆": "Follow",
+    "低杆": "Draw",
+    "左塞": "Left",
+    "右塞": "Right",
+    "：在球桌上单指左右拖动": ": drag one finger left/right on the table.",
+    "：单指上下拖动": ": drag one finger up/down.",
+    "：双指捏合放大 / 缩小": ": pinch with two fingers to zoom in / out.",
+    "：点击右下角的「击球」按钮":
+      ': tap the "Shoot" button at the bottom-right.',
+    "：拖动底部栏的力度条设定击球力量，百分比实时显示；击球后力度条维持设定值，下一杆可直接沿用":
+      ": drag the power bar to set strength; the percentage shows live. After shooting, the bar keeps its value for the next shot.",
+    "：点开底部栏「击球点」展开母球圆盘，在盘上点选落点——偏上为高杆（跟进）、偏下为低杆（缩杆）、左右为左右塞（加塞走位）":
+      ": open Contact on the bottom bar to reveal the cue-ball disc, then tap a spot — top is follow, bottom is draw, left/right is side spin.",
+    "：点击母球圆盘旁的「+」，可抬高球杆角度，用于跳球或打出弧线":
+      ": tap + next to the disc to raise the cue angle for jump or curve shots.",
+    "：双击母球圆盘中心，击球点恢复正中心":
+      ": double-tap the centre of the disc to recentre the contact point.",
+    "（高杆": " (follow",
+    "（跟进）": ")",
+    "（低杆": " (draw",
+    "（缩杆）": ")",
+    "（左右": " (left/right",
+    "（加塞走位）": ")",
+
+    // 关于：被 <b> 拆开
+    "本游戏为完全离线的单机版本，":
+      "This game is a fully offline single-player version:",
+    "不需要联网": "no internet needed",
+    "、无任何广告、": ", no ads, ",
+    "无任何广告": "no ads",
+    "不收集任何个人信息。": "and no personal data collected.",
+    "本作品是开源项目 ": "This is a derivative of the open-source project ",
+    " 的衍生作品，遵循 GPL-3.0 协议。 物理引擎实现了真实的球体碰撞、旋转、库边反弹与摩擦模型。":
+      " under GPL-3.0. The physics engine implements realistic ball collisions, spin, cushion bounce and friction.",
+    "开发者": "Developer",
+    "版本": "Version",
+    "协议": "License",
+    "项目源码": "Source",
+    "上游项目": "Upstream",
+    "本游戏": "This game",
+    "不申请任何权限": "requests no permissions",
+    "，不申请联网、存储、定位等任何敏感权限，因此无法自动检查更新。 如需获取最新版本，请自行前往 GitHub 的 Release 页面下载：":
+      " — no network, storage or location — so it cannot auto-check for updates. To get the latest version, download it yourself from the GitHub Releases page:",
+      "奥特曼的台球 · 离线版": "Ultraman Billiards · Offline Edition",
+      "电脑 · 专业": "CPU · Pro",
+      "台球桌外观": "Table Appearance",
+      "点击色块即可实时更换台呢、桌框、纹理与边缘发光特效（球杆随台面自动协调）": "Tap a swatch to change the cloth, frame, texture and edge glow in real time (the cue follows the table automatically).",
+      "最长": "Longest",
+      "选择后会立即在主菜单高亮，进入对局即生效；对局中经本页或设置页更换也会实时刷新。": "Your selection is highlighted on the home screen immediately and takes effect when you enter a match; changes made here or in Settings also refresh live during a match.",
+      "安装后首次进入对局（训练或对战）会自动显示一次分步引导，引导你实做「摆白球→瞄准→击球」。\n              引导走完后不再自动弹出，可随时点击下方按钮重新观看。": "After installation, the first time you enter a match (practice or versus) a one-time step-by-step tutorial appears, guiding you through “place the cue ball → aim → shoot”. It will not pop up again afterward; tap the button below to replay it anytime.",
+      "无限制": "No limit",
+      "10 秒": "10s",
+      "20 秒": "20s",
+      "30 秒": "30s",
+      "不收集任何个人信息": "collects no personal information",
+      "本作品是开源项目": "This work is an open-source project",
+      "的衍生作品，遵循 GPL-3.0 协议。\n              物理引擎实现了真实的球体碰撞、旋转、库边反弹与摩擦模型。": "derived from tailuge/billiards, released under the GPL-3.0 license. Its physics engine implements realistic ball collision, spin, cushion rebound and friction models.",
+      "，不申请联网、存储、定位等任何敏感权限，因此无法自动检查更新。\n              如需获取最新版本，请自行前往 GitHub 的 Release 页面下载：": ", and requests no sensitive permissions such as network, storage or location, so it cannot auto-check for updates. To get the latest version, download it yourself from the GitHub Releases page:",
+      "的衍生作品。": " is a derivative work.",
+      "物理引擎、渲染管线、规则判定与电脑对手等核心实现均来自该项目，\n              版权归原作者及其贡献者所有。在此致谢。": "The core implementations—physics engine, rendering pipeline, rule judgments and the computer opponent—all come from that project; copyright belongs to the original authors and contributors. Our thanks to them.",
+      "2026 年 8 月 3 日": "August 3, 2026",
+      "本作品由 huang336 基于 tailuge/billiards 修改而来。\n              主要改动：全中文本地化、移除全部联网功能、新增六档画质系统与移动端适配、\n              新增操作介绍与设置面板、封装为安卓离线应用。": "This edition was modified by huang336 based on tailuge/billiards. Key changes: full Chinese localization, removal of all networking features, a six-tier quality system plus mobile adaptation, an added How-to-Play guide and Settings panel, and packaging as an offline Android app.",
+      "本作品整体依据 GPL-3.0 发布。依据协议第 6 条，\n              分发二进制形式时须同时提供对应完整源代码，\n              该源码已随发布页附件一并提供。": "This work is released under GPL-3.0. Per section 6 of the license, distributing binary forms requires also providing the corresponding complete source code, which is included with the release page attachments.",
+      "你有权自由运行、研究、修改和再分发本作品，\n              但再分发时须遵循同样的 GPL-3.0 条款。\n              协议全文：gnu.org/licenses/gpl-3.0.html": "You are free to run, study, modify and redistribute this work, but redistribution must follow the same GPL-3.0 terms. Full text: gnu.org/licenses/gpl-3.0.html",
+      "本程序不提供任何担保。在适用法律允许的最大范围内，\n              版权持有者以「原样」提供本程序，不作任何明示或默示的担保，\n              使用风险由你自行承担。": "This program comes with no warranty. To the maximum extent permitted by law, the copyright holders provide it “as is” with no express or implied warranty; use it at your own risk.",
+      "还没有保存的回放。": "No saved replays yet.",
+      "在每局结束后点击「保存回放」即可在此回看。": "After each match, tap “Save Replay” to review it here.",
   }
 
   function curLang() {

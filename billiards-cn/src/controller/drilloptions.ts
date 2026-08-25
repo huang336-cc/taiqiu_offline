@@ -2,7 +2,7 @@ import { ControllerBase } from "./controllerbase"
 import { Controller, Input } from "./controller"
 import { Aim } from "./aim"
 import { DrillReplay } from "./drillreplay"
-import { T } from "../utils/i18n"
+import { t } from "../utils/i18n"
 
 export class DrillOptions extends ControllerBase {
   override get name() {
@@ -17,7 +17,7 @@ export class DrillOptions extends ControllerBase {
 
   override onFirst() {
     this.container.table.cue.aimInputs.setDisabled(false)
-    this.container.table.cue.aimInputs.setButtonText(T.continueButton)
+    this.container.table.cue.aimInputs.setButtonText(t("continueButton"))
   }
 
   override handleInput(input: Input): Controller {

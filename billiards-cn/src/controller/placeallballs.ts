@@ -5,11 +5,14 @@ import { Aim } from "./aim"
 import { BreakEvent } from "../events/breakevent"
 import { CueMesh } from "../view/cuemesh"
 import { R } from "../model/physics/constants"
-import { T } from "../utils/i18n"
+import { t } from "../utils/i18n"
 import type { Ball } from "../model/ball"
 import type { Container } from "../container/container"
 
-const BALL_LABELS = [T.placeWhite, T.placeYellow, T.placeRed]
+/** 各球摆球按钮文字（运行时随语言切换重新读取） */
+function ballLabels(): string[] {
+  return [t("placeWhite"), t("placeYellow"), t("placeRed")]
+}
 
 export class PlaceAllBalls extends ControllerBase {
   override get name() {
@@ -44,7 +47,7 @@ export class PlaceAllBalls extends ControllerBase {
     this.container.table.cue.moveTo(ball.pos)
     this.container.view.camera.forceMode(this.container.view.camera.topView)
     this.container.table.cue.aimInputs.setButtonText(
-      BALL_LABELS[this.currentIndex] ?? "Place Ball"
+      ballLabels()[this.currentIndex] ?? t("placeBallButton")
     )
     // Re-focus the canvas for each ball in turn, otherwise arrow-key input
     // only works for the first ball (e.g. after the "Place Balls" button
@@ -179,7 +182,7 @@ export class PlaceAllBalls extends ControllerBase {
     this.removeListeners?.()
     this.removeListeners = null
     this.isDragging = false
-    this.container.table.cue.aimInputs.setButtonText(T.hitButton)
+    this.container.table.cue.aimInputs.setButtonText(t("hitButton"))
     this.container.sendEvent(
       new BreakEvent(this.container.table.shortSerialise())
     )
