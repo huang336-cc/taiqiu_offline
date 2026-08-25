@@ -11,8 +11,6 @@ import {
   BufferGeometry,
   Group,
   BackSide,
-  Color,
-  DoubleSide,
 } from "three"
 import { RuleFactory } from "../controller/rules/rulefactory"
 import { importGltf } from "../utils/gltf"
@@ -20,7 +18,6 @@ import { Rules } from "../controller/rules/rules"
 import { Sound } from "./sound"
 import { TableMesh } from "./tablemesh"
 import { TableGeometry } from "./tablegeometry"
-import { R } from "../model/physics/constants"
 import { Settings, getSkin, getEnvScene, getTableSkin } from "../utils/settings"
 import { getSceneTexture } from "./scenetexturefactory"
 import { buildSceneEnvironment } from "./sceneenvironment"
@@ -182,7 +179,6 @@ export class Assets {
     //
     // UV 修正只针对 5 尺台模型（其台呢 UV 是塌缩的）。
     this.paintTable(scene, cfg, this.isTableSize5())
-    this.refreshEdgeGlow(scene, cfg)
 
     // 异步阶段：旧 wave.jpg 贴图缺失则静默跳过（颜色与程序化纹理已在上面生效）。
     new TextureLoader().load(
@@ -220,7 +216,6 @@ export class Assets {
   recolorTable(scene, skinId?: string, tableSkinId?: string): void {
     const cfg = Assets.tableCustomizationFor(skinId, tableSkinId)
     this.paintTable(scene, cfg, false)
-    this.refreshEdgeGlow(scene, cfg)
   }
 
   /**
@@ -389,85 +384,15 @@ export class Assets {
   }
 
   /**
-   * 桌沿装饰发光边（item 5 边缘特效）。
+   * 桌沿装饰发光边：已移除。
    *
-   * 纯装饰：在球台外沿叠加一圈细发光环，不参与任何碰撞/物理逻辑
-   * （物理由 TableGeometry / PocketGeometry 常量决定，与此 mesh 无关）。
-   * 用 MeshBasicMaterial（不受光照），颜色取 tableSkin.edgeGlow，0 时隐藏。
+   * 旧版在球台外沿叠加一圈细发光环，但坐标错算（innerX/outerX 取
+   * `TableGeometry.X + 1.2/+1.9`，而 X 已经是 1.4，+1.2 后内圈已达 2.6，
+   * 是真实桌面的 ~2 倍）导致从默认相机角度看，整圈发光环的近/远两侧
+   * 投影到画面中央、形成「球桌中央多了一块矩形色块」的视觉 bug。
+   * 改用 paintTable 给桌框/库边上色 + emissive 即可达到边框发光效果，
+   * 此处仅删去该 mesh，不再绘制额外几何体。
    */
-  private edgeGlowMesh: Mesh | null = null
-
-  private refreshEdgeGlow(scene, cfg): void {
-    // 移除旧的（实时切换时）
-    if (this.edgeGlowMesh && this.edgeGlowMesh.parent) {
-      this.edgeGlowMesh.parent.remove(this.edgeGlowMesh)
-      ;(this.edgeGlowMesh.material as any)?.dispose?.()
-      this.edgeGlowMesh.geometry?.dispose?.()
-      this.edgeGlowMesh = null
-    }
-    if (!cfg.edgeGlow) return
-
-    const X = TableGeometry.X
-    const Y = TableGeometry.Y
-    // 外沿比桌面略大一圈（桌框位置），细环
-    const innerX = X + 1.2
-    const innerY = Y + 1.2
-    const outerX = X + 1.9
-    const outerY = Y + 1.9
-    const z = -R * 0.55 // 贴着桌框上沿高度
-    // 用自定义顶点构建矩形环（RingGeometry 是圆的，改用平面环带）
-    const g = this.buildRectRing(innerX, innerY, outerX, outerY)
-    const mat = new MeshBasicMaterial({
-      color: new Color(cfg.edgeGlow),
-      side: DoubleSide,
-      transparent: true,
-      opacity: 0.92,
-      toneMapped: false,
-      fog: false,
-    })
-    const ring = new Mesh(g, mat)
-    ring.position.set(0, 0, z)
-    ring.name = "tableEdgeGlow"
-    ring.renderOrder = 2
-    scene.add(ring)
-    this.edgeGlowMesh = ring
-  }
-
-  /** 构建矩形发光环的 BufferGeometry（内矩形与外矩形之间的带状环） */
-  private buildRectRing(
-    ix: number,
-    iy: number,
-    ox: number,
-    oy: number
-  ): BufferGeometry {
-    // 8 个顶点：内圈 4 + 外圈 4
-    const v = [
-      -ix, -iy, 0, // 0 内下左
-      ix, -iy, 0, // 1 内下右
-      ix, iy, 0, // 2 内上右
-      -ix, iy, 0, // 3 内上左
-      -ox, -oy, 0, // 4 外下左
-      ox, -oy, 0, // 5 外下右
-      ox, oy, 0, // 6 外上右
-      -ox, oy, 0, // 7 外上左
-    ]
-    // 由内外矩形各边组成的 4 个梯形（8 个三角形）
-    const idx = [
-      0, 1, 5, 0, 5, 4, // 下边
-      1, 2, 6, 1, 6, 5, // 右边
-      2, 3, 7, 2, 7, 6, // 上边
-      3, 0, 4, 3, 4, 7, // 左边
-    ]
-    const geo = new BufferGeometry()
-    geo.setAttribute(
-      "position",
-      new Float32BufferAttribute(v, 3)
-    )
-    geo.setIndex(idx)
-    geo.computeVertexNormals()
-    return geo
-  }
-
   private fixClothUVs(mesh): void {
     const geometry = mesh.geometry as BufferGeometry
     if (!geometry) return
