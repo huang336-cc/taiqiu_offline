@@ -68,4 +68,4 @@
 1. 拉取代码至 `v1.3.21` tag。
 2. `cd billiards-cn && npm run build`。
 3. `cd ../billiards-apk && ANDROID_SDK=/opt bash build-apk.sh` 重新打包 APK。
-4. `dist/billiards-cn.apk` 即 v1.3.21 安装包；`dist/taiqiu-v1.3.21-release.zip` 为完整资源包。
+4. `dist/billiards-cn-v1.3.21.apk` 即 v1.3.21 安装包（dist/billiards-cn.apk 为同内容便捷副本）；`dist/taiqiu-v1.3.21-release.zip` 为完整资源包。

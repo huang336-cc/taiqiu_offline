@@ -31,7 +31,7 @@
 
 | 资源 | 说明 |
 |------|------|
-| `billiards-cn.apk` | 安卓安装包（1.8MB，零权限，Android 7.0+） |
+| `billiards-cn-v1.3.21.apk` | 安卓安装包（1.8MB，零权限，Android 7.0+；`billiards-cn.apk` 为同内容便捷副本） |
 | `taiqiu-v1.3.21-release.zip` | 完整资源包（APK + 源码包 + 仓库 bundle + SDK + 迁移明细 + 发布说明） |
 | `play.html` | 网页版对局页 |
 | `MIGRATION-v1.3.10-to-v1.3.21.md` | 迁移明细（v1.3.10 → v1.3.21 全量改动） |
@@ -46,4 +46,4 @@
 
 ## 升级指引
 
-拉取 `v1.3.21` tag → `npm run build` → `ANDROID_SDK=/opt bash build-apk.sh` → 安装 `dist/billiards-cn.apk`。
+拉取 `v1.3.21` tag → `npm run build` → `ANDROID_SDK=/opt bash build-apk.sh` → 安装 `dist/billiards-cn-v1.3.21.apk`（或便捷副本 dist/billiards-cn.apk）。
