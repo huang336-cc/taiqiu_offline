@@ -380,6 +380,8 @@
     keepAllViews: true,
     skin: "classic",
     cueTheme: "auto",
+    // v1.3.20：台球桌皮肤默认黑曜石黑
+    tableSkin: "obsidian",
     // v1.1.6：默认且仅启用「雪山」场景
     scene: "snow",
     // v1.3.19：界面语言默认中文
@@ -1101,6 +1103,34 @@
     ctx.fill()
   }
 
+  /** 台球桌皮肤缩略图（item 5）：台呢渐变(c1→c2) + 发光桌框边 */
+  function drawTableSkinPreview(cv, c1, c2) {
+    var ctx = cv.getContext("2d")
+    var W = cv.width,
+      H = cv.height
+    // 桌框（外圈）
+    ctx.fillStyle = "#1a1a1f"
+    roundRect(ctx, 4, 4, W - 8, H - 8, 10)
+    ctx.fill()
+    // 台呢渐变
+    var m = 12
+    var g = ctx.createLinearGradient(0, m, 0, H - m)
+    g.addColorStop(0, c1)
+    g.addColorStop(1, c2)
+    ctx.fillStyle = g
+    roundRect(ctx, m, m, W - 2 * m, H - 2 * m, 6)
+    ctx.fill()
+    // 发光桌框边（c2 作发光色）
+    ctx.save()
+    ctx.shadowColor = c2
+    ctx.shadowBlur = 10
+    ctx.strokeStyle = c2
+    ctx.lineWidth = 3
+    roundRect(ctx, m + 1, m + 1, W - 2 * m - 2, H - 2 * m - 2, 5)
+    ctx.stroke()
+    ctx.restore()
+  }
+
   function applyCardPreviews() {
     Array.prototype.forEach.call(
       document.querySelectorAll("#sceneCards .skin-card"),
@@ -1150,6 +1180,18 @@
         }
       }
     )
+    Array.prototype.forEach.call(
+      document.querySelectorAll("#tableSkinCards .skin-card"),
+      function (card) {
+        var sw = card.querySelector(".skin-swatch")
+        if (sw && !sw.dataset.pv) {
+          var cv = makeCanvas(150, 150)
+          drawTableSkinPreview(cv, card.dataset.c1, card.dataset.c2)
+          sw.style.backgroundImage = "url(" + cv.toDataURL() + ")"
+          sw.dataset.pv = "1"
+        }
+      }
+    )
   }
 
   var NAME_OF = {
@@ -1164,6 +1206,10 @@
     skin: function (id) {
       var c = document.querySelector('#skinCards .skin-card[data-skin="' + id + '"]')
       return c ? c.querySelector(".skin-name").textContent : "经典原木"
+    },
+    tableskin: function (id) {
+      var c = document.querySelector('#tableSkinCards .skin-card[data-tableskin="' + id + '"]')
+      return c ? c.querySelector(".skin-name").textContent : "黑曜石黑"
     },
   }
 
@@ -1209,6 +1255,16 @@
         var cv3 = makeCanvas(92, 92)
         drawTablePreview(cv3, kc.dataset.felt)
         tk.style.backgroundImage = "url(" + cv3.toDataURL() + ")"
+      }
+    }
+    var tsk = $("thumbTableSkin")
+    if (tsk) {
+      $("valTableSkin").textContent = NAME_OF.tableskin(settings.tableSkin)
+      var ttc = document.querySelector('#tableSkinCards .skin-card[data-tableskin="' + (settings.tableSkin || "obsidian") + '"]')
+      if (ttc) {
+        var cv4 = makeCanvas(92, 92)
+        drawTableSkinPreview(cv4, ttc.dataset.c1, ttc.dataset.c2)
+        tsk.style.backgroundImage = "url(" + cv4.toDataURL() + ")"
       }
     }
   }
@@ -1316,6 +1372,7 @@
     initSkins()
     initCueThemes()
     initScenes()
+    initTableSkins()
 
     // v1.2.12：恢复首页「查看回放」按钮绑定（v1.2.11 #3 误删 initMyReplays 时一并丢失）
     initReplays()
@@ -1560,6 +1617,31 @@
     Array.prototype.forEach.call(cards, function (c) {
       c.addEventListener("click", function () {
         settings.scene = c.getAttribute("data-scene")
+        saveSettings(settings)
+        syncActive()
+        buzz(10)
+      })
+    })
+    syncActive()
+  }
+
+  /* ---------------- 台球桌皮肤卡片（item 5） ---------------- */
+
+  function initTableSkins() {
+    var cards = document.querySelectorAll("#tableSkinCards .skin-card")
+    if (!cards.length) return
+    function syncActive() {
+      Array.prototype.forEach.call(cards, function (c) {
+        c.classList.toggle(
+          "active",
+          c.getAttribute("data-tableskin") === (settings.tableSkin || "obsidian")
+        )
+      })
+      refreshCustomRows()
+    }
+    Array.prototype.forEach.call(cards, function (c) {
+      c.addEventListener("click", function () {
+        settings.tableSkin = c.getAttribute("data-tableskin")
         saveSettings(settings)
         syncActive()
         buzz(10)

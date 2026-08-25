@@ -174,6 +174,17 @@ function setupOverlayControls(browserContainer: BrowserContainer) {
       }
       return
     }
+    // 对局内实时切换台球桌皮肤（item 5）：刷新台呢/桌框/装饰边，不影响球杆与物理
+    if (e.data.type === "billiards-apply-tableskin") {
+      try {
+        Settings.reload()
+        Settings.set("tableSkin", e.data.tableSkin)
+        browserContainer.container?.view?.applyTableSkin(e.data.tableSkin)
+      } catch {
+        /* 尚未初始化时忽略 */
+      }
+      return
+    }
     // 对局内实时切换环境场景（item 4）：刷新背景贴图与氛围光
     if (e.data.type === "billiards-apply-scene") {
       try {
@@ -204,6 +215,8 @@ function setupOverlayControls(browserContainer: BrowserContainer) {
       )
       // 浮层可能改了环境场景，重新套用
       browserContainer.container?.view?.applyScene(settings.scene)
+      // 浮层可能改了台球桌皮肤，重新套用
+      browserContainer.container?.view?.applyTableSkin(settings.tableSkin)
     } catch {
       /* 尚未初始化时忽略 */
     }

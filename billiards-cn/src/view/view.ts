@@ -148,6 +148,13 @@ export class View {
     this.table.cue.applyCueTheme(themeId)
   }
 
+  /** 实时更换台球桌皮肤（item 5）：重着色台呢/桌框/装饰边，不影响球杆与物理 */
+  applyTableSkin(tableSkinId: string) {
+    if (this.assets.table) {
+      this.assets.recolorTable(this.assets.table, undefined, tableSkinId)
+    }
+  }
+
   update(elapsed, aim: AimEvent) {
     this.camera.update(elapsed, aim)
   }

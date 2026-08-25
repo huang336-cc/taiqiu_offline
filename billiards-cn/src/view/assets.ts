@@ -11,6 +11,8 @@ import {
   BufferGeometry,
   Group,
   BackSide,
+  Color,
+  DoubleSide,
 } from "three"
 import { RuleFactory } from "../controller/rules/rulefactory"
 import { importGltf } from "../utils/gltf"
@@ -18,9 +20,11 @@ import { Rules } from "../controller/rules/rules"
 import { Sound } from "./sound"
 import { TableMesh } from "./tablemesh"
 import { TableGeometry } from "./tablegeometry"
-import { Settings, getSkin, getEnvScene } from "../utils/settings"
+import { R } from "../model/physics/constants"
+import { Settings, getSkin, getEnvScene, getTableSkin } from "../utils/settings"
 import { getSceneTexture } from "./scenetexturefactory"
 import { buildSceneEnvironment } from "./sceneenvironment"
+import { getClothTexture, getFrameTexture } from "./tableskinfactory"
 
 function hex(n: number): string {
   return "#" + (n >>> 0).toString(16).padStart(6, "0").slice(-6)
@@ -53,15 +57,27 @@ export class Assets {
    * 缓存里仍是旧皮肤，若这里只读 Settings，桌布就永远停在上一个颜色
    * （球杆却因为直接收到 skinId 而变色）——这正是「球杆变了桌布没变」的根因。
    */
-  private static tableCustomizationFor(skinId?: string) {
+  private static tableCustomizationFor(
+    skinId?: string,
+    tableSkinId?: string
+  ) {
     const skin = getSkin(skinId ?? Settings.get().skin)
+    const ts = getTableSkin(tableSkinId ?? Settings.get().tableSkin)
+    // 台球桌皮肤（item 5）拥有球台本体的完整外观：
+    // 台呢色 / 库边色 / 桌框色 / 发光 / 纹理；「台球桌颜色(skin)」主要作用于球杆。
     return {
       texturePath: "assets/wave.jpg",
       textureRepeatU: 1,
       textureRepeatV: 2,
-      clothColor: skin.clothColor,
-      cushionColor: skin.cushionColor,
+      clothColor: ts.clothColor,
+      clothColor2: ts.clothColor2,
+      cushionColor: ts.cushionColor,
       clothshadeColor: skin.clothshadeColor,
+      frameColor: ts.frameColor,
+      frameGlow: ts.frameGlow,
+      edgeGlow: ts.edgeGlow,
+      clothTexture: getClothTexture(ts.id),
+      frameTexture: getFrameTexture(ts.id),
     }
   }
 
@@ -152,9 +168,12 @@ export class Assets {
   }
 
   private customizeTableScene(scene): void {
-    const cfg = Assets.tableCustomizationFor()
+    const cfg = Assets.tableCustomizationFor(
+      undefined,
+      Settings.get().tableSkin
+    )
 
-    // 同步阶段：修正台呢 UV，并直接按皮肤给台呢 / 库边 / 阴影上色。
+    // 同步阶段：修正台呢 UV，并直接按皮肤给台呢 / 库边 / 阴影 / 桌框上色。
     //
     // 注意：台呢颜色此前只在下面的贴图异步回调里设置，而贴图 assets/wave.jpg
     // 实际并不存在（fork 上游时遗留），加载必然失败 -> 回调不执行 ->
@@ -163,8 +182,9 @@ export class Assets {
     //
     // UV 修正只针对 5 尺台模型（其台呢 UV 是塌缩的）。
     this.paintTable(scene, cfg, this.isTableSize5())
+    this.refreshEdgeGlow(scene, cfg)
 
-    // 异步阶段：贴图存在时叠加纹理（缺失则静默跳过，颜色已在上面生效）
+    // 异步阶段：旧 wave.jpg 贴图缺失则静默跳过（颜色与程序化纹理已在上面生效）。
     new TextureLoader().load(
       cfg.texturePath,
       (texture) => {
@@ -195,9 +215,12 @@ export class Assets {
    * 实时更换皮肤（item 1）：按指定皮肤重设台呢/库边/阴影颜色。
    *
    * skinId 由调用方显式传入（不读 Settings 缓存），否则实时切换会失效。
+   * tableSkinId 同理传入（item 5 台球桌皮肤实时切换）。
    */
-  recolorTable(scene, skinId?: string): void {
-    this.paintTable(scene, Assets.tableCustomizationFor(skinId), false)
+  recolorTable(scene, skinId?: string, tableSkinId?: string): void {
+    const cfg = Assets.tableCustomizationFor(skinId, tableSkinId)
+    this.paintTable(scene, cfg, false)
+    this.refreshEdgeGlow(scene, cfg)
   }
 
   /**
@@ -342,13 +365,107 @@ export class Assets {
         } else if (name.includes("cloth")) {
           if (fixUVs) this.fixClothUVs(child)
           mat.color.set(cfg.clothColor)
+          if (cfg.clothTexture) {
+            mat.map = cfg.clothTexture
+          }
           mat.needsUpdate = true
         } else if (name.includes("cushion")) {
           mat.color.set(cfg.cushionColor)
           mat.needsUpdate = true
+        } else if (name.includes("wood")) {
+          // 桌框：底色 + 发光（emissive）。无发光时 emissive 置黑。
+          mat.color.set(cfg.frameColor)
+          if ("emissive" in mat) {
+            ;(mat as any).emissive.set(cfg.frameGlow || 0x000000)
+            ;(mat as any).emissiveIntensity = cfg.frameGlow ? 0.9 : 0
+          }
+          if (cfg.frameTexture) {
+            mat.map = cfg.frameTexture
+          }
+          mat.needsUpdate = true
         }
       }
     })
+  }
+
+  /**
+   * 桌沿装饰发光边（item 5 边缘特效）。
+   *
+   * 纯装饰：在球台外沿叠加一圈细发光环，不参与任何碰撞/物理逻辑
+   * （物理由 TableGeometry / PocketGeometry 常量决定，与此 mesh 无关）。
+   * 用 MeshBasicMaterial（不受光照），颜色取 tableSkin.edgeGlow，0 时隐藏。
+   */
+  private edgeGlowMesh: Mesh | null = null
+
+  private refreshEdgeGlow(scene, cfg): void {
+    // 移除旧的（实时切换时）
+    if (this.edgeGlowMesh && this.edgeGlowMesh.parent) {
+      this.edgeGlowMesh.parent.remove(this.edgeGlowMesh)
+      ;(this.edgeGlowMesh.material as any)?.dispose?.()
+      this.edgeGlowMesh.geometry?.dispose?.()
+      this.edgeGlowMesh = null
+    }
+    if (!cfg.edgeGlow) return
+
+    const X = TableGeometry.X
+    const Y = TableGeometry.Y
+    // 外沿比桌面略大一圈（桌框位置），细环
+    const innerX = X + 1.2
+    const innerY = Y + 1.2
+    const outerX = X + 1.9
+    const outerY = Y + 1.9
+    const z = -R * 0.55 // 贴着桌框上沿高度
+    // 用自定义顶点构建矩形环（RingGeometry 是圆的，改用平面环带）
+    const g = this.buildRectRing(innerX, innerY, outerX, outerY)
+    const mat = new MeshBasicMaterial({
+      color: new Color(cfg.edgeGlow),
+      side: DoubleSide,
+      transparent: true,
+      opacity: 0.92,
+      toneMapped: false,
+      fog: false,
+    })
+    const ring = new Mesh(g, mat)
+    ring.position.set(0, 0, z)
+    ring.name = "tableEdgeGlow"
+    ring.renderOrder = 2
+    scene.add(ring)
+    this.edgeGlowMesh = ring
+  }
+
+  /** 构建矩形发光环的 BufferGeometry（内矩形与外矩形之间的带状环） */
+  private buildRectRing(
+    ix: number,
+    iy: number,
+    ox: number,
+    oy: number
+  ): BufferGeometry {
+    // 8 个顶点：内圈 4 + 外圈 4
+    const v = [
+      -ix, -iy, 0, // 0 内下左
+      ix, -iy, 0, // 1 内下右
+      ix, iy, 0, // 2 内上右
+      -ix, iy, 0, // 3 内上左
+      -ox, -oy, 0, // 4 外下左
+      ox, -oy, 0, // 5 外下右
+      ox, oy, 0, // 6 外上右
+      -ox, oy, 0, // 7 外上左
+    ]
+    // 由内外矩形各边组成的 4 个梯形（8 个三角形）
+    const idx = [
+      0, 1, 5, 0, 5, 4, // 下边
+      1, 2, 6, 1, 6, 5, // 右边
+      2, 3, 7, 2, 7, 6, // 上边
+      3, 0, 4, 3, 4, 7, // 左边
+    ]
+    const geo = new BufferGeometry()
+    geo.setAttribute(
+      "position",
+      new Float32BufferAttribute(v, 3)
+    )
+    geo.setIndex(idx)
+    geo.computeVertexNormals()
+    return geo
   }
 
   private fixClothUVs(mesh): void {

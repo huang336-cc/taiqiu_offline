@@ -34,6 +34,8 @@ export interface GameSettings {
   skin: string
   /** 球杆主题（item 2）：auto=随台面，其余为独立主题贴图 */
   cueTheme: string
+  /** 台球桌皮肤（item 5）：仅影响台呢/桌框/装饰纹理与边缘特效，不改球杆与球 */
+  tableSkin: string
   /** 环境场景（item 4）：room=室内，其余为新增主题 */
   scene: string
   /** 是否保留三个视角（跟随 / 俯视 / 母球视角），关闭则仅保留前两个 */
@@ -63,6 +65,8 @@ const DEFAULTS: GameSettings = {
   aimSlider: true,
   skin: "classic",
   cueTheme: "auto",
+  // v1.3.20：台球桌皮肤默认黑曜石黑（冷酷神秘，适配多数场景）
+  tableSkin: "obsidian",
   // v1.1.6：默认且仅启用「雪山」场景（其余场景 UI 禁用，避免黑屏）
   scene: "snow",
   // v1.1.8：默认保留三个视角（跟随 / 俯视 / 母球视角）
@@ -144,6 +148,140 @@ export const SKINS: SkinDef[] = [
 
 export function getSkin(id: string): SkinDef {
   return SKINS.find((s) => s.id === id) ?? SKINS[0]
+}
+
+/**
+ * 台球桌皮肤（item 5）。
+ *
+ * 与 SKINS（同时改台呢+球杆）不同，本系统**只**作用于球台本体：
+ * 台呢(cloth)、库边(cushion)、桌框(wood)、装饰线条与边缘发光特效。
+ * 不改球杆模型、球模型、击球动画，也不动球桌尺寸/袋口/碰撞体。
+ *
+ * 全部为程序化 Canvas 贴图（见 tableskinfactory.ts），离线可用、零版权风险。
+ *
+ * 字段说明：
+ * - clothColor / clothColor2：台呢底色（渐变两端）。
+ * - clothTexture：台呢纹理类型（决定程序化图案：裂纹/霓虹灯带/云纹/全息/果冻等）。
+ * - cushionColor：库边色。
+ * - frameColor / frameGlow：桌框底色与发光色（frameGlow=0 表示无发光）。
+ * - edgeGlow：桌沿装饰发光边色（0 表示无）；以细发光环呈现，属纯装饰。
+ * - kind：贴图生成方式，对应 tableskinfactory.ts 的分支。
+ * - swatch：UI 缩略图背景（CSS 渐变）。
+ */
+export interface TableSkinDef {
+  id: string
+  name: string
+  kind:
+    | "obsidian"
+    | "lava"
+    | "neon"
+    | "crimsonGold"
+    | "holo"
+    | "candy"
+  /** 台呢渐变两端色 */
+  clothColor: number
+  clothColor2: number
+  /** 台呢纹理类型（程序化图案） */
+  clothTexture:
+    | "none"
+    | "glass"
+    | "lava"
+    | "neonstrip"
+    | "cloud"
+    | "holo"
+    | "candy"
+  cushionColor: number
+  frameColor: number
+  /** 桌框发光色（emissive），0 表示不发光 */
+  frameGlow: number
+  /** 桌沿装饰发光边色（纯装饰细环），0 表示无 */
+  edgeGlow: number
+  swatch: string
+}
+
+export const TABLE_SKINS: TableSkinDef[] = [
+  {
+    id: "obsidian",
+    name: "黑曜石黑",
+    kind: "obsidian",
+    clothColor: 0x0a0a0c,
+    clothColor2: 0x1a1a20,
+    clothTexture: "glass",
+    cushionColor: 0x2a0a0a,
+    frameColor: 0x140406,
+    frameGlow: 0x5a0d12,
+    edgeGlow: 0x8a1018,
+    swatch: "linear-gradient(135deg,#1a1a20 0%,#5a0d12 100%)",
+  },
+  {
+    id: "lava",
+    name: "熔岩裂纹",
+    kind: "lava",
+    clothColor: 0x140303,
+    clothColor2: 0x3a0808,
+    clothTexture: "lava",
+    cushionColor: 0x4a1206,
+    frameColor: 0x1a0602,
+    frameGlow: 0xff5a14,
+    edgeGlow: 0xff7a1f,
+    swatch: "linear-gradient(135deg,#3a0808 0%,#ff7a1f 100%)",
+  },
+  {
+    id: "neon",
+    name: "霓虹蓝紫",
+    kind: "neon",
+    clothColor: 0x0b0a2a,
+    clothColor2: 0x241046,
+    clothTexture: "neonstrip",
+    cushionColor: 0x1a0a4a,
+    frameColor: 0x0a0626,
+    frameGlow: 0x6a3cff,
+    edgeGlow: 0x13e6ff,
+    swatch: "linear-gradient(135deg,#241046 0%,#13e6ff 100%)",
+  },
+  {
+    id: "crimsonGold",
+    name: "朱红鎏金",
+    kind: "crimsonGold",
+    clothColor: 0x2a0606,
+    clothColor2: 0x5a0a0a,
+    clothTexture: "cloud",
+    cushionColor: 0x3a0808,
+    frameColor: 0x3a2406,
+    frameGlow: 0xd9a23a,
+    edgeGlow: 0xf0c860,
+    swatch: "linear-gradient(135deg,#5a0a0a 0%,#d9a23a 100%)",
+  },
+  {
+    id: "holo",
+    name: "全息银",
+    kind: "holo",
+    clothColor: 0x8a909a,
+    clothColor2: 0xc8d0da,
+    clothTexture: "holo",
+    cushionColor: 0x5a606a,
+    frameColor: 0x6a707a,
+    frameGlow: 0x9fd0ff,
+    edgeGlow: 0xd0e8ff,
+    swatch: "linear-gradient(135deg,#c8d0da 0%,#9fd0ff 100%)",
+  },
+  {
+    id: "candy",
+    name: "粉色糖果",
+    kind: "candy",
+    clothColor: 0xffc6dd,
+    clothColor2: 0xffe6f0,
+    clothTexture: "candy",
+    cushionColor: 0xff9ec4,
+    frameColor: 0xffb3d4,
+    frameGlow: 0xff7ab0,
+    edgeGlow: 0xffd0e8,
+    swatch: "linear-gradient(135deg,#ffe6f0 0%,#ff7ab0 100%)",
+  },
+]
+
+export function getTableSkin(id: string): TableSkinDef {
+  return TABLE_SKINS.find((s) => s.id === id) ?? TABLE_SKINS[0]
 }
 
 /**
