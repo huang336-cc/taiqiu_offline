@@ -139,18 +139,11 @@
                 <span class="menu-row-val" id="valCue">随台面</span>
               </span>
             </button>
-            <button class="menu-row" data-target="skin">
-              <span class="menu-thumb skin-swatch" id="thumbSkin"></span>
-              <span class="menu-row-text">
-                <span class="menu-row-title">台球桌颜色</span>
-                <span class="menu-row-val" id="valSkin">经典原木</span>
-              </span>
-            </button>
             <button class="menu-row" data-target="tableskin">
               <span class="menu-thumb skin-swatch" id="thumbTableSkin"></span>
               <span class="menu-row-text">
-                <span class="menu-row-title">台球桌皮肤</span>
-                <span class="menu-row-val" id="valTableSkin">黑曜石黑</span>
+                <span class="menu-row-title">台球桌外观</span>
+                <span class="menu-row-val" id="valTableSkin">经典原木</span>
               </span>
             </button>
           </div>
@@ -245,38 +238,27 @@
         <button class="btn btn-primary back-btn" data-back>返回</button>
       </section>
 
-      <!-- 台球桌颜色二级菜单 -->
-      <section id="screen-skin" class="screen">
-        <h2 class="screen-title">台球桌颜色</h2>
+      <!-- 台球桌外观二级菜单（原「台球桌颜色」5 款 + 「台球桌皮肤」6 款，已合二为一） -->
+      <section id="screen-tableskin" class="screen">
+        <h2 class="screen-title">台球桌外观</h2>
         <div class="scroll">
-          <p class="seg-hint">点击色块即可实时更换球台台呢与球杆外观</p>
-          <div class="skin-cards" id="skinCards">
-            <button class="skin-card" data-skin="classic" data-felt="#dac39e">
+          <p class="seg-hint">点击色块即可实时更换台呢、桌框、纹理与边缘发光特效（球杆随台面自动协调）</p>
+          <div class="skin-cards" id="tableSkinCards">
+            <button class="skin-card" data-tableskin="classic" data-c1="#dac39e" data-c2="#6a4a1a">
               <span class="skin-swatch"></span><span class="skin-name">经典原木</span>
             </button>
-            <button class="skin-card" data-skin="emerald" data-felt="#2a7a3a">
+            <button class="skin-card" data-tableskin="emerald" data-c1="#2a7a3a" data-c2="#11401f">
               <span class="skin-swatch"></span><span class="skin-name">翡翠绿</span>
             </button>
-            <button class="skin-card" data-skin="crimson" data-felt="#8a2a2a">
+            <button class="skin-card" data-tableskin="crimson" data-c1="#8a2a2a" data-c2="#5a1414">
               <span class="skin-swatch"></span><span class="skin-name">赤焰红</span>
             </button>
-            <button class="skin-card" data-skin="sapphire" data-felt="#1a3a8a">
+            <button class="skin-card" data-tableskin="sapphire" data-c1="#1a3a8a" data-c2="#0a1840">
               <span class="skin-swatch"></span><span class="skin-name">蓝宝石</span>
             </button>
-            <button class="skin-card" data-skin="golden" data-felt="#8a6a2a">
+            <button class="skin-card" data-tableskin="golden" data-c1="#8a6a2a" data-c2="#4a2a0a">
               <span class="skin-swatch"></span><span class="skin-name">金辉</span>
             </button>
-          </div>
-        </div>
-        <button class="btn btn-primary back-btn" data-back>返回</button>
-      </section>
-
-      <!-- 台球桌皮肤二级菜单（item 5） -->
-      <section id="screen-tableskin" class="screen">
-        <h2 class="screen-title">台球桌皮肤</h2>
-        <div class="scroll">
-          <p class="seg-hint">点击色块即可实时更换台呢、桌框与边缘发光特效（不影响球杆与球）</p>
-          <div class="skin-cards" id="tableSkinCards">
             <button class="skin-card" data-tableskin="obsidian" data-c1="#1a1a20" data-c2="#5a0d12">
               <span class="skin-swatch"></span><span class="skin-name">黑曜石黑</span>
             </button>
@@ -494,15 +476,21 @@
           </div>
 
             <div class="setting-group">
-            <h3>台球桌颜色</h3>
+            <h3>台球桌外观</h3>
             <div class="setting-row">
-              <label for="setSkin">台球桌颜色</label>
-              <select id="setSkin">
+              <label for="setTableSkin">台球桌外观</label>
+              <select id="setTableSkin">
                 <option value="classic">经典原木</option>
                 <option value="emerald">翡翠绿</option>
                 <option value="crimson">赤焰红</option>
                 <option value="sapphire">蓝宝石</option>
                 <option value="golden">金辉</option>
+                <option value="obsidian">黑曜石黑</option>
+                <option value="lava">熔岩裂纹</option>
+                <option value="neon">霓虹蓝紫</option>
+                <option value="crimsonGold">朱红鎏金</option>
+                <option value="holo">全息银</option>
+                <option value="candy">粉色糖果</option>
               </select>
             </div>
             <div class="setting-row">

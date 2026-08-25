@@ -678,9 +678,10 @@
       saveSettings(settings)
     })
 
-    $("setSkin").addEventListener("change", function (e) {
-      settings.skin = e.target.value
+    $("setTableSkin").addEventListener("change", function (e) {
+      settings.tableSkin = e.target.value
       saveSettings(settings)
+      refreshCustomRows()
     })
 
     $("setCueTheme").addEventListener("change", function (e) {
@@ -720,7 +721,7 @@
     $("setTLine").value = String(settings.targetLineLength || 3)
     $("setTLineVal").textContent = TL(settings.targetLineLength || 3) || "中"
     $("setKeepViews").checked = settings.keepAllViews !== false
-    $("setSkin").value = settings.skin || "classic"
+    $("setTableSkin").value = settings.tableSkin || "classic"
     $("setCueTheme").value = settings.cueTheme || "auto"
     $("setScene").value = settings.scene || "snow"
     $("setTurnTimer").value = String(settings.turnTimer || 0)
@@ -1070,39 +1071,6 @@
     ctx.restore()
   }
 
-  function drawTablePreview(cv, felt) {
-    var ctx = cv.getContext("2d")
-    var W = cv.width,
-      H = cv.height
-    ctx.fillStyle = "#5a3d18"
-    ctx.fillRect(0, 0, W, H)
-    var m = 10
-    var g = ctx.createLinearGradient(0, m, 0, H - m)
-    g.addColorStop(0, shadeColor(felt, 0.12))
-    g.addColorStop(1, shadeColor(felt, -0.12))
-    ctx.fillStyle = g
-    roundRect(ctx, m, m, W - 2 * m, H - 2 * m, 8)
-    ctx.fill()
-    ctx.strokeStyle = shadeColor(felt, 0.18)
-    ctx.lineWidth = 2
-    roundRect(ctx, m + 2, m + 2, W - 2 * m - 4, H - 2 * m - 4, 6)
-    ctx.stroke()
-    var r = Math.min(W, H) * 0.18
-    var bx = W * 0.62,
-      by = H * 0.42
-    var bg2 = ctx.createRadialGradient(bx - r * 0.3, by - r * 0.3, r * 0.1, bx, by, r)
-    bg2.addColorStop(0, shadeColor(felt, 0.5))
-    bg2.addColorStop(1, "#f4f1ea")
-    ctx.fillStyle = bg2
-    ctx.beginPath()
-    ctx.arc(bx, by, r, 0, 6.283)
-    ctx.fill()
-    ctx.fillStyle = "rgba(255,255,255,0.5)"
-    ctx.beginPath()
-    ctx.arc(bx - r * 0.3, by - r * 0.3, r * 0.28, 0, 6.283)
-    ctx.fill()
-  }
-
   /** 台球桌皮肤缩略图（item 5）：台呢渐变(c1→c2) + 发光桌框边 */
   function drawTableSkinPreview(cv, c1, c2) {
     var ctx = cv.getContext("2d")
@@ -1169,18 +1137,6 @@
       }
     )
     Array.prototype.forEach.call(
-      document.querySelectorAll("#skinCards .skin-card"),
-      function (card) {
-        var sw = card.querySelector(".skin-swatch")
-        if (sw && !sw.dataset.pv) {
-          var cv = makeCanvas(150, 150)
-          drawTablePreview(cv, card.dataset.felt)
-          sw.style.backgroundImage = "url(" + cv.toDataURL() + ")"
-          sw.dataset.pv = "1"
-        }
-      }
-    )
-    Array.prototype.forEach.call(
       document.querySelectorAll("#tableSkinCards .skin-card"),
       function (card) {
         var sw = card.querySelector(".skin-swatch")
@@ -1203,13 +1159,9 @@
       var c = document.querySelector('#cueThemeCards .skin-card[data-cuetheme="' + id + '"]')
       return c ? c.querySelector(".skin-name").textContent : "随台面"
     },
-    skin: function (id) {
-      var c = document.querySelector('#skinCards .skin-card[data-skin="' + id + '"]')
-      return c ? c.querySelector(".skin-name").textContent : "经典原木"
-    },
     tableskin: function (id) {
       var c = document.querySelector('#tableSkinCards .skin-card[data-tableskin="' + id + '"]')
-      return c ? c.querySelector(".skin-name").textContent : "黑曜石黑"
+      return c ? c.querySelector(".skin-name").textContent : "经典原木"
     },
   }
 
@@ -1247,20 +1199,10 @@
         tc.style.backgroundImage = "url(" + cv2.toDataURL() + ")"
       }
     }
-    var tk = $("thumbSkin")
-    if (tk) {
-      $("valSkin").textContent = NAME_OF.skin(settings.skin)
-      var kc = document.querySelector('#skinCards .skin-card[data-skin="' + settings.skin + '"]')
-      if (kc) {
-        var cv3 = makeCanvas(92, 92)
-        drawTablePreview(cv3, kc.dataset.felt)
-        tk.style.backgroundImage = "url(" + cv3.toDataURL() + ")"
-      }
-    }
     var tsk = $("thumbTableSkin")
     if (tsk) {
       $("valTableSkin").textContent = NAME_OF.tableskin(settings.tableSkin)
-      var ttc = document.querySelector('#tableSkinCards .skin-card[data-tableskin="' + (settings.tableSkin || "obsidian") + '"]')
+      var ttc = document.querySelector('#tableSkinCards .skin-card[data-tableskin="' + (settings.tableSkin || "classic") + '"]')
       if (ttc) {
         var cv4 = makeCanvas(92, 92)
         drawTableSkinPreview(cv4, ttc.dataset.c1, ttc.dataset.c2)
@@ -1369,10 +1311,9 @@
     initModes()
     initOpponents()
     initSettingsPanel()
-    initSkins()
+    initTableAppearances()
     initCueThemes()
     initScenes()
-    initTableSkins()
 
     // v1.2.12：恢复首页「查看回放」按钮绑定（v1.2.11 #3 误删 initMyReplays 时一并丢失）
     initReplays()
@@ -1547,22 +1488,23 @@
     }
   }
 
-  /* ---------------- 台球桌颜色卡片（item 1） ---------------- */
+  /* ---------------- 台球桌外观卡片（v1.3.21 合并：原「台球桌颜色」+「台球桌皮肤」） ---------------- */
 
-  function initSkins() {
-    var cards = document.querySelectorAll("#skinCards .skin-card")
+  function initTableAppearances() {
+    var cards = document.querySelectorAll("#tableSkinCards .skin-card")
     if (!cards.length) return
     function syncActive() {
       Array.prototype.forEach.call(cards, function (c) {
-        c.classList.toggle("active", c.getAttribute("data-skin") === settings.skin)
+        c.classList.toggle(
+          "active",
+          c.getAttribute("data-tableskin") === (settings.tableSkin || "classic")
+        )
       })
-      var sel = $("setSkin")
-      if (sel) sel.value = settings.skin || "classic"
       refreshCustomRows()
     }
     Array.prototype.forEach.call(cards, function (c) {
       c.addEventListener("click", function () {
-        settings.skin = c.getAttribute("data-skin")
+        settings.tableSkin = c.getAttribute("data-tableskin")
         saveSettings(settings)
         syncActive()
         buzz(10)
@@ -1617,31 +1559,6 @@
     Array.prototype.forEach.call(cards, function (c) {
       c.addEventListener("click", function () {
         settings.scene = c.getAttribute("data-scene")
-        saveSettings(settings)
-        syncActive()
-        buzz(10)
-      })
-    })
-    syncActive()
-  }
-
-  /* ---------------- 台球桌皮肤卡片（item 5） ---------------- */
-
-  function initTableSkins() {
-    var cards = document.querySelectorAll("#tableSkinCards .skin-card")
-    if (!cards.length) return
-    function syncActive() {
-      Array.prototype.forEach.call(cards, function (c) {
-        c.classList.toggle(
-          "active",
-          c.getAttribute("data-tableskin") === (settings.tableSkin || "obsidian")
-        )
-      })
-      refreshCustomRows()
-    }
-    Array.prototype.forEach.call(cards, function (c) {
-      c.addEventListener("click", function () {
-        settings.tableSkin = c.getAttribute("data-tableskin")
         saveSettings(settings)
         syncActive()
         buzz(10)

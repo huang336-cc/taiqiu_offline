@@ -1,7 +1,17 @@
 import { R } from "../model/physics/constants"
 import { up } from "../utils/three-utils"
-import { Settings, getSkin } from "../utils/settings"
+import { Settings, getSkin, getTableSkin } from "../utils/settings"
 import { getCueTexture } from "./cuetexturefactory"
+
+/** 对 0xRRGGBB 颜色做明暗调整（amount>0 提亮，<0 压暗），返回 0xRRGGBB */
+function shade(hex: number, amount: number): number {
+  const r = (hex >> 16) & 0xff
+  const g = (hex >> 8) & 0xff
+  const b = hex & 0xff
+  const f = (c: number) =>
+    Math.max(0, Math.min(255, Math.round(amount >= 0 ? c + (255 - c) * amount : c * (1 + amount))))
+  return (f(r) << 16) | (f(g) << 8) | f(b)
+}
 import {
   Matrix4,
   Mesh,
@@ -247,7 +257,6 @@ export class CueMesh {
    */
   static applyCueTheme(group: Group, themeId: string, skinId: string) {
     const tex = getCueTexture(themeId)
-    const skin = getSkin(skinId)
     group.traverse((child) => {
       const mesh = child as Mesh
       if (!(mesh as any).isMesh) return
@@ -258,10 +267,13 @@ export class CueMesh {
         mat.map = tex
         mat.color.setHex(0xffffff)
       } else {
+        // auto（随台面）：球杆颜色跟随「当前台球桌外观」的台呢色派生，
+        // 使「单一外观设置」真正统一（台呢与球杆协调）。
+        const ts = getTableSkin(Settings.get().tableSkin)
+        const base = ts.clothColor
+        const shaft = mesh.name === "cueButt" ? shade(base, -0.28) : shade(base, 0.12)
         mat.map = null
-        mat.color.setHex(
-          mesh.name === "cueButt" ? skin.buttColor : skin.shaftColor
-        )
+        mat.color.setHex(shaft)
       }
       mat.needsUpdate = true
     })

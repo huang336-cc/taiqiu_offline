@@ -65,8 +65,8 @@ const DEFAULTS: GameSettings = {
   aimSlider: true,
   skin: "classic",
   cueTheme: "auto",
-  // v1.3.20：台球桌皮肤默认黑曜石黑（冷酷神秘，适配多数场景）
-  tableSkin: "obsidian",
+  // v1.3.21：台球桌外观默认经典原木（原「台球桌颜色」首款，已合入统一外观设置）
+  tableSkin: "classic",
   // v1.1.6：默认且仅启用「雪山」场景（其余场景 UI 禁用，避免黑屏）
   scene: "snow",
   // v1.1.8：默认保留三个视角（跟随 / 俯视 / 母球视角）
@@ -172,6 +172,11 @@ export interface TableSkinDef {
   id: string
   name: string
   kind:
+    | "classic"
+    | "emerald"
+    | "crimson"
+    | "sapphire"
+    | "golden"
     | "obsidian"
     | "lava"
     | "neon"
@@ -200,6 +205,73 @@ export interface TableSkinDef {
 }
 
 export const TABLE_SKINS: TableSkinDef[] = [
+  // —— 经典原「台球桌颜色」5 款（仅台呢/库边配色，无特效，合入统一外观设置）——
+  {
+    id: "classic",
+    name: "经典原木",
+    kind: "classic",
+    clothColor: 0xdac39e,
+    clothColor2: 0x896e42,
+    clothTexture: "none",
+    cushionColor: 0xba934e,
+    frameColor: 0x6a4a1a,
+    frameGlow: 0,
+    edgeGlow: 0,
+    swatch: "linear-gradient(135deg,#dac39e 0%,#6a4a1a 100%)",
+  },
+  {
+    id: "emerald",
+    name: "翡翠绿",
+    kind: "emerald",
+    clothColor: 0x2a7a3a,
+    clothColor2: 0x1a3a1a,
+    clothTexture: "none",
+    cushionColor: 0x1a5a2a,
+    frameColor: 0x11401f,
+    frameGlow: 0,
+    edgeGlow: 0,
+    swatch: "linear-gradient(135deg,#2a7a3a 0%,#11401f 100%)",
+  },
+  {
+    id: "crimson",
+    name: "赤焰红",
+    kind: "crimson",
+    clothColor: 0x8a2a2a,
+    clothColor2: 0x4a0a0a,
+    clothTexture: "none",
+    cushionColor: 0x6a1a1a,
+    frameColor: 0x5a1414,
+    frameGlow: 0,
+    edgeGlow: 0,
+    swatch: "linear-gradient(135deg,#8a2a2a 0%,#5a1414 100%)",
+  },
+  {
+    id: "sapphire",
+    name: "蓝宝石",
+    kind: "sapphire",
+    clothColor: 0x1a3a8a,
+    clothColor2: 0x0a1a4a,
+    clothTexture: "none",
+    cushionColor: 0x0a2a6a,
+    frameColor: 0x0a1840,
+    frameGlow: 0,
+    edgeGlow: 0,
+    swatch: "linear-gradient(135deg,#1a3a8a 0%,#0a1840 100%)",
+  },
+  {
+    id: "golden",
+    name: "金辉",
+    kind: "golden",
+    clothColor: 0x8a6a2a,
+    clothColor2: 0x4a2a0a,
+    clothTexture: "none",
+    cushionColor: 0x6a4a1a,
+    frameColor: 0x4a2a0a,
+    frameGlow: 0,
+    edgeGlow: 0,
+    swatch: "linear-gradient(135deg,#8a6a2a 0%,#4a2a0a 100%)",
+  },
+  // —— 新增 6 款台球桌皮肤（含桌框发光/纹理/边缘特效）——
   {
     id: "obsidian",
     name: "黑曜石黑",
