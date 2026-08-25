@@ -1,5 +1,7 @@
 # 奥特曼的台球 · 中文离线版
 
+<p align="center"><b>中文</b> | <a href="README.en.md"><b>English</b></a></p>
+
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Platform](https://img.shields.io/badge/platform-Android%205.0%2B-brightgreen.svg)](#下载)
 [![Permissions](https://img.shields.io/badge/权限-0%20个-success.svg)](#隐私)
@@ -8,11 +10,14 @@
 
 <p align="center">
   <img src="docs/screenshots/menu-home.jpg" alt="主菜单" width="48%" />
-  <img src="docs/screenshots/topview-eightball.jpg" alt="八球顶视" width="48%" />
 </p>
+<p align="center"><em>主菜单：模式选择、对手难度、外观定制</em></p>
+
 <p align="center">
-  <img src="docs/screenshots/cueview-nineball.jpg" alt="八球击球视角" width="48%" />
+  <img src="docs/screenshots/android-topview.jpg" alt="安卓端游戏界面 · 俯视视角" width="48%" />
+  <img src="docs/screenshots/android-cueview.jpg" alt="安卓端游戏界面 · 击球视角" width="48%" />
 </p>
+<p align="center"><em>安卓端游戏界面：俯视视角（左）与击球视角（右）</em></p>
 
 > **修改声明**
 > 本作品是开源项目 [tailuge/billiards](https://github.com/tailuge/billiards) 的**衍生作品**，
@@ -24,7 +29,11 @@
 
 ## 下载
 
-前往 [Releases](../../releases/latest) 下载最新版 APK。
+**在线发布页**：<https://a8bf01e5f1e8b47ce.bj9.agentos-app.net/>
+
+无需安装即可在浏览器中**在线试玩**，也可以直接在该页面下载最新版 APK。
+
+前往 [Releases](../../releases/latest) 也可下载最新版 APK。
 
 安装说明与常见问题见 [`docs/安装与使用说明.md`](docs/安装与使用说明.md)。
 
