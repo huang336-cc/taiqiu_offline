@@ -300,6 +300,9 @@ label {
   color: #aab2c0;
   max-width: 280px;
 }
-@media (orientation: portrait) and (max-width: 1024px) {
-  .rotate-overlay { display: flex; }
-}
+/* v1.3.27 修复：移除「竖屏手机强制全屏遮罩」的硬锁定。
+   原规则 @media (orientation: portrait) and (max-width: 1024px) 会在竖屏手机上
+   把 #rotateOverlay 变成全屏 flex 遮罩（position:fixed;inset:0;z-index:10000;touch-action:none），
+   完全盖住并屏蔽游戏交互——导致「开始游戏」看似跳转却卡在「请横屏」死墙、无法进入对局。
+   现不再强制横屏：游戏在竖屏下也能正常进入与游玩（resize/orientationchange 已做重渲染适配）。
+   保留 .rotate-overlay 基础样式（默认 display:none），若日后想做「非阻塞」的横屏提示再启用。 */

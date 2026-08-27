@@ -10,6 +10,8 @@ import {
 import { TableGeometry } from "./tablegeometry"
 import { PocketGeometry } from "./pocketgeometry"
 import { R } from "../model/physics/constants"
+import { Settings } from "../utils/settings"
+import { getTableSkin } from "../utils/settings"
 
 export class TableMesh {
   logger = (_) => {}
@@ -27,7 +29,11 @@ export class TableMesh {
     this.addCushions(group, hasPockets)
 
     if (hasPockets) {
-      PocketGeometry.knuckles.forEach((k) => this.knuckleCylinder(k, group))
+      // v1.3.38：去除桌边 12 个 knuckle 小凸点（视觉冗余、用户反馈突兀），
+      // 仅保留 6 个球洞（pocketCenters）。物理/碰撞由 PocketGeometry 常量决定，不受影响。
+      // 球洞颜色同步当前桌布皮肤（取库边色，与桌面色调协调）。
+      const ts = getTableSkin(Settings.get().tableSkin)
+      this.pocket.color.set(ts.cushionColor)
       PocketGeometry.pocketCenters.forEach((p) =>
         this.knuckleCylinder(p, group, this.pocket)
       )

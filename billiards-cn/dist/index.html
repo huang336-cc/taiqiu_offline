@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>奥特曼的台球 · v1.3.22 发布中心</title>
+<title>奥特曼的台球 · v1.3.39 发布中心</title>
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; min-height: 100vh;
@@ -31,75 +31,179 @@
     border-radius: 8px; font-size: 12px; color: #8a8268; line-height: 1.7; }
   .meta b { color: #ffd97a; }
   code { background: rgba(0,0,0,0.4); padding: 1px 6px; border-radius: 3px; color: #ffd97a; }
+  /* 版本履历：折叠按钮组 */
+  .ver-item { margin-top: 12px; border: 1px solid #2d7050; border-radius: 8px;
+    background: rgba(0,0,0,0.25); overflow: hidden; }
+  .ver-item.current { border-color: #ffd97a; }
+  .ver-item > summary.ver-btn { list-style: none; cursor: pointer; padding: 12px 16px;
+    font-weight: 700; color: #ffd97a; display: flex; align-items: baseline; gap: 10px;
+    font-size: 14px; user-select: none; }
+  .ver-item > summary.ver-btn::-webkit-details-marker { display: none; }
+  .ver-item > summary.ver-btn::before { content: "▸"; color: #b0a988; margin-right: 2px;
+    display: inline-block; transition: transform .15s; }
+  .ver-item[open] > summary.ver-btn::before { content: "▾"; }
+  .ver-no { flex: 0 0 auto; }
+  .ver-title { font-weight: 400; font-size: 12px; color: #b0a988; }
+  .ver-body { padding: 4px 16px 16px; font-size: 12px; color: #8a8268; line-height: 1.7; }
+  .ver-body b { color: #ffd97a; }
+  /* 语言切换按钮：标题下方内联 */
+  .lang-bar { margin: 0 0 20px; display: flex; align-items: center; gap: 8px; }
+  .lang-toggle { padding: 6px 14px; background: #2d7050; color: #fff; border: 1px solid #ffd97a;
+    border-radius: 20px; font-size: 13px; font-weight: 700; cursor: pointer;
+    font-family: inherit; letter-spacing: 0.5px; }
+  .lang-toggle:hover { background: #ffd97a; color: #0a1f1a; }
+  .lang-hint { font-size: 12px; color: #b0a988; }
+  /* 双语显隐：默认中文，加 lang-en 类切英文 */
+  body:not(.lang-en) .en { display: none; }
+  body.lang-en .zh { display: none; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>奥特曼的台球<span class="ver">v1.3.22</span></h1>
-  <div class="sub">2026-08-24 · 离线单文件 · 三端同步</div>
+  <h1><span class="zh">奥特曼的台球</span><span class="en">Ultraman's Billiards</span><span class="ver">v1.3.39</span></h1>
+  <div class="sub"><span class="zh">2026-08-24 · 离线单文件 · 三端同步</span><span class="en">2026-08-24 · Offline single-file · 3-platform sync</span></div>
+  <div class="lang-bar">
+    <button id="langToggle" class="lang-toggle" aria-label="切换语言 / Switch language">EN</button>
+    <span class="lang-hint"><span class="zh">语言 / Language</span><span class="en">Language / 语言</span></span>
+  </div>
 
   <div class="grid">
     <a class="card" href="menu.html">
-      <h2>🎱 网页版直接玩</h2>
-      <p>无需下载，进入即玩。点击先进入<b>游戏主菜单</b>，再自选模式开局。<b>v1.3.22 新增</b>：外观定制合并为单一「台球桌外观」(11 款：5 经典原木配色 + 6 特效皮肤)，球杆 auto 跟随台面色；v1.3.20 新增 6 款台球桌特效皮肤；v1.3.19 起支持<b>中文 / English</b>界面语言实时切换。</p>
-      <span class="cta">进入主菜单</span>
+      <h2><span class="zh">🎱 在线游戏（直接玩）</span><span class="en">🎱 Play Online</span></h2>
+      <p><span class="zh">点此进入游戏主菜单，选模式即玩，已包含本次四项改动：真实音效、桌布配色、回放「跟随」视角、增强的专业 AI。建议用电脑/横屏体验最佳。</span><span class="en">Enter the game main menu and pick a mode to play—includes all four updates: realistic sound, cloth colors, replay "Follow" view, and a stronger Professional AI. Best on desktop / landscape.</span></p>
+      <span class="cta"><span class="zh">开始游戏</span><span class="en">Play Now</span></span>
     </a>
-    <a class="card" href="billiards-cn-v1.3.22.apk">
-      <h2>📲 安卓 APK</h2>
-      <p>1.8MB · 零权限 · 支持 Android 7.0+ · 适配沉浸全屏。本版同步支持中英切换。文件名：billiards-cn-v1.3.22.apk。点击下载后到"下载"目录点击安装。</p>
-      <span class="cta">下载 APK</span>
+    <a class="card" href="billiards-cn-v1.3.39.apk">
+      <h2><span class="zh">📲 安卓 App (APK)</span><span class="en">📲 Android App (APK)</span></h2>
+      <p><span class="zh">约 3.9MB · 零权限 · 支持 Android 7.0+ · 适配沉浸全屏。刚构建的 v1.3.39 安装包：修复 v1.3.38 球杆预览反射错位导致的"断节"感，低端机统一用 Phong 高光材质；同时修复 GLTF 模型桌台的袋口/桌边凸点未随主题变色/隐藏的问题。点击下载后到"下载"目录点击安装。</span><span class="en">~3.9MB · Zero permissions · Android 7.0+ · Immersive fullscreen. Freshly built v1.3.39: fixed the v1.3.38 cue reflection scale issue that made the cue look broken, unified Phong specular materials for low-end devices; also fixed GLTF table pockets/rail bumps not theming/hiding. Tap download, then open it from your Downloads folder to install.</span></p>
+      <span class="cta"><span class="zh">下载 APK</span><span class="en">Download APK</span></span>
     </a>
-    <a class="card" href="taiqiu-v1.3.22-release.zip">
-      <h2>📦 完整资源包</h2>
-      <p>含 APK + 仓库 bundle + SDK + 源码包 + 迁移明细 + 发布说明 + GitHub 发布指南。给开发者或想本机构建的人。</p>
-      <span class="cta">下载资源包</span>
-    </a>
-    <a class="card" href="MIGRATION-v1.3.10-to-v1.3.22.md">
-      <h2>📋 迁移明细</h2>
-      <p>v1.3.10 → 最新版全部改动：双端分化策略、逐文件 diff、残留清理、量化验证。升级前必读。</p>
-      <span class="cta">查看明细</span>
-    </a>
-    <a class="card" href="GITHUB-RELEASE-NOTES-v1.3.22.md">
-      <h2>📝 发布说明</h2>
-      <p>GitHub Release 风格说明：变更亮点、下载资源表、验证数据、升级指引。也在资源包内。</p>
-      <span class="cta">查看说明</span>
+    <a class="card" href="release-v1.3.39.zip">
+      <h2><span class="zh">📦 发布包（Release）</span><span class="en">📦 Release Package</span></h2>
+      <p><span class="zh">每次变更完代码、构建 APK 时一并打包发布。内含 4 个改动源文件（音效 / 桌布 / 回放视角 / 专业 AI）+ 改动说明，以及已构建好的完整网页产物（publish/ 文件夹，直接打开即用）。</span><span class="en">Packaged alongside the APK after every code change. Contains the 4 modified source files (sound / cloth / replay view / pro AI) plus the change log, and the built web deliverable (publish/ folder, ready to open).</span></p>
+      <span class="cta"><span class="zh">下载发布包</span><span class="en">Download Release</span></span>
     </a>
   </div>
 
-  <div class="meta">
-    <b>v1.3.22 新功能：英文版未翻译文案批量补全</b><br>
-    <b>① i18n.ts 升级为双语运行时</b>：原 T 单语表改为 STRINGS 双语表 + <code>t(key)</code> 运行时函数，按 <code>Settings.get().language</code> 取值；aim / placeball / placeallballs / drilloptions / rules/* / boteventhandler / matchresult 等所有渲染文案（击球 / 摆球 / 犯规 / 球局结束 / 你赢了你输了…）改为 <code>t("...")</code> 调用；旧 <code>T</code> 通过 Proxy 兼容保留为中文。<br>
-    <b>② 4 款新球杆主题补 EN 名</b>：奥特曼 / 霓虹脉冲 / 青竹 / 墨玉 → Ultraman / Neon Pulse / Bamboo / Black Jade。<br>
-    <b>③ 6 款新桌布补 EN 名</b>：黑曜石黑 / 熔岩裂纹 / 霓虹蓝紫 / 朱红鎏金 / 全息银 / 粉色糖果 → Obsidian Black / Lava Cracks / Neon Blue-Purple / Crimson Gold / Holographic Silver / Pink Candy。<br>
-    <b>④ in-game 帮助页 Touch controls / Power & Stroke / Camera 区块补全</b>：被 <code>&lt;b&gt;</code> 拆分的文本节点（左右拖动 / 上下拖动 / 双指捏合 / 击球按钮 / 力度条 / 母球图示 / 「+」按钮 / 复位按钮 / 细微瞄准条 / 视角 / 力度≈60%）逐段加 EN。<br>
-    <b>⑤ 主菜单「操作介绍」与「关于」区块补全</b>：基本操作 / 加塞与杆法 / 摆球 / 视角切换 / 小技巧 / 关于 等区块的所有 <code>&lt;b&gt;</code> 片段与表格表头（开发者 / 版本 / 协议 / 项目源码 / 上游项目）逐段加 EN。<br>
-    <b>⑥ SVG 圆盘标签</b>高杆 / 低杆 / 左塞 / 右塞 与示意图「力度 ≈ 60%」同步补 EN。<br>
-    仅文案层改造，<b>未改动任何物理 / 渲染 / 布局</b>。<br>
-    <br>
-    <b>v1.3.21 新功能：台球桌外观合并为单一设置（11 款）+ 球杆 auto 跟随台面色</b><br>
-    主菜单「设置」面板与游戏内「设置」覆盖层（help.html）均新增语言分段控件（中文 / English），选择持久化到 localStorage（沿用 <code>billiards_cn_settings_v1</code>）。<br>
-    <br>
-    <b>中英文案全面覆盖</b>：<br>
-    · <b>主菜单</b>：全部可见文本（画质档位 / 辅助线档位 / 各模式规则弹窗 / 外观定制皮肤·球杆·场景名 / 设置联动提示 / 操作反馈 toast）<br>
-    · <b>游戏内设置覆盖层</b>：设置面板全部条目（语言 / 画质 / 辅助线 / 音量 / 操作介绍）<br>
-    · <b>游戏内 HUD</b>：比分栏（玩家 / 对手 / 电脑）、击球 / 摆球 / 切换视角 / 设置按钮、白球击球点 / 击球力度 / 回放进度等标签、横屏遮罩、加载提示<br>
-    实现采用<b>全局中文→英文映射字典 + <code>localize(root)</code> 树遍历翻译</b>，缺失项优雅降级保持中文。<br>
-    <br>
-    <b>比分栏随语言根治</b>：hud.ts 构造函数读取 <code>billiards_cn_settings_v1.language</code> 决定标签写入（玩家/对手/电脑 → You/Opponent/CPU），index.html 内联脚本保留 <code>MutationObserver</code> 兜底监听切换消息，确保对局开始瞬间与对局中切换都即时正确。<br>
-    <br>
-    <b>结构分离</b>：游戏对局页 index.html 更名为 <code>play.html</code>，发布落地页 download.html 更名为 <code>index.html</code>，使站点根 / 直接显示本发布页（含在线模式 / 安卓 APK / 完整资源包 / 迁移明细 / 发布说明五块入口）。游戏内导航全量同步改引用；APP 端 <code>MainActivity.java</code> 游戏内页面返回拦截判断同步改为 <code>/play.html</code>。<br>
-    <br>
-    <b>双端一致</b>：外观 / 语言设置对所有端一致呈现，纯文案 / 逻辑层改造，<b>未改动任何布局</b>；APP 端通过 APK 重签打 v1.3.22 一并生效。<br>
-    <br>
-    <b>验证</b>（chromium 真实加载 + CDP 驱动，含语言切换 / 比分栏中英 / 落地页五块入口可达性 / APK & 压缩包下载链接 200）：<br>
-    · <b>菜单 / help</b>：zh↔en 可见文本全部正确互换 ✓<br>
-    · <b>游戏内界面</b>：zh↔en bodyText 完美互换，zh 含「九球/八球/斯诺克/三库开伦/开始游戏/玩家/电脑」，en 含「9-Ball/8-Ball/Snooker/3-Cushion/Start Game/You/CPU」✓<br>
-    · <b>比分栏</b>：en+bot → <code>You / CPU</code>；zh+pvp → <code>玩家 / 对手</code>；对局中 <code>postMessage</code> 切换即时覆盖 ✓<br>
-    · <b>落地页</b>：根 <code>/</code> → <code>index.html</code> 发布页，五块入口齐全；<code>billiards-cn.apk</code> / <code>taiqiu-v1.3.22-release.zip</code> / <code>play.html</code> / <code>MIGRATION-*.md</code> / <code>GITHUB-RELEASE-NOTES-*.md</code> 全部 HTTP 200 ✓<br>
-    · <b>APK</b>：重签打包通过（1.8MB，零权限，resources.arsc Stored，4 字节对齐）✓<br>
-    <br>
-    <b>版本信息</b>：versionName 1.3.22 · versionCode 26082522 · git tag v1.3.22
-  </div>
+  <div class="meta" id="meta">
+    <details class="ver-item current" open>
+    <summary class="ver-btn"><span class="ver-no"><span class="zh">v1.3.39</span><span class="en">v1.3.39</span></span><span class="ver-title"><span class="zh">当前版本 · 修复预览渲染 / GLTF 桌台</span><span class="en">Current · fix preview render / GLTF table</span></span></summary>
+    <div class="ver-body">
+      <span class="zh"><b>v1.3.39 · v1.3.38 后续修复</b><br>
+· <b>球杆预览渲染修复</b>：横置后反射改对 pivot 组镜像（不再压短 cue 长轴），消除"断节/多段"感；低端机统一使用 <code>MeshPhongMaterial</code> 柔和高光，增强主光/轮廓光，减弱地面装饰环。<br>
+· <b>GLTF 桌台修复</b>：v1.3.38 仅改了程序化本地桌台，真机游戏加载的 GLTF 模型未生效。现 GLTF 材质的 <code>blackpocket</code>（6 球洞）随库边色、<code>Material.001</code>（袋口包边）随桌框色、<code>diamond</code>（桌边菱形标记小凸点）直接隐藏。<br>
+<b>约束</b>：仅改展示层，<b>不改动任何物理逻辑、挥杆动画、碰撞参数</b>。</span>
+      <span class="en"><b>v1.3.39 · Follow-up fixes for v1.3.38</b><br>
+· <b>Cue preview render fix</b>: reflection now mirrors via the pivot group (no longer compresses the cue along its long axis), removing the "broken/multi-segment" look; low-end devices use <code>MeshPhongMaterial</code> with soft specular, stronger key/rim lights, subtler floor ring.<br>
+· <b>GLTF table fix</b>: v1.3.38 only changed the procedural local table; the GLTF model used on real devices was unaffected. Now GLTF <code>blackpocket</code> (6 pockets) follows cushion color, <code>Material.001</code> (pocket trim) follows frame color, and <code>diamond</code> rail markers are hidden.<br>
+<b>Constraint</b>: preview/showcase layer only — <b>no physics, swing animation, or collision params changed</b>.</span>
+    </div>
+  </details>
+  <details class="ver-item">
+    <summary class="ver-btn"><span class="zh">v1.3.22 · 英文文案补全</span><span class="en">v1.3.22 · EN strings</span></summary>
+    <div class="ver-body">
+      <span class="zh"><b>v1.3.22 新功能：英文版未翻译文案批量补全</b><br>
+  <b>① i18n.ts 升级为双语运行时</b>：原 T 单语表改为 STRINGS 双语表 + <code>t(key)</code> 运行时函数，按 <code>Settings.get().language</code> 取值；aim / placeball / placeallballs / drilloptions / rules/* / boteventhandler / matchresult 等所有渲染文案（击球 / 摆球 / 犯规 / 球局结束 / 你赢了你输了…）改为 <code>t("...")</code> 调用；旧 <code>T</code> 通过 Proxy 兼容保留为中文。<br>
+  <b>② 4 款新球杆主题补 EN 名</b>：奥特曼 / 霓虹脉冲 / 青竹 / 墨玉 → Ultraman / Neon Pulse / Bamboo / Black Jade。<br>
+  <b>③ 6 款新桌布补 EN 名</b>：黑曜石黑 / 熔岩裂纹 / 霓虹蓝紫 / 朱红鎏金 / 全息银 / 粉色糖果 → Obsidian Black / Lava Cracks / Neon Blue-Purple / Crimson Gold / Holographic Silver / Pink Candy。<br>
+  <b>④ in-game 帮助页 Touch controls / Power & Stroke / Camera 区块补全</b>：被 <code>&lt;b&gt;</code> 拆分的文本节点（左右拖动 / 上下拖动 / 双指捏合 / 击球按钮 / 力度条 / 母球图示 / 「+」按钮 / 复位按钮 / 细微瞄准条 / 视角 / 力度≈60%）逐段加 EN。<br>
+  <b>⑤ 主菜单「操作介绍」与「关于」区块补全</b>：基本操作 / 加塞与杆法 / 摆球 / 视角切换 / 小技巧 / 关于 等区块的所有 <code>&lt;b&gt;</code> 片段与表格表头（开发者 / 版本 / 协议 / 项目源码 / 上游项目）逐段加 EN。<br>
+  <b>⑥ SVG 圆盘标签</b>高杆 / 低杆 / 左塞 / 右塞 与示意图「力度 ≈ 60%」同步补 EN。<br>
+  仅文案层改造，<b>未改动任何物理 / 渲染 / 布局</b>。<br>
+  <br>
+  </span>
+      <span class="en"><b>v1.3.22 What's New: English untranslated strings batch-completed</b><br>
+  <b>① i18n.ts upgraded to a bilingual runtime</b>: the old single-language <code>T</code> table became a bilingual <code>STRINGS</code> table + a <code>t(key)</code> runtime function, reading from <code>Settings.get().language</code>; all rendered text in aim / placeball / placeallballs / drilloptions / rules/* / boteventhandler / matchresult (shoot / place balls / foul / end of frame / you win you lose…) now call <code>t("...")</code>; the old <code>T</code> is kept via a Proxy for backward-compat (defaults to Chinese).<br>
+  <b>② 4 new cue themes got EN names</b>: 奥特曼 / 霓虹脉冲 / 青竹 / 墨玉 → Ultraman / Neon Pulse / Bamboo / Black Jade.<br>
+  <b>③ 6 new cloths got EN names</b>: 黑曜石黑 / 熔岩裂纹 / 霓虹蓝紫 / 朱红鎏金 / 全息银 / 粉色糖果 → Obsidian Black / Lava Cracks / Neon Blue-Purple / Crimson Gold / Holographic Silver / Pink Candy.<br>
+  <b>④ In-game help page Touch controls / Power &amp; Stroke / Camera sections completed</b>: text nodes split by <code>&lt;b&gt;</code> (drag left/right / drag up/down / pinch / Shoot button / power bar / cue-ball icon / "+" button / reset button / fine-aim bar / view / power≈60%) each got EN.<br>
+  <b>⑤ Main menu "How to play" and "About" sections completed</b>: all <code>&lt;b&gt;</code> fragments and table headers (Developer / Version / License / Source / Upstream) in basics / spin &amp; stroke / ball placement / view switch / tips / about each got EN.<br>
+  <b>⑥ SVG dial labels</b> high/low spin, left/right english and the "power ≈ 60%" diagram got EN.<br>
+  Text layer only—<b>no physics / rendering / layout changes</b>.<br>
+  <br>
+  </span>
+    </div>
+  </details>
+  <details class="ver-item">
+    <summary class="ver-btn"><span class="zh">v1.3.21 · 桌布合并 + 球杆跟随</span><span class="en">v1.3.21 · Cloth merge + cue follow</span></summary>
+    <div class="ver-body">
+      <span class="zh"><b>v1.3.21 新功能：台球桌外观合并为单一设置（11 款）+ 球杆 auto 跟随台面色</b><br>
+  主菜单「设置」面板与游戏内「设置」覆盖层（help.html）均新增语言分段控件（中文 / English），选择持久化到 localStorage（沿用 <code>billiards_cn_settings_v1</code>）。<br>
+  <br>
+  </span>
+      <span class="en"><b>v1.3.21 What's New: table appearance merged into a single setting (11 options) + cue auto-follows table color</b><br>
+  The main menu "Settings" panel and the in-game settings overlay (help.html) both gained a language segmented control (中文 / English), persisted to localStorage (key <code>billiards_cn_settings_v1</code>).<br>
+  <br>
+  </span>
+    </div>
+  </details>
+  <details class="ver-item">
+    <summary class="ver-btn"><span class="zh">v1.3.20 及以前 · 中英全面覆盖</span><span class="en">v1.3.20 & earlier · Full i18n</span></summary>
+    <div class="ver-body">
+      <span class="zh"><b>中英文案全面覆盖</b>：<br>
+  · <b>主菜单</b>：全部可见文本（画质档位 / 辅助线档位 / 各模式规则弹窗 / 外观定制皮肤·球杆·场景名 / 设置联动提示 / 操作反馈 toast）<br>
+  · <b>游戏内设置覆盖层</b>：设置面板全部条目（语言 / 画质 / 辅助线 / 音量 / 操作介绍）<br>
+  · <b>游戏内 HUD</b>：比分栏（玩家 / 对手 / 电脑）、击球 / 摆球 / 切换视角 / 设置按钮、白球击球点 / 击球力度 / 回放进度等标签、横屏遮罩、加载提示<br>
+  实现采用<b>全局中文→英文映射字典 + <code>localize(root)</code> 树遍历翻译</b>，缺失项优雅降级保持中文。<br>
+  <br>
+  <b>比分栏随语言根治</b>：hud.ts 构造函数读取 <code>billiards_cn_settings_v1.language</code> 决定标签写入（玩家/对手/电脑 → You/Opponent/CPU），index.html 内联脚本保留 <code>MutationObserver</code> 兜底监听切换消息，确保对局开始瞬间与对局中切换都即时正确。<br>
+  <br>
+  <b>结构分离</b>：游戏对局页 index.html 更名为 <code>play.html</code>，发布落地页 download.html 更名为 <code>publish.html</code>（发布中心），使站点根 <code>/</code> 直接显示游戏主入口。<br>
+  <br>
+  <b>双端一致</b>：外观 / 语言设置对所有端一致呈现，纯文案 / 逻辑层改造，<b>未改动任何布局</b>；APP 端通过 APK 重签打 v1.3.22 一并生效。<br>
+  <br>
+  <b>验证</b>（chromium 真实加载 + CDP 驱动，含语言切换 / 比分栏中英 / 落地页三块入口可达性 / APK & 压缩包下载链接 200）：<br>
+  · <b>菜单 / help</b>：zh↔en 可见文本全部正确互换 ✓<br>
+  · <b>游戏内界面</b>：zh↔en bodyText 完美互换，zh 含「九球/八球/斯诺克/三库开伦/开始游戏/玩家/电脑」，en 含「9-Ball/8-Ball/Snooker/3-Cushion/Start Game/You/CPU」✓<br>
+  · <b>比分栏</b>：en+bot → <code>You / CPU</code>；zh+pvp → <code>玩家 / 对手</code>；对局中 <code>postMessage</code> 切换即时覆盖 ✓<br>
+  · <b>落地页</b>：根 <code>/</code> → 游戏主入口，<code>publish.html</code> 为发布中心（三块入口齐全）；<code>billiards-cn.apk</code> / <code>taiqiu-v1.3.22-release.zip</code> / <code>play.html</code> / <code>MIGRATION-*.md</code> / <code>GITHUB-RELEASE-NOTES-*.md</code> 全部 HTTP 200 ✓<br>
+  · <b>APK</b>：重签打包通过（1.8MB，零权限，resources.arsc Stored，4 字节对齐）✓<br>
+  <br>
+  <b>版本信息</b>：versionName 1.3.22 · versionCode 26082522 · git tag v1.3.22
+</span>
+      <span class="en"><b>Full Chinese / English coverage</b>:<br>
+  · <b>Main menu</b>: all visible text (quality tiers / aim-line tiers / per-mode rule popups / appearance skins·cues·scenes / settings hints / feedback toasts)<br>
+  · <b>In-game settings overlay</b>: all panel items (language / quality / aim-line / volume / how-to-play)<br>
+  · <b>In-game HUD</b>: score bar (player / opponent / CPU), shoot / place-ball / switch-view / settings buttons, cue-ball contact point / power / replay labels, rotate-lock mask, loading hints<br>
+  Implemented via a <b>global Chinese→English map + <code>localize(root)</code> tree-walk translation</b>; missing keys gracefully fall back to Chinese.<br>
+  <br>
+  <b>Score bar fixed by language</b>: hud.ts constructor reads <code>billiards_cn_settings_v1.language</code> to decide labels (player/opponent/CPU → You/Opponent/CPU); index.html inline script keeps a <code>MutationObserver</code> fallback for switch messages, ensuring instant correctness at frame start and mid-game switches.<br>
+  <br>
+  <b>Structure split</b>: the game page index.html renamed to <code>play.html</code>, the landing download.html renamed to <code>publish.html</code> (the publish center), so the site root <code>/</code> shows the game main entry directly.<br>
+  <br>
+  <b>Consistent across platforms</b>: appearance / language settings render identically on all ends; text/logic only, <b>no layout changes</b>; APP ships via re-signed v1.3.22 APK.<br>
+  <br>
+  <b>Verification</b> (real chromium load + CDP, covering language switch / score-bar zh-en / landing-page entry reachability / APK &amp; zip download 200):<br>
+  · <b>Menu / help</b>: zh↔en visible text swaps correctly ✓<br>
+  · <b>In-game UI</b>: zh↔en bodyText swaps perfectly; zh has 九球/八球/斯诺克/三库开伦/开始游戏/玩家/电脑, en has 9-Ball/8-Ball/Snooker/3-Cushion/Start Game/You/CPU ✓<br>
+  · <b>Score bar</b>: en+bot → <code>You / CPU</code>; zh+pvp → <code>玩家 / 对手</code>; in-game <code>postMessage</code> switch instantly overrides ✓<br>
+  · <b>Landing</b>: root <code>/</code> → game main entry; <code>publish.html</code> is the publish center (three entries present); <code>billiards-cn.apk</code> / <code>taiqiu-v1.3.22-release.zip</code> / <code>play.html</code> / <code>MIGRATION-*.md</code> / <code>GITHUB-RELEASE-NOTES-*.md</code> all HTTP 200 ✓<br>
+  · <b>APK</b>: re-signed build passed (1.8MB, zero permissions, resources.arsc Stored, 4-byte aligned) ✓<br>
+  <br>
+  <b>Version info</b>: versionName 1.3.22 · versionCode 26082522 · git tag v1.3.22
+</span>
+    </div>
+  </details>
 </div>
+
+<script>
+(function () {
+  var KEY = 'publish_lang';
+  var btn = document.getElementById('langToggle');
+  function apply(lang) {
+    var isEn = lang === 'en';
+    document.body.classList.toggle('lang-en', isEn);
+    btn.textContent = isEn ? '中文' : 'EN';
+  }
+  var saved = 'zh';
+  try { saved = localStorage.getItem(KEY) || 'zh'; } catch (e) {}
+  apply(saved);
+  btn.addEventListener('click', function () {
+    var now = document.body.classList.contains('lang-en') ? 'zh' : 'en';
+    try { localStorage.setItem(KEY, now); } catch (e) {}
+    apply(now);
+  });
+})();
+</script>
 </body>
 </html>

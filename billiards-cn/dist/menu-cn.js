@@ -264,9 +264,19 @@
 
     // v1.3.21 新增球杆主题 EN 名
     "奥特曼": "Ultraman",
-    "霓虹脉冲": "Neon Pulse",
-    "青竹": "Bamboo",
-    "墨玉": "Black Jade",
+    // v1.3.23 新增 12 款特色球杆皮肤 EN 名
+    "墨云龙阙": "Moyun Longque",
+    "青竹听风": "Qingzhu Tingfeng",
+    "凤羽鎏金": "Fengyu Gilt",
+    "千里砚山": "Qianli Inkstone",
+    "星核暗芒": "Star Core",
+    "霓虹溯光": "Neon Trace",
+    "虚空裂隙": "Void Rift",
+    "幽刺夜影": "Shadow Thorn",
+    "烬火焚风": "Ember Blaze",
+    "云糖幻梦": "Cloud Candy",
+    "冰晶雪魄": "Ice Crystal",
+    "万象权杖": "Myriad Scepter",
 
     // v1.3.21 新增桌布 EN 名
     "黑曜石黑": "Obsidian Black",
@@ -1115,6 +1125,112 @@
       ctx.beginPath()
       ctx.arc((x0 + x1) / 2 + 6, -3, halfTh * 0.22, 0, 6.283)
       ctx.fill()
+    } else if (kind === "moyunlongque") {
+      ctx.strokeStyle = "#e6c878"
+      ctx.globalAlpha = 0.6
+      ctx.lineWidth = 2
+      for (var ml = -halfTh + 2; ml < halfTh; ml += 5) {
+        ctx.beginPath()
+        ctx.moveTo(x0, ml)
+        ctx.lineTo(x1, ml + (ml % 10 ? 2 : -2))
+        ctx.stroke()
+      }
+      ctx.globalAlpha = 1
+    } else if (kind === "qingzhutingfeng") {
+      ctx.strokeStyle = "rgba(225,245,220,0.7)"
+      ctx.lineWidth = 1.5
+      for (var qz = 0; qz < 4; qz++) {
+        var qy = -halfTh + qz * (halfTh * 0.7)
+        ctx.beginPath()
+        ctx.moveTo(x0, qy)
+        ctx.lineTo(x1, qy)
+        ctx.stroke()
+      }
+    } else if (kind === "fengyuliujin") {
+      ctx.strokeStyle = "#caa24a"
+      ctx.lineWidth = 2
+      for (var fy = 0; fy < 4; fy++) {
+        ctx.beginPath()
+        ctx.ellipse((x0 + x1) / 2, -halfTh + fy * (halfTh * 0.7), halfTh * 0.45, halfTh * 0.7, 0.3, 0, 6.283)
+        ctx.stroke()
+      }
+    } else if (kind === "qianliyanshan") {
+      ctx.strokeStyle = "rgba(30,40,45,0.7)"
+      ctx.lineWidth = 3
+      ctx.beginPath()
+      ctx.moveTo(x0, halfTh * 0.2)
+      ctx.lineTo((x0 + x1) / 2, -halfTh * 0.3)
+      ctx.lineTo(x1, halfTh * 0.1)
+      ctx.stroke()
+    } else if (kind === "xinghedanmang") {
+      ctx.fillStyle = "rgba(180,210,255,0.9)"
+      for (var xh = 0; xh < 30; xh++) {
+        ctx.fillRect(x0 + Math.random() * (x1 - x0), -halfTh + Math.random() * halfTh * 2, 1.5, 1.5)
+      }
+    } else if (kind === "nihongsuguang") {
+      ctx.strokeStyle = "rgba(255,123,224,0.9)"
+      ctx.lineWidth = 3
+      ctx.beginPath()
+      for (var nt = 0; nt <= 1; nt += 0.1) {
+        var nx = (x0 + x1) / 2 + Math.sin(nt * 6) * (halfTh * 0.8)
+        var ny = -halfTh + nt * halfTh * 2
+        nt === 0 ? ctx.moveTo(nx, ny) : ctx.lineTo(nx, ny)
+      }
+      ctx.stroke()
+    } else if (kind === "xukonglilie") {
+      ctx.strokeStyle = "rgba(155,92,255,0.9)"
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.moveTo(x0, 0)
+      for (var xk = 0; xk < 8; xk++) {
+        ctx.lineTo(x0 + (x1 - x0) * (xk + 1) / 8, (xk % 2 ? 1 : -1) * halfTh * 0.7)
+      }
+      ctx.stroke()
+    } else if (kind === "youciyeying") {
+      ctx.fillStyle = "rgba(184,160,216,0.7)"
+      for (var yc = -halfTh + 4; yc < halfTh; yc += 12) {
+        ctx.beginPath()
+        ctx.moveTo(x0 + 10, yc + 6)
+        ctx.lineTo(x0 + 18, yc)
+        ctx.lineTo(x0 + 26, yc + 6)
+        ctx.closePath()
+        ctx.fill()
+      }
+    } else if (kind === "jinhuofengfeng") {
+      ctx.fillStyle = "rgba(255,122,31,0.9)"
+      for (var jh = 0; jh < 14; jh++) {
+        ctx.beginPath()
+        ctx.arc(x0 + Math.random() * (x1 - x0), -halfTh + Math.random() * halfTh * 2, 2, 0, 6.283)
+        ctx.fill()
+      }
+    } else if (kind === "yuntianghuanmeng") {
+      ctx.fillStyle = "rgba(255,255,255,0.7)"
+      for (var yt = 0; yt < 4; yt++) {
+        var yty = -halfTh + yt * (halfTh * 0.7)
+        ctx.beginPath()
+        ctx.arc((x0 + x1) / 2 - 10, yty, 10, 0, 6.283)
+        ctx.arc((x0 + x1) / 2 + 10, yty, 10, 0, 6.283)
+        ctx.fill()
+      }
+    } else if (kind === "bingjingxuepo") {
+      ctx.strokeStyle = "rgba(120,180,220,0.8)"
+      ctx.lineWidth = 1.5
+      for (var bj = 0; bj < 4; bj++) {
+        var bjy = -halfTh + bj * (halfTh * 0.7)
+        ctx.beginPath()
+        ctx.moveTo((x0 + x1) / 2, bjy - 8)
+        ctx.lineTo((x0 + x1) / 2, bjy + 8)
+        ctx.moveTo((x0 + x1) / 2 - 8, bjy)
+        ctx.lineTo((x0 + x1) / 2 + 8, bjy)
+        ctx.stroke()
+      }
+    } else if (kind === "wanxiangquanzhang") {
+      ctx.strokeStyle = "rgba(232,200,120,0.85)"
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.moveTo(x0, -halfTh * 0.5)
+      ctx.bezierCurveTo((x0 + x1) / 2, -halfTh, x1, -halfTh * 0.5, x1, 0)
+      ctx.stroke()
     } else if (kind === "qilin") {
       ctx.strokeStyle = "#ffb347"
       ctx.lineWidth = 2.5
@@ -1131,7 +1247,7 @@
     ctx.restore()
   }
 
-  function drawCuePreview(cv, kind, c1, c2) {
+  function drawCuePreview(cv, kind, c1, c2, phase) {
     var ctx = cv.getContext("2d")
     var W = cv.width,
       H = cv.height
@@ -1143,8 +1259,15 @@
     ctx.save()
     ctx.translate(W / 2, H / 2)
     ctx.rotate(-Math.PI / 4)
-    var halfLen = W * 0.5,
+    // 杆长按画布较短边收敛，保证 45° 旋转后不出框
+    var halfLen = Math.min(W * 0.5, H * 0.7),
       halfTh = H * 0.15
+    if (typeof phase === "number") {
+      // 模拟球杆绕长轴自转：相位决定厚度方向压缩量（边缘视角最薄），呈现 3D 转动感
+      var sy = 0.34 + 0.66 * Math.abs(Math.cos(phase))
+      ctx.scale(1, sy)
+      ctx.translate(Math.sin(phase) * halfLen * 0.06, 0)
+    }
     var g = ctx.createLinearGradient(-halfLen, 0, halfLen, 0)
     g.addColorStop(0, c2)
     g.addColorStop(0.55, c1)
@@ -1607,6 +1730,199 @@
 
   /* ---------------- 球杆主题卡片（item 2） ---------------- */
 
+  /* ===================== 球杆 3D 预览（原生 WebGL，不引 three.js） ===================== */
+  // 生成球杆皮展开纹理：宽=周向(256) 高=杆长(1024)，轴向渐变 + 纹样
+  function makeCueSkinCanvas(kind, c1, c2) {
+    var W = 256, H = 1024
+    var cv = makeCanvas(W, H)
+    var ctx = cv.getContext("2d")
+    // 轴向渐变底（皮头在底端=亮木色）
+    var g = ctx.createLinearGradient(0, 0, 0, H)
+    g.addColorStop(0.0, c2)
+    g.addColorStop(0.5, c1)
+    g.addColorStop(0.82, "#efe0bf")
+    g.addColorStop(1.0, "#f4ead0")
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, W, H)
+    // 纹样：drawCueMotif 的 x=杆长 y=厚度，旋转 -90° 映射到 展开图(宽=周 高=轴)
+    ctx.save()
+    ctx.translate(W / 2, H / 2)
+    ctx.rotate(-Math.PI / 2)
+    // 调用前把全局 alpha 等状态交给 drawCueMotif（其内部自带 save/restore）
+    try { drawCueMotif(ctx, kind, H, W / 2) } catch (e) {}
+    ctx.restore()
+    // 两端金属环
+    ctx.fillStyle = "#caa15a"
+    ctx.fillRect(0, H * 0.84, W, H * 0.05)
+    ctx.fillStyle = "#3a6ea5"
+    ctx.fillRect(0, H * 0.90, W, H * 0.035)
+    return cv
+  }
+
+  // 极简 mat4 工具
+  function m4identity() { return [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1] }
+  function m4mul(a, b) {
+    var o = new Array(16)
+    for (var r = 0; r < 4; r++) for (var c = 0; c < 4; c++) {
+      o[r*4+c] = a[r*4+0]*b[0*4+c] + a[r*4+1]*b[1*4+c] + a[r*4+2]*b[2*4+c] + a[r*4+3]*b[3*4+c]
+    }
+    return o
+  }
+  function m4perspective(fovy, asp, n, f) {
+    var t = 1 / Math.tan(fovy / 2)
+    return [t/asp,0,0,0, 0,t,0,0, 0,0,(f+n)/(n-f),-1, 0,0,(2*f*n)/(n-f),0]
+  }
+  function m4translate(x, y, z) { var m = m4identity(); m[12]=x; m[13]=y; m[14]=z; return m }
+  function m4rotX(a){var c=Math.cos(a),s=Math.sin(a);return[1,0,0,0,0,c,-s,0,0,s,c,0,0,0,0,1]}
+  function m4rotY(a){var c=Math.cos(a),s=Math.sin(a);return[c,0,s,0,0,1,0,0,-s,0,c,0,0,0,0,1]}
+
+  // 生成圆柱侧面顶点（轴沿 Y，半径 rad，高 hgt，seg 段），返回 {pos,nrm,uv,idx}
+  function buildCylinder(rad, hgt, seg) {
+    var pos = [], nrm = [], uv = [], idx = []
+    var y0 = -hgt/2, y1 = hgt/2
+    for (var i = 0; i <= seg; i++) {
+      var u = i / seg
+      var ang = u * Math.PI * 2
+      var cx = Math.cos(ang), cz = Math.sin(ang)
+      // 两个端点（底/顶）同 uv.u，v=0/1
+      pos.push(rad*cx, y0, rad*cz); nrm.push(cx,0,cz); uv.push(u, 0)
+      pos.push(rad*cx, y1, rad*cz); nrm.push(cx,0,cz); uv.push(u, 1)
+    }
+    for (var i = 0; i < seg; i++) {
+      var a = i*2, b = i*2+1, c = i*2+2, d = i*2+3
+      idx.push(a,b,d, a,d,c)
+    }
+    return { pos:new Float32Array(pos), nrm:new Float32Array(nrm), uv:new Float32Array(uv), idx:new Uint16Array(idx) }
+  }
+
+  // 球杆主题预览：电影级写实 3D（three.js）。
+  // 按需加载 three.standalone.js（挂 window.THREE）+ cue-preview-3d.js（挂 window.CuePreview3D），
+  // 仅首次预览时加载一次。关键：WebGLRenderer 整个页面生命周期只创建一次、永不销毁——
+  // 松手只停旋转，不 dispose，避免真机 WebView「第二次新建 context 失败/丢失」导致白屏。
+  var cueViewer3D = null          // CuePreview3D 实例（只创建一次，复用）
+  var cue3DScriptPromise = null   // 脚本加载 Promise（缓存，只加载一次）
+  function loadCuePreview3DLib() {
+    if (cue3DScriptPromise) return cue3DScriptPromise
+    cue3DScriptPromise = new Promise(function (resolve, reject) {
+      if (window.CuePreview3D) { resolve(); return }
+      var base = (window.__APP_ROOT__ || "")  // 发布目录根（默认空串=同源）
+      function inject(src, ok, fail) {
+        var s = document.createElement("script")
+        s.src = base + src
+        s.onload = ok
+        s.onerror = function () { fail(new Error("加载失败: " + src)) }
+        document.head.appendChild(s)
+      }
+      inject("three.standalone.js", function () {
+        inject("cue-preview-3d.js", function () {
+          if (window.CuePreview3D) resolve()
+          else reject(new Error("CuePreview3D 未定义"))
+        }, reject)
+      }, reject)
+    })
+    return cue3DScriptPromise
+  }
+  // WebGL 不可用 / 加载失败时，在预览窗内给出明确提示（纯 3D 路径，不做 2D 降级）
+  function showCuePreviewError(msg) {
+    var cv = $("cuePreview3D")
+    if (cv) {
+      var ctx = cv.getContext("2d")
+      if (ctx) {
+        ctx.fillStyle = "#0a0e18"; ctx.fillRect(0, 0, cv.width, cv.height)
+        ctx.fillStyle = "#8fa6d8"; ctx.font = "13px sans-serif"; ctx.textAlign = "center"
+        ctx.fillText(msg || "无法显示 3D 预览", cv.width / 2, cv.height / 2)
+      }
+    }
+  }
+
+  // 球杆主题预览：长按卡片弹出小窗（3D 自动旋转，WebGL 不可用降级 2D）
+  var cueOverlay = null
+  function closeCuePreviewOverlay() {
+    if (!cueOverlay) cueOverlay = $("cuePreviewOverlay")
+    if (!cueOverlay) return
+    cueOverlay.classList.remove("active")
+  }
+  // 把小窗定位到卡片附近（优先右侧，空间不足放左侧，再不足居中），避免超出视口
+  function positionCuePreview(rect) {
+    if (!cueOverlay || !rect) return
+    var ww = window.innerWidth, wh = window.innerHeight
+    var winW = 220, winH = 150   // 与 CSS .cue-preview-overlay 尺寸一致
+    var left = rect.right + 12
+    if (left + winW > ww - 8) left = rect.left - winW - 12
+    if (left < 8) left = Math.max(8, Math.round((ww - winW) / 2))
+    var top = rect.top + rect.height / 2 - winH / 2
+    if (top < 8) top = 8
+    if (top + winH > wh - 8) top = wh - winH - 8
+    cueOverlay.style.left = left + "px"
+    cueOverlay.style.top = top + "px"
+  }
+  function showCuePreviewOverlay(themeId, rect) {
+    if (!cueOverlay) cueOverlay = $("cuePreviewOverlay")
+    if (!cueOverlay) return
+    var card = document.querySelector(
+      '#cueThemeCards .skin-card[data-cuetheme="' + themeId + '"]'
+    )
+    var kind = card ? card.getAttribute("data-pattern") : "auto"
+    var c1 = card ? card.getAttribute("data-c1") : "#d2b48c"
+    var c2 = card ? card.getAttribute("data-c2") : "#1a1a1a"
+    positionCuePreview(rect)
+    cueOverlay.classList.add("active")
+    // 双 rAF 确保浮层布局完成、预览 canvas 有真实尺寸后再初始化 3D 渲染器。
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        if (!cueOverlay.classList.contains("active")) return
+        var cv = $("cuePreview3D")
+        if (!cv) return
+        var hint = document.querySelector(".cue-preview-overlay-tip")
+        if (hint) hint.textContent = "自动旋转中 · 松手关闭"
+        // 主题色：c1=杆身主色, c2=握把/杆尾深色；金属色和皮头色从主题派生
+        var wood = c1 || "#d2b48c", dark = c2 || "#1a1a1a"
+        // 简单派生：金属色 = 主色提亮偏暖；皮头色 = 深色再压暗
+        function hexToRgb(h) {
+          var n = parseInt((h || "#000000").replace("#", ""), 16)
+          return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 }
+        }
+        function rgbToHex(c) {
+          return "#" + ((1 << 24) + (c.r << 16) + (c.g << 8) + c.b).toString(16).slice(1)
+        }
+        function clamp(v) { return Math.max(0, Math.min(255, Math.round(v))) }
+        function deriveMetal(hex) {
+          var c = hexToRgb(hex)
+          var lum = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b
+          if (lum < 60) return "#c9a24b" // 深色主题用经典金
+          return rgbToHex({
+            r: clamp(c.r * 1.25 + 25),
+            g: clamp(c.g * 1.12 + 10),
+            b: clamp(c.b * 0.95)
+          })
+        }
+        function deriveTip(hex) {
+          var c = hexToRgb(hex)
+          return rgbToHex({ r: clamp(c.r * 0.5), g: clamp(c.g * 0.5), b: clamp(c.b * 0.5) })
+        }
+        loadCuePreview3DLib().then(function () {
+          if (!cueOverlay.classList.contains("active")) return
+          // 只创建一次 renderer（首次），之后复用，避免真机第二次新建 context 失败
+          if (!cueViewer3D) {
+            cueViewer3D = new window.CuePreview3D(cv)
+            try {
+              cueViewer3D.init()   // WebGL 不可用会在此抛出（仅首次可能）
+            } catch (err) {
+              cueViewer3D = null   // 初始化失败：丢弃半成品，走错误提示
+              throw err
+            }
+          }
+          cueViewer3D.setTheme(wood, dark, deriveMetal(wood), deriveTip(dark), kind)
+          cueViewer3D.setAutoRotate(true)   // 360° 缓慢自转
+        }).catch(function (e) {
+          // 纯 3D 路径：加载或 WebGL 失败时给出明确提示，不降级 2D
+          console.error("[cuePreview] 3D 预览失败:", e)
+          showCuePreviewError(e && /WebGL/i.test(String(e)) ? "当前设备不支持 WebGL" : "无法加载 3D 预览")
+        })
+      })
+    })
+  }
+
   function initCueThemes() {
     var cards = document.querySelectorAll("#cueThemeCards .skin-card")
     if (!cards.length) return
@@ -1622,13 +1938,58 @@
       refreshCustomRows()
     }
     Array.prototype.forEach.call(cards, function (c) {
+      var themeId = c.getAttribute("data-cuetheme")
+      var pressTimer = null
+      var longFired = false
+      function startPress(e) {
+        longFired = false
+        if (pressTimer) clearTimeout(pressTimer)
+        // 长按 380ms 弹出预览
+        pressTimer = setTimeout(function () {
+          longFired = true
+          c.classList.add("cue-card-longpress")
+          showCuePreviewOverlay(themeId, c.getBoundingClientRect())
+        }, 380)
+      }
+      function cancelPress() {
+        if (pressTimer) { clearTimeout(pressTimer); pressTimer = null }
+        c.classList.remove("cue-card-longpress")
+      }
+      // 指针按下：启动长按计时（鼠标 + 触摸统一用 pointer 事件）
+      c.addEventListener("pointerdown", function (e) {
+        // 仅主键 / 单指
+        if (e.button !== undefined && e.button !== 0) return
+        startPress(e)
+      })
+      c.addEventListener("pointerup", cancelPress)
+      c.addEventListener("pointercancel", cancelPress)
+      c.addEventListener("pointerleave", cancelPress)
+      // 短按 = 选中主题
       c.addEventListener("click", function () {
-        settings.cueTheme = c.getAttribute("data-cuetheme")
+        cancelPress()
+        if (longFired) { longFired = false; return }  // 长按已处理，不再触发选中
+        settings.cueTheme = themeId
         saveSettings(settings)
         syncActive()
         buzz(10)
       })
     })
+    // 手指 / 鼠标抬起即关闭预览（松手关闭）。在 document 上捕获，
+    // 确保无论指针抬在哪都触发；浮层本身 pointer-events:none 不拦截抬手。
+    function onPointerRelease() {
+      if (cueOverlay && cueOverlay.classList.contains("active")) {
+        // 关键：只停旋转，绝不 dispose / 释放 WebGL 上下文。
+        // renderer 整个页面生命周期仅创建一次，复用可避免真机「第二次 context 失败」白屏。
+        if (cueViewer3D && cueViewer3D.stop) cueViewer3D.stop()
+        closeCuePreviewOverlay()
+        Array.prototype.forEach.call(cards, function (c) {
+          c.classList.remove("cue-card-longpress")
+        })
+      }
+    }
+    // 在 document 上捕获抬起，确保无论指针抬在哪都关闭
+    document.addEventListener("pointerup", onPointerRelease)
+    document.addEventListener("pointercancel", onPointerRelease)
     syncActive()
   }
 

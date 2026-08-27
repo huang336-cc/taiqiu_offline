@@ -82,9 +82,10 @@
   <body>
     <h1 hidden>奥特曼的台球 单机离线版</h1>
 
-    <!-- v1.2.31：在线游戏模式横屏锁定。竖屏（移动端）时全屏覆盖「请横屏」遮罩，
-         屏蔽竖屏游玩，仅横屏模式可进入游戏；桌面/大屏（宽度 > 1024px）不触发。
-         显示/隐藏完全由 css/index.css 的 @media (orientation: portrait) 控制。 -->
+    <!-- v1.2.31 曾做「在线游戏模式横屏锁定」：竖屏（移动端）全屏覆盖「请横屏」遮罩并屏蔽交互。
+         v1.3.27 已移除该硬锁定（见 css/index.css）：移除 @media (orientation: portrait) and (max-width:1024px)
+         强制 display:flex 的规则，游戏在竖屏手机下也能正常进入与游玩（resize/orientationchange 已做重渲染适配）。
+         此 #rotateOverlay 现默认 display:none，不再阻断游戏；若日后想做「非阻塞」横屏提示可在此基础上启用。 -->
     <div id="rotateOverlay" class="rotate-overlay" aria-hidden="true">
       <div class="rotate-icon" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">

@@ -378,6 +378,28 @@ export class Assets {
             mat.map = cfg.frameTexture
           }
           mat.needsUpdate = true
+        } else if (name === "blackpocket" || name.includes("pocket")) {
+          // v1.3.38-fix：GLTF 模型桌台的 6 个球洞（pocket）不再用固定深色，
+          // 改为跟随当前桌布皮肤的库边色，使袋口与整体色调协调。
+          mat.color.set(cfg.cushionColor)
+          if ("emissive" in mat) {
+            ;(mat as any).emissive.set(0x000000)
+            ;(mat as any).emissiveIntensity = 0
+          }
+          mat.needsUpdate = true
+        } else if (name === "material.001" || name === "material_001") {
+          // GLTF 模型中未被命名的金属/包边件（Blender 默认名 Material.001），
+          // 通常是袋口包边或角落金属件，跟随桌框色以融入整体。
+          mat.color.set(cfg.frameColor)
+          if ("emissive" in mat) {
+            ;(mat as any).emissive.set(cfg.frameGlow || 0x000000)
+            ;(mat as any).emissiveIntensity = cfg.frameGlow ? 0.5 : 0
+          }
+          mat.needsUpdate = true
+        } else if (name === "diamond") {
+          // v1.3.38-fix：隐藏 GLTF 模型桌边 diamond（菱形瞄准标记）小凸点，
+          // 用户反馈其视觉上很突兀。直接隐藏 mesh，不动物理。
+          child.visible = false
         }
       }
     })

@@ -210,14 +210,16 @@ export const TABLE_SKINS: TableSkinDef[] = [
     id: "classic",
     name: "经典原木",
     kind: "classic",
-    clothColor: 0xdac39e,
-    clothColor2: 0x896e42,
+    // 经典台球桌外观：原木框 + 墨绿台呢（台呢取自 emerald 的经典绿，框保留原木暖棕），
+    // 库边用台呢的更深绿作为过渡，使台呢/库边/木框三者成一套协调的「原木绿台」主题。
+    clothColor: 0x1f6b34,
+    clothColor2: 0x124a22,
     clothTexture: "none",
-    cushionColor: 0xba934e,
+    cushionColor: 0x0e3a1a,
     frameColor: 0x6a4a1a,
     frameGlow: 0,
     edgeGlow: 0,
-    swatch: "linear-gradient(135deg,#dac39e 0%,#6a4a1a 100%)",
+    swatch: "linear-gradient(135deg,#1f6b34 0%,#6a4a1a 100%)",
   },
   {
     id: "emerald",
@@ -226,11 +228,11 @@ export const TABLE_SKINS: TableSkinDef[] = [
     clothColor: 0x2a7a3a,
     clothColor2: 0x1a3a1a,
     clothTexture: "none",
-    cushionColor: 0x1a5a2a,
-    frameColor: 0x11401f,
+    cushionColor: 0x15501f,
+    frameColor: 0x0d3316,
     frameGlow: 0,
     edgeGlow: 0,
-    swatch: "linear-gradient(135deg,#2a7a3a 0%,#11401f 100%)",
+    swatch: "linear-gradient(135deg,#2a7a3a 0%,#0d3316 100%)",
   },
   {
     id: "crimson",
@@ -239,11 +241,11 @@ export const TABLE_SKINS: TableSkinDef[] = [
     clothColor: 0x8a2a2a,
     clothColor2: 0x4a0a0a,
     clothTexture: "none",
-    cushionColor: 0x6a1a1a,
-    frameColor: 0x5a1414,
+    cushionColor: 0x5a1414,
+    frameColor: 0x3a0c0c,
     frameGlow: 0,
     edgeGlow: 0,
-    swatch: "linear-gradient(135deg,#8a2a2a 0%,#5a1414 100%)",
+    swatch: "linear-gradient(135deg,#8a2a2a 0%,#3a0c0c 100%)",
   },
   {
     id: "sapphire",
@@ -252,24 +254,25 @@ export const TABLE_SKINS: TableSkinDef[] = [
     clothColor: 0x1a3a8a,
     clothColor2: 0x0a1a4a,
     clothTexture: "none",
-    cushionColor: 0x0a2a6a,
-    frameColor: 0x0a1840,
+    cushionColor: 0x0a2458,
+    frameColor: 0x081028,
     frameGlow: 0,
     edgeGlow: 0,
-    swatch: "linear-gradient(135deg,#1a3a8a 0%,#0a1840 100%)",
+    swatch: "linear-gradient(135deg,#1a3a8a 0%,#081028 100%)",
   },
   {
     id: "golden",
     name: "金辉",
     kind: "golden",
-    clothColor: 0x8a6a2a,
-    clothColor2: 0x4a2a0a,
+    // 金辉主题：台呢提亮为更纯的暖金（与深棕木框形成金棕对比），库边取台呢与框之间的过渡金。
+    clothColor: 0xb8902f,
+    clothColor2: 0x6a4a14,
     clothTexture: "none",
-    cushionColor: 0x6a4a1a,
-    frameColor: 0x4a2a0a,
+    cushionColor: 0x8a6620,
+    frameColor: 0x3a2408,
     frameGlow: 0,
     edgeGlow: 0,
-    swatch: "linear-gradient(135deg,#8a6a2a 0%,#4a2a0a 100%)",
+    swatch: "linear-gradient(135deg,#b8902f 0%,#3a2408 100%)",
   },
   // —— 新增 6 款台球桌皮肤（含桌框发光/纹理/边缘特效）——
   {
@@ -279,11 +282,11 @@ export const TABLE_SKINS: TableSkinDef[] = [
     clothColor: 0x0a0a0c,
     clothColor2: 0x1a1a20,
     clothTexture: "glass",
-    cushionColor: 0x2a0a0a,
-    frameColor: 0x140406,
+    cushionColor: 0x141416,
+    frameColor: 0x18181c,
     frameGlow: 0x5a0d12,
     edgeGlow: 0x8a1018,
-    swatch: "linear-gradient(135deg,#1a1a20 0%,#5a0d12 100%)",
+    swatch: "linear-gradient(135deg,#1a1a20 0%,#8a1018 100%)",
   },
   {
     id: "lava",
@@ -292,8 +295,8 @@ export const TABLE_SKINS: TableSkinDef[] = [
     clothColor: 0x140303,
     clothColor2: 0x3a0808,
     clothTexture: "lava",
-    cushionColor: 0x4a1206,
-    frameColor: 0x1a0602,
+    cushionColor: 0x2a0804,
+    frameColor: 0x140402,
     frameGlow: 0xff5a14,
     edgeGlow: 0xff7a1f,
     swatch: "linear-gradient(135deg,#3a0808 0%,#ff7a1f 100%)",
@@ -305,8 +308,8 @@ export const TABLE_SKINS: TableSkinDef[] = [
     clothColor: 0x0b0a2a,
     clothColor2: 0x241046,
     clothTexture: "neonstrip",
-    cushionColor: 0x1a0a4a,
-    frameColor: 0x0a0626,
+    cushionColor: 0x13082e,
+    frameColor: 0x0c0722,
     frameGlow: 0x6a3cff,
     edgeGlow: 0x13e6ff,
     swatch: "linear-gradient(135deg,#241046 0%,#13e6ff 100%)",
@@ -318,8 +321,8 @@ export const TABLE_SKINS: TableSkinDef[] = [
     clothColor: 0x2a0606,
     clothColor2: 0x5a0a0a,
     clothTexture: "cloud",
-    cushionColor: 0x3a0808,
-    frameColor: 0x3a2406,
+    cushionColor: 0x3a1406,
+    frameColor: 0x4a2e08,
     frameGlow: 0xd9a23a,
     edgeGlow: 0xf0c860,
     swatch: "linear-gradient(135deg,#5a0a0a 0%,#d9a23a 100%)",
@@ -331,8 +334,8 @@ export const TABLE_SKINS: TableSkinDef[] = [
     clothColor: 0x8a909a,
     clothColor2: 0xc8d0da,
     clothTexture: "holo",
-    cushionColor: 0x5a606a,
-    frameColor: 0x6a707a,
+    cushionColor: 0xb9c2cc,
+    frameColor: 0x9aa2ac,
     frameGlow: 0x9fd0ff,
     edgeGlow: 0xd0e8ff,
     swatch: "linear-gradient(135deg,#c8d0da 0%,#9fd0ff 100%)",
@@ -344,8 +347,8 @@ export const TABLE_SKINS: TableSkinDef[] = [
     clothColor: 0xffc6dd,
     clothColor2: 0xffe6f0,
     clothTexture: "candy",
-    cushionColor: 0xff9ec4,
-    frameColor: 0xffb3d4,
+    cushionColor: 0xffa8cf,
+    frameColor: 0xff9ec4,
     frameGlow: 0xff7ab0,
     edgeGlow: 0xffd0e8,
     swatch: "linear-gradient(135deg,#ffe6f0 0%,#ff7ab0 100%)",
@@ -373,9 +376,18 @@ export interface CueThemeDef {
     | "peppa"
     | "qilin"
     | "ultraman"
-    | "neon"
-    | "bamboo"
-    | "jade"
+    | "moyunlongque"      // 墨云龙阙
+    | "qingzhutingfeng"   // 青竹听风
+    | "fengyuliujin"      // 凤羽鎏金
+    | "qianliyanshan"     // 千里砚山
+    | "xinghedanmang"     // 星核暗芒
+    | "nihongsuguang"     // 霓虹溯光
+    | "xukonglilie"       // 虚空裂隙
+    | "youciyeying"       // 幽刺夜影
+    | "jinhuofengfeng"    // 烬火焚风
+    | "yuntianghuanmeng"  // 云糖幻梦
+    | "bingjingxuepo"     // 冰晶雪魄
+    | "wanxiangquanzhang" // 万象权杖
   /** UI 色块渐变（左=杆身，右=杆尾） */
   swatch: string
   accent: number
@@ -431,26 +443,90 @@ export const CUE_THEMES: CueThemeDef[] = [
     swatch: "linear-gradient(135deg,#e8eef2 0%,#c81f1f 100%)",
     accent: 0xe8eef2,
   },
+  // ===== 新增 12 款特色球杆皮肤（v1.3.23）=====
   {
-    id: "neon",
-    name: "霓虹脉冲",
-    kind: "neon",
-    swatch: "linear-gradient(135deg,#ff2bd6 0%,#13e6ff 100%)",
-    accent: 0xff2bd6,
+    id: "moyunlongque",
+    name: "墨云龙阙",
+    kind: "moyunlongque",
+    swatch: "linear-gradient(135deg,#3a3320 0%,#0c0a07 100%)",
+    accent: 0xc9a24a,
   },
   {
-    id: "bamboo",
-    name: "青竹",
-    kind: "bamboo",
-    swatch: "linear-gradient(135deg,#9fd67a 0%,#3f7d2f 100%)",
+    id: "qingzhutingfeng",
+    name: "青竹听风",
+    kind: "qingzhutingfeng",
+    swatch: "linear-gradient(135deg,#bfe3a0 0%,#3f7d2f 100%)",
     accent: 0x9fd67a,
   },
   {
-    id: "jade",
-    name: "墨玉",
-    kind: "jade",
-    swatch: "linear-gradient(135deg,#1c2b22 0%,#0a0f0c 100%)",
-    accent: 0x2f5d4a,
+    id: "fengyuliujin",
+    name: "凤羽鎏金",
+    kind: "fengyuliujin",
+    swatch: "linear-gradient(135deg,#1a1410 0%,#caa24a 100%)",
+    accent: 0xe8c878,
+  },
+  {
+    id: "qianliyanshan",
+    name: "千里砚山",
+    kind: "qianliyanshan",
+    swatch: "linear-gradient(135deg,#8a99a0 0%,#39474d 100%)",
+    accent: 0x6b7d85,
+  },
+  {
+    id: "xinghedanmang",
+    name: "星核暗芒",
+    kind: "xinghedanmang",
+    swatch: "linear-gradient(135deg,#1b2a4a 0%,#05060a 100%)",
+    accent: 0x39c6ff,
+  },
+  {
+    id: "nihongsuguang",
+    name: "霓虹溯光",
+    kind: "nihongsuguang",
+    swatch: "linear-gradient(135deg,#ff7be0 0%,#3a1d6e 100%)",
+    accent: 0xff5fd0,
+  },
+  {
+    id: "xukonglilie",
+    name: "虚空裂隙",
+    kind: "xukonglilie",
+    swatch: "linear-gradient(135deg,#2a1840 0%,#050507 100%)",
+    accent: 0x9b5cff,
+  },
+  {
+    id: "youciyeying",
+    name: "幽刺夜影",
+    kind: "youciyeying",
+    swatch: "linear-gradient(135deg,#3a3a42 0%,#0d0d10 100%)",
+    accent: 0xb8a0d8,
+  },
+  {
+    id: "jinhuofengfeng",
+    name: "烬火焚风",
+    kind: "jinhuofengfeng",
+    swatch: "linear-gradient(135deg,#ff5a2a 0%,#1a0805 100%)",
+    accent: 0xff7a1f,
+  },
+  {
+    id: "yuntianghuanmeng",
+    name: "云糖幻梦",
+    kind: "yuntianghuanmeng",
+    swatch: "linear-gradient(135deg,#ffe3ef 0%,#c9b6ff 100%)",
+    accent: 0xffb8d8,
+  },
+  {
+    id: "bingjingxuepo",
+    name: "冰晶雪魄",
+    kind: "bingjingxuepo",
+    swatch: "linear-gradient(135deg,#eaf6ff 0%,#9fc6e0 100%)",
+    accent: 0xcfeaff,
+  },
+  {
+    id: "wanxiangquanzhang",
+    name: "万象权杖",
+    kind: "wanxiangquanzhang",
+    swatch: "linear-gradient(135deg,#caa24a 0%,#0c0a07 100%)",
+    accent: 0xe8c878,
   },
 ]
 

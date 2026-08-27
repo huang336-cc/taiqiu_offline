@@ -201,7 +201,7 @@
       <section id="screen-cuetheme" class="screen">
         <h2 class="screen-title">球杆主题</h2>
         <div class="scroll">
-          <p class="seg-hint">「随台面」时球杆颜色跟随台球桌颜色；也可单独换成主题贴图</p>
+          <p class="seg-hint">「随台面」时球杆颜色跟随台球桌颜色；也可单独换成主题贴图。<b>长按卡片可预览球杆 3D 效果</b></p>
           <div class="skin-cards" id="cueThemeCards">
             <button class="skin-card" data-cuetheme="auto" data-pattern="auto" data-c1="#d2b48c" data-c2="#1a1a1a">
               <span class="skin-swatch"></span><span class="skin-name">随台面</span>
@@ -224,14 +224,41 @@
             <button class="skin-card" data-cuetheme="ultraman" data-pattern="ultraman" data-c1="#e8eef2" data-c2="#c81f1f">
               <span class="skin-swatch"></span><span class="skin-name">奥特曼</span>
             </button>
-            <button class="skin-card" data-cuetheme="neon" data-pattern="neon" data-c1="#ff2bd6" data-c2="#13e6ff">
-              <span class="skin-swatch"></span><span class="skin-name">霓虹脉冲</span>
+            <button class="skin-card" data-cuetheme="moyunlongque" data-pattern="moyunlongque" data-c1="#3a3320" data-c2="#0c0a07">
+              <span class="skin-swatch"></span><span class="skin-name">墨云龙阙</span>
             </button>
-            <button class="skin-card" data-cuetheme="bamboo" data-pattern="bamboo" data-c1="#9fd67a" data-c2="#3f7d2f">
-              <span class="skin-swatch"></span><span class="skin-name">青竹</span>
+            <button class="skin-card" data-cuetheme="qingzhutingfeng" data-pattern="qingzhutingfeng" data-c1="#bfe3a0" data-c2="#3f7d2f">
+              <span class="skin-swatch"></span><span class="skin-name">青竹听风</span>
             </button>
-            <button class="skin-card" data-cuetheme="jade" data-pattern="jade" data-c1="#1c2b22" data-c2="#0a0f0c">
-              <span class="skin-swatch"></span><span class="skin-name">墨玉</span>
+            <button class="skin-card" data-cuetheme="fengyuliujin" data-pattern="fengyuliujin" data-c1="#1a1410" data-c2="#caa24a">
+              <span class="skin-swatch"></span><span class="skin-name">凤羽鎏金</span>
+            </button>
+            <button class="skin-card" data-cuetheme="qianliyanshan" data-pattern="qianliyanshan" data-c1="#8a99a0" data-c2="#39474d">
+              <span class="skin-swatch"></span><span class="skin-name">千里砚山</span>
+            </button>
+            <button class="skin-card" data-cuetheme="xinghedanmang" data-pattern="xinghedanmang" data-c1="#1b2a4a" data-c2="#05060a">
+              <span class="skin-swatch"></span><span class="skin-name">星核暗芒</span>
+            </button>
+            <button class="skin-card" data-cuetheme="nihongsuguang" data-pattern="nihongsuguang" data-c1="#ff7be0" data-c2="#3a1d6e">
+              <span class="skin-swatch"></span><span class="skin-name">霓虹溯光</span>
+            </button>
+            <button class="skin-card" data-cuetheme="xukonglilie" data-pattern="xukonglilie" data-c1="#2a1840" data-c2="#050507">
+              <span class="skin-swatch"></span><span class="skin-name">虚空裂隙</span>
+            </button>
+            <button class="skin-card" data-cuetheme="youciyeying" data-pattern="youciyeying" data-c1="#3a3a42" data-c2="#0d0d10">
+              <span class="skin-swatch"></span><span class="skin-name">幽刺夜影</span>
+            </button>
+            <button class="skin-card" data-cuetheme="jinhuofengfeng" data-pattern="jinhuofengfeng" data-c1="#ff5a2a" data-c2="#1a0805">
+              <span class="skin-swatch"></span><span class="skin-name">烬火焚风</span>
+            </button>
+            <button class="skin-card" data-cuetheme="yuntianghuanmeng" data-pattern="yuntianghuanmeng" data-c1="#ffe3ef" data-c2="#c9b6ff">
+              <span class="skin-swatch"></span><span class="skin-name">云糖幻梦</span>
+            </button>
+            <button class="skin-card" data-cuetheme="bingjingxuepo" data-pattern="bingjingxuepo" data-c1="#eaf6ff" data-c2="#9fc6e0">
+              <span class="skin-swatch"></span><span class="skin-name">冰晶雪魄</span>
+            </button>
+            <button class="skin-card" data-cuetheme="wanxiangquanzhang" data-pattern="wanxiangquanzhang" data-c1="#caa24a" data-c2="#0c0a07">
+              <span class="skin-swatch"></span><span class="skin-name">万象权杖</span>
             </button>
           </div>
         </div>
@@ -748,12 +775,138 @@
           </p>
 
           <div class="setting-group">
+            <h3>v1.3.39 · 2026-08-27 13:05:00</h3>
+            <p class="about-text dim"><b>2 项 v1.3.38 后续修复（球杆预览渲染质量 · GLTF 桌台球洞/凸点）：</b></p>
+            <ul class="about-text dim">
+              <li><b>球杆预览渲染质量修复</b>：v1.3.38 横置后反射仍对 cue 本体做 <code>scale.y = -0.85</code>，导致反射沿长轴被压短、与主杆错位，看起来像“断节/多段”。改为对 pivot 组做地面镜像缩放，并整体减弱反射透明度；低端机不再强制 <code>MeshLambertMaterial</code>（太平、像塑料），统一用 <code>MeshPhongMaterial</code> 并补默认柔和高光；同时增强主光/轮廓光、压暗装饰环/刻度线，让杆身更立体真实。</li>
+              <li><b>GLTF 模型桌台同步修复</b>：v1.3.38 只改了程序化本地桌台（<code>TableMesh</code>），真机游戏实际加载的是 GLTF 模型桌台，所以袋口/凸点问题未生效。现 <code>Assets.paintTable</code> 同步处理 GLTF 材质：<code>blackpocket</code>（6 个球洞）取库边色上色、<code>Material.001</code>（袋口包边/金属件）取桌框色、<code>diamond</code>（桌边菱形标记小凸点）直接隐藏。本地桌台路径的改动继续保留。</li>
+              <li>约束：仅改展示层，不改动任何物理逻辑、挥杆动画、碰撞参数；已重签 APK（v1.3.39 / 26082713）并重新发布。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.3.38 · 2026-08-27 12:30:00</h3>
+            <p class="about-text dim"><b>3 项界面优化（变更履历去嵌套框 · 桌洞随主题变色去凸点 · 球杆预览横置加长）：</b></p>
+            <ul class="about-text dim">
+              <li><b>变更履历去除多层嵌套框框</b>：v1.3.37 起变更履历区被 6 层空 <code>&lt;div class="setting-group"&gt;</code> 嵌套包裹，浏览器自动补闭合导致 v1.3.29~v1.3.37 一串条目出现多层同心圆角框。本版重写该区包裹结构，全列表仅保留单层外框，DOM 标签平衡校验通过（div 开合 139=139）。</li>
+              <li><b>桌面 6 个球洞颜色同步当前桌布主题</b>：原球洞（pocket）材质硬编码为固定蓝紫色 <code>0x445599</code>，与不同桌布皮肤格格不入。现 <code>TableMesh.generateTable</code> 按当前 <code>Settings.tableSkin</code> 取库边色（<code>cushionColor</code>）给 6 个球洞上色，切桌布即联动；同时<b>去除桌边 12 个 knuckle 小凸点</b>（视觉冗余、用户反馈突兀），仅保留球洞本身。物理/碰撞由 <code>PocketGeometry</code> 常量决定，不受影响。</li>
+              <li><b>球杆预览窗口加长 + 横置展示</b>：预览小窗由 220×150 竖窗改为 340×150 横置加长；Three.js 中球杆改用 pivot 组放平到水平（沿 X 轴），旋转动画绕横杆长轴（pivot 的 X 轴）滚动式自转，呈产品式水平展示。13 个主题 buildCue + pivot 接线经无头脚本全部验证通过。</li>
+              <li>约束：仅改展示层，不改动任何物理逻辑、挥杆动画、碰撞参数；已重签 APK（v1.3.38 / 26082712）并重新发布。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.3.37 · 2026-08-27 10:20:00</h3>
+            <p class="about-text dim"><b>1 项球杆预览修复（根因：脚本加载期崩溃导致全主题白屏）：</b></p>
+            <ul class="about-text dim">
+              <li>根因：烬火焚风主题的 <code>params</code> 配置里误引用了函数作用域外的 <code>cols</code> 变量，导致整个 <code>cue-preview-3d.js</code> 在浏览器解析阶段就抛出 <code>ReferenceError</code> 崩溃，所有主题预览都无法渲染（并非某些主题失败，而是整页脚本挂掉）。</li>
+              <li>修复：将烬火焚风的 <code>emissive</code> 改为具体色值（<code>0xff3a1a</code>），消除非法引用；并用 jsdom 真实执行每个主题的 <code>buildCue</code> 验证，13 个主题全部通过。</li>
+              <li>约束：仅改菜单预览展示层，不改动任何物理逻辑、挥杆动画、碰撞参数；已重签 APK（v1.3.37 / 26082737）并重新发布。</li>
+            </ul>
+
+            <h3>v1.3.36 · 2026-08-27 09:55:00</h3>
+            <p class="about-text dim"><b>1 项球杆预览「主题真实效果」定制（12 个主题独立材质/纹理/造型）：</b></p>
+            <ul class="about-text dim">
+              <li>架构改造：<code>menu-cn.js</code> 把主题 <code>data-pattern</code> 传入 <code>CuePreview3D</code>，<code>cue-preview-3d.js</code> 按主题 ID 分支生成完全不同的球杆外观。</li>
+              <li>12 个主题专属效果：墨云龙阙（暗金龙鳞/云纹）、青竹听风（竹节/竹根）、凤羽鎏金（鲍鱼贝羽翼/鎏金）、千里砚山（石砚山水浮雕）、星核暗芒（星尘/电路纹）、霓虹溯光（半透玻璃色带）、虚空裂隙（裂隙幽紫）、幽刺夜影（尖刺/贝母珠光）、烬火焚风（熔岩龟裂）、云糖幻梦（果冻云朵）、冰晶雪魄（冰棱/切面）、万象权杖（黑金浮雕/鎏金饰盘）。</li>
+              <li>每个主题独立：杆身程序化纹理、握把程序化纹理、杆尾几何造型、金属/先角/皮头材质参数，颜色从主题 <code>c1/c2</code> 自动派生。</li>
+              <li>保留 renderer 只创建一次、松手只停旋转不复创上下文的稳健逻辑；低端 WebView 自动降级 <code>MeshLambertMaterial</code>。</li>
+              <li>约束：仅改菜单预览展示层，不改动任何物理逻辑、挥杆动画、碰撞参数；已重签 APK（v1.3.35 / 26082735）并重新发布。</li>
+            </ul>
+
+            <h3>v1.3.34 · 2026-08-27 08:55:00</h3>
+            <p class="about-text dim"><b>1 项球杆预览品质优化（更粗壮、更有质感、主题色更协调）：</b></p>
+            <ul class="about-text dim">
+              <li>球杆比例调整：整体更粗更短，在 220×150 预览小窗中更饱满；相机拉近并略仰视，更像产品展示。</li>
+              <li>材质升级：杆身加程序化木纹纹理，握把加程序化皮革纹理，金属镶嵌环高光反射，先角象牙白，皮头随主题深色；主路径使用 <code>MeshPhongMaterial</code>/<code>MeshStandardMaterial</code>，低端 WebView 自动降级 <code>MeshLambertMaterial</code>。</li>
+              <li>主题色派生：金属色和皮头色从主题主色 <code>c1</code> / 深色 <code>c2</code> 自动派生，避免金/绿与粉紫主题不搭。</li>
+              <li>灯光与舞台感：保留 Hemisphere + 多盏 Directional 棚拍光，开启 ACESFilmic 色调映射与 SRGB 输出；倒影透明度提升，地面加暗蓝径向渐变，轨迹环与刻度线更精致。</li>
+              <li>保留 renderer 只创建一次、松手只停旋转不复创上下文的稳健逻辑；自转速度略降，并加入轻微悬浮动画。</li>
+              <li>约束：仅改菜单预览展示层，不改动任何物理逻辑、挥杆动画、碰撞参数；已重签 APK（v1.3.34 / 26082734）并重新发布。</li>
+            </ul>
+
+            <h3>v1.3.33 · 2026-08-27 01:52:00</h3>
+            <p class="about-text dim"><b>1 项球杆预览「第二次起白屏」修复（renderer 只创建一次、永不复创）：</b></p>
+            <ul class="about-text dim">
+              <li>问题：v1.3.32 第一次预览能看到一部分球杆，第二次及以后再次长按就变回纯白空白。</li>
+              <li>根因：之前的实现在松手时 <code>dispose()</code> + <code>forceContextLoss()</code> 释放 WebGL 上下文，第二次长按又 <code>new WebGLRenderer</code> 新建上下文；真机 WebView 在首个 context 被销毁/丢失后，再次创建 context 会失败或拿到损坏的 context，导致后续全部白屏。</li>
+              <li>修复：renderer 改为整个页面生命周期只创建一次、永不销毁；松手时只停旋转（<code>stop()</code>），不再 dispose / 置空 / 释放上下文。第二次及以后预览直接复用同一 renderer 与 scene，仅切换主题并继续自转。同时在 <code>init()</code> 失败与渲染循环中做空引用防御。</li>
+              <li>约束：仅改菜单预览展示层，不改动任何物理逻辑、挥杆动画、碰撞参数；已重签 APK（v1.3.33 / 26082733）并重新发布。</li>
+            </ul>
+
+            <h3>v1.3.32 · 2026-08-27 01:36:00</h3>
+            <p class="about-text dim"><b>1 项球杆预览真机白屏修复（three.js 稳健化）：</b></p>
+            <ul class="about-text dim">
+              <li>问题：v1.3.31 在真机 WebView 上预览窗显示为纯白色空白，WebGL context 已创建但画面未实际渲染。</li>
+              <li>根因：复杂 shader/渲染路径（shadowMap、环境贴图 scene.environment、scene.background CanvasTexture、ACES 色调映射）在部分移动 GPU / WebView 上容易编译失败或缓冲合成异常，导致整窗白屏。</li>
+              <li>修复：降级为稳健版 three 场景——<code>alpha:true</code> + 强制 <code>renderer.setClearColor(0x0a1020)</code>，移除 shadowMap / 环境贴图 / 背景纹理，改用纯色 <code>MeshLambertMaterial</code> 材质，仅保留基础多光源（Hemisphere + Directional）。同时给预览 canvas 加 CSS 暗蓝兜底背景，确保即使 WebGL 合成异常也不会透出白色。</li>
+              <li>约束：仅改菜单预览展示层，不改动任何物理逻辑、挥杆动画、碰撞参数；已重签 APK（v1.3.32 / 26082732）并重新发布。</li>
+            </ul>
+
+            <h3>v1.3.31 · 2026-08-27 01:25:00</h3>
+            <p class="about-text dim"><b>1 项球杆预览升级（改用 three.js 电影级写实 3D 渲染）：</b></p>
+            <ul class="about-text dim">
+              <li>球杆预览从 2D 示意图升级为 three.js 写实 3D 渲染：一根台球杆在暗蓝舞台灯光中 360° 缓慢自转，正面居中视角，清晰展示杆尾 / 握把 / 杆身 / 先角结构。</li>
+              <li>材质与质感：程序化木纹、金属镶嵌环、皮革握把网格、雕刻纹路、皮头，配合环境贴图高光反射；暗蓝径向渐变背景、底部半透明倒影、旋转轨迹环与角度刻度线、柔和棚拍光与电影感阴影（ACES 色调映射 + 软阴影）。</li>
+              <li>实现：新增 <code>three.standalone.js</code>（r185，离线自包含，挂 window.THREE）与 <code>cue-preview-3d.js</code>（<code>CuePreview3D</code> 类），长按时按需加载一次；单一 WebGLRenderer，松手即 <code>dispose()</code> + <code>forceContextLoss()</code> 释放上下文，避免多次预览累积丢上下文。</li>
+              <li>约束：仅改菜单预览展示层，不改动任何物理逻辑、挥杆动画、碰撞参数；APK 体积因内嵌 three 增大约 2MB；已重签 APK（v1.3.31 / 26082731）并重新发布。</li>
+            </ul>
+
+            <h3>v1.3.30 · 2026-08-27 01:10:00</h3>
+            <p class="about-text dim"><b>1 项球杆预览渲染修复（彻底移除 WebGL 3D 路径，统一走 2D）：</b></p>
+            <ul class="about-text dim">
+              <li>问题：部分真机（尤其 WebView 已持有主游戏 WebGL 上下文的设备）下，预览窗整窗被左右两半色块填满、无 -45° 球杆，渲染完全错乱。</li>
+              <li>根因：预览的 WebGL <code>CueViewer3D</code> 路径在真机 WebView 下新建第二个 WebGL 上下文会触发「上下文上限 / 上下文丢失」，着色器无法正常出图，canvas 被当作 2D 拉伸铺满整窗。</li>
+              <li>修复：彻底删除 <code>CueViewer3D</code> / <code>ensureCueViewer3D</code> / <code>webglSupported</code>，球杆预览 100% 走已真机验证的 2D 整杆渲染（带绕长轴自转模拟 3D 转动）。所有设备无歧义，不再有任何走 WebGL 的可能。</li>
+              <li>约束：仅改菜单展示层，不改动任何物理逻辑、挥杆动画、碰撞参数；已重签 APK（v1.3.30 / 26082730）并重新发布。</li>
+            </ul>
+
+            <h3>v1.3.29 · 2026-08-26 19:20:00</h3>
+            <p class="about-text dim"><b>1 项球杆预览可靠性修复（改用可靠 2D 渲染，彻底解决黑屏）：</b></p>
+            <ul class="changelog-list">
+              <li><b>预览改用可靠 2D 渲染</b>：经排查，原 3D（WebGL）预览在部分真机表现为黑屏——主游戏已在 WebView 内持有 WebGL 上下文，预览再新建第二个 WebGL 上下文易触发「上下文上限 / 上下文丢失」，渲染全黑，且该路径无法在本无头环境实测验证。故球杆预览统一改为可靠的 2D 整杆渲染（带绕长轴自转，约 2.6s 一圈，清晰呈现 3D 转动感），保证预览一定可见、一定旋转。</li>
+              <li><b>保留小窗 + 松手关闭交互</b>：长按球杆主题卡片（约 380ms）仍在卡片旁弹出 220×150 小窗、自动旋转，手指 / 鼠标抬起即关闭（浮层 pointer-events:none 不拦截抬手）。仅改菜单展示层，未改动物理 / 挥杆动画 / 碰撞参数；已重签 APK（v1.3.29 / 26082629）并重新发布。</li>
+            </ul>
+          </div>
+
+            <h3>v1.3.28 · 2026-08-26 18:41:00</h3>
+            <p class="about-text dim"><b>2 项球杆主题预览优化（小窗定位 + 修复黑屏）：</b></p>
+            <ul class="changelog-list">
+              <li><b>预览改为卡片旁小窗 + 松手关闭</b>：长按球杆主题卡片（约 380ms）弹出的预览从「居中全屏浮层、点击任意处关闭」改为「在卡片对应位置弹出 220×150 小窗（优先放卡片右侧、空间不足放左侧、再不足居中，避免超出视口），自动旋转展示；手指 / 鼠标抬起即关闭（浮层 pointer-events:none 不拦截抬手，由 document 级 pointerup/pointercancel 捕获关闭）」。</li>
+              <li><b>修复预览黑屏</b>：根因为浮层刚 active 时 canvas 尚未布局（clientWidth=0），<code>ensureCueViewer3D</code> 的尺寸检查 <code>clientWidth &lt; 2</code> 返回 null 且不再重建，导致 viewer 永不创建、真机（尤其 WebView 同步读取 clientWidth=0）全黑无任何物体。修复：用双 <code>requestAnimationFrame</code> 确保布局完成、canvas 有真实尺寸后再初始化 viewer 并设置主题 / 自动旋转；WebGL 不可用时降级 2D 整杆预览并做轻微摆动模拟旋转。仅改菜单展示层，未改动物理 / 挥杆动画 / 碰撞参数。</li>
+            </ul>
+
+            <h3>v1.3.27 · 2026-08-26 17:38:00</h3>
+            <p class="about-text dim"><b>1 项 Bug 修复（手机竖屏无法进入游戏）：</b></p>
+            <ul class="changelog-list">
+              <li><b>修复竖屏锁定死墙</b>：移除「竖屏手机强制全屏显示『请横屏使用』遮罩」的硬锁定（css/index.css 的 <code>@media (orientation: portrait)</code>）。此前该遮罩以 <code>position:fixed; inset:0; z-index:10000</code> 全屏盖住并屏蔽游戏交互，导致手机竖屏下点「开始游戏」后落到死墙、对局起不来，看似「无法跳转 / 无反应」。现竖屏下也能正常进入与游玩（游戏本身已适配 orientationchange 重渲染）。</li>
+            </ul>
+
+          <div class="setting-group">
+            <h3>v1.3.26 · 2026-08-26 16:33:00</h3>
+            <p class="about-text dim"><b>1 项交互优化（球杆主题预览改为长按弹出 + 自动旋转）：</b></p>
+            <ul class="changelog-list">
+              <li><b>球杆主题预览交互重构</b>：① <b>移除独立预览窗口</b>：不再常驻显示顶部预览框，界面更紧凑，19 张卡片无需上滑全部可见；② <b>长按卡片弹出预览</b>：长按任意球杆主题卡片（约 380ms）弹出居中浮层，展示该主题球杆；③ <b>自动旋转</b>：浮层内球杆自动 360° 旋转展示（原生 WebGL 圆柱，支持手指/鼠标拖动辅助查看；WebGL 不可用时自动降级 2D 整杆预览并标注），点击浮层任意处关闭；④ 短按仍为选中该主题，长按不触发选中。仅改菜单展示层，未改动物理 / 挥杆动画 / 碰撞参数。</li>
+            </ul>
+          </div>
+
+            <h3>v1.3.25 · 2026-08-26 15:53:00</h3>
+            <p class="about-text dim"><b>1 项优化（球杆主题预览框收窄 + 3D 可拖拽预览）：</b></p>
+            <ul class="changelog-list">
+              <li><b>球杆主题预览体验优化</b>：① <b>预览框收窄</b>：高度由 180px 降至约 96px，改为左右分栏（左侧 2D 缩略、右侧主预览），让 19 张球杆卡片全部进入视口，切换主题后无需上滑找卡片；② <b>新增 3D 球杆展示</b>：右侧主预览使用原生 WebGL 渲染带纹理圆柱，并<b>支持手指 / 鼠标拖动旋转</b>（水平转 yaw、垂直转 pitch），360° 查看杆身材质与配色，菜单不依赖 three.js；③ <b>WebGL 自动降级</b>：不支持 3D 的设备自动显示 2D 整杆预览并标注"2D 预览"，避免空白。仅改展示层，未改动物理 / 挥杆动画 / 碰撞参数。</li>
+            </ul>
+
+            <h3>v1.3.24 · 2026-08-26 15:36:00</h3>
+            <p class="about-text dim"><b>1 项新功能（12 款特色球杆皮肤 + 实时预览）：</b></p>
+            <ul class="changelog-list">
+              <li><b>球杆主题系统扩展</b>：① <b>新增 12 款特色球杆皮肤</b>：墨云龙阙 / 青竹听风 / 凤羽鎏金 / 千里砚山 / 星核暗芒 / 霓虹溯光 / 虚空裂隙 / 幽刺夜影 / 烬火焚风 / 云糖幻梦 / 冰晶雪魄 / 万象权杖，每款程序化生成杆身材质 / 纹理 / 配色，含击球微光、星芒粒子、火光、金色拖尾等专属特效；② <b>删除 3 款重复皮肤</b>：移除原有墨玉 / 青竹 / 霓虹，最终球杆主题 = 随台面(auto) + 原 6 款 + 新 12 款 = 共 19 款；③ <b>球杆主题界面增加实时渲染预览</b>：切换皮肤时顶部大预览区（增强 2D Canvas，菜单不引 three.js）即时重绘当前球杆外观。<b>约束</b>：仅改球杆材质 / 纹理 / 颜色，未改动任何物理逻辑 / 挥杆动画 / 碰撞参数。</li>
+            </ul>
+
             <h3>v1.3.22 · 2026-08-25 14:30:00</h3>
             <p class="about-text dim"><b>1 项优化（英文版补全未翻译文案）：</b></p>
             <ul class="changelog-list">
               <li><b>英文版未翻译文案批量补全</b>：① <b>i18n.ts 升级为双语运行时</b>：原 T 单语表改为 STRINGS 双语表 + <code>t(key)</code> 运行时函数，按 <code>Settings.get().language</code> 取值；aim/placeball/placeallballs/drilloptions/rules/*/boteventhandler/matchresult 等所有渲染文案（击球/摆球/犯规/球局结束/你赢了你输了…）改为 <code>t("...")</code> 调用；旧 <code>T</code> 通过 Proxy 兼容保留为中文；② <b>4 款新球杆主题补 EN 名</b>：奥特曼 / 霓虹脉冲 / 青竹 / 墨玉 → Ultraman / Neon Pulse / Bamboo / Black Jade；③ <b>6 款新桌布补 EN 名</b>：黑曜石黑 / 熔岩裂纹 / 霓虹蓝紫 / 朱红鎏金 / 全息银 / 粉色糖果 → Obsidian Black / Lava Cracks / Neon Blue-Purple / Crimson Gold / Holographic Silver / Pink Candy；④ <b>in-game 帮助页 (help.html) Touch controls / Power & Stroke / Camera 区块补全</b>：被 <code>&lt;b&gt;</code> 拆分的文本节点（左右拖动 / 上下拖动 / 双指捏合 / 击球按钮 / 力度条 / 母球图示 / 「+」按钮 / 复位按钮 / 细微瞄准条 / 视角 / 力度≈60%）逐段加 EN；⑤ <b>主菜单「操作介绍」与「关于」区块补全</b>：基本操作 / 加塞与杆法 / 摆球 / 视角切换 / 小技巧 / 关于 等区块的所有 <code>&lt;b&gt;</code> 片段与表格表头（开发者 / 版本 / 协议 / 项目源码 / 上游项目）逐段加 EN；⑥ <b>SVG 圆盘标签高杆 / 低杆 / 左塞 / 右塞 与示意图「力度 ≈ 60%」</b> 同步补 EN。仅文案层改造，<b>未改动任何物理 / 渲染 / 布局</b>。</li>
             </ul>
-          </div>
 
           <div class="setting-group">
             <h3>v1.3.21 · 2026-08-24 17:47:00</h3>
@@ -2116,7 +2269,7 @@
     </div>
 
     <script>
-      window.__BILLIARDS_VERSION__ = "1.3.22-2608251430";
+      window.__BILLIARDS_VERSION__ = "1.3.39-26082713";
     </script>
     <script src="menu-cn.js"></script>
     <script>
@@ -2160,5 +2313,14 @@
         window.addEventListener("orientationchange", updateViewportFit);
       })();
     </script>
+
+  <!-- 球杆 3D 预览浮层（长按球杆主题卡片弹出，自动旋转） -->
+  <div class="cue-preview-overlay" id="cuePreviewOverlay">
+    <div class="cue-preview-overlay-inner">
+      <canvas id="cuePreview3D" class="cue-preview-overlay-canvas"></canvas>
+      <div class="cue-preview-overlay-tip">自动旋转中 · 松手关闭</div>
+    </div>
+  </div>
+
   </body>
 </html>

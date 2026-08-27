@@ -110,12 +110,13 @@ export class Replay extends ControllerBase {
   }
   /**
    * v1.2.26：回放视角模式。
-   *  true  = 俯视（固定俯视全局视角，相机停在台面上方俯瞰整桌）；
-   *  false = 固定（固定侧后视角，相机停在击球点后上方，击球后不切俯视、不跟随）。
-   * 默认「固定」，避免回放中击球后被切到俯视；需要俯瞰全局时再切到「俯视」。
+   *  true  = 俯视（固定俯视全局视角，相机停在台面上方俯瞰整桌，不跟随球运动）；
+   *  false = 跟随（侧后视角，相机沿母球位置/出杆方向平滑跟随，击球后不切俯视）。
+   * 回放默认「跟随」，击球后镜头随母球移动，观感更接近实战；
+   * 需要俯瞰全局时再切到「俯视」。
    */
   private camTopDown = false
-  /** v1.2.26：视角切换按钮（固定/俯视）引用与点击处理 */
+  /** v1.2.26：视角切换按钮（跟随/俯视）引用与点击处理 */
   private camBtn: HTMLButtonElement | null = null
   private onCamClick = () => {
     this.camTopDown = !this.camTopDown
@@ -128,7 +129,7 @@ export class Replay extends ControllerBase {
     if (this.camBtn) this.camBtn.textContent = this.currentCamLabel()
   }
   private currentCamLabel(): string {
-    return this.camTopDown ? "俯视" : "固定"
+    return this.camTopDown ? "俯视" : "跟随"
   }
   /** 吸附点 DOM 缓存签名，避免每帧重建 */
   private lastSnapSig = ""
@@ -757,7 +758,7 @@ export class Replay extends ControllerBase {
       speed.textContent = this.currentSpeedLabel()
       speed.addEventListener("click", this.onSpeedClick)
     }
-    // v1.2.24：挂载视角切换按钮（固定/跟随），初始化为当前视角标签并绑定切换
+    // v1.2.24：挂载视角切换按钮（跟随/俯视），初始化为当前视角标签并绑定切换
     const cam = document.getElementById("replayCamBtn") as HTMLButtonElement | null
     this.camBtn = cam
     if (cam) {
