@@ -67,17 +67,6 @@ export class Sound {
     this.actx = this.listener.context as unknown as AudioContext
     this.listener3d = this.actx.listener as unknown as AudioListener
     this.setupMasterGain()
-    this.prebuildCushion()
-  }
-
-  /** 撞库（库边）音效为固定基线（用户确认已准确），单独预生成一次缓存。 */
-  private prebuildCushion() {
-    const sr = this.actx.sampleRate
-    const n = Math.floor(0.9 * sr)
-    const data = this.genCushion(n, sr)
-    const buf = this.actx.createBuffer(1, n, sr)
-    buf.copyToChannel(data, 0)
-    this.buffers.set("cushion", buf)
   }
 
   /**
@@ -268,7 +257,9 @@ export class Sound {
 
   /** 落袋：用按力度合成 pot 音（重击落袋更响更脆），按声源位置 3D 播放 */
   private pot(x: number, y: number, speed: number) {
-    const step = this.intensityStep(speed, 55)
+    // 落袋速度通常较慢（约 0.2~3），旧 refSpeed=55 使力度映射永远落在最软档。
+    // 改为 2.6，让轻重落袋在音色/响度上分明可辨。
+    const step = this.intensityStep(speed, 2.6)
     const buf = this.synth("pot", step, (n, sr, k) => this.genPot(n, sr, k))
     if (!buf) return
     // 响度随力度连续：轻碰 0.5 → 重撞 1.0
@@ -280,7 +271,9 @@ export class Sound {
     const x = pos ? pos.x : 0
     const y = pos ? pos.y : 0
     if (outcome.type === "Collision") {
-      const step = this.intensityStep(outcome.incidentSpeed, 60)
+      // 球速实际量级约 0~5.4（maxPower=160R≈5.24）；旧 refSpeed=60 使力度映射
+      // 永远落在最软档，碰撞声听不出力度差异且偏软。改为 5，让轻碰≈低档、大力对撞≈高档。
+      const step = this.intensityStep(outcome.incidentSpeed, 5)
       const buf = this.synth("collision", step, (n, sr, k) => this.genCollision(n, sr, k))
       if (buf) this.play3D(buf, x, y, 0.35 + this.intensityK(step) * 0.65)
     }
@@ -299,12 +292,17 @@ export class Sound {
       this.pot(x, y, outcome.incidentSpeed)
     }
     if (outcome.type === "Cushion") {
-      const buf = this.bufferOf("cushion")
-      if (buf) this.play3D(buf, x, y, Math.min(1, 0.3 + outcome.incidentSpeed / 40))
+      // 碰库声音此前是构建时固定的单一缓冲，音色不随力度变化、音量也被
+      // incidentSpeed/40 早早饱和，导致「碰库声音没按碰撞力度调整」。
+      // 现改为按力度合成：轻碰沉闷柔软、重撞明亮短促；refSpeed=6 覆盖玩法区间。
+      const step = this.intensityStep(outcome.incidentSpeed, 6)
+      const buf = this.synth("cushion", step, (n, sr, kk) => this.genCushion(n, sr, kk))
+      if (buf) this.play3D(buf, x, y, 0.3 + this.intensityK(step) * 0.7)
     }
     if (outcome.type === "Hit") {
-      // 击球：按力度连续合成（取消三档硬分档），音色+响度随速度平滑变化
-      const step = this.intensityStep(outcome.incidentSpeed, 70)
+      // 击球：按力度连续合成（取消三档硬分档），音色+响度随速度平滑变化。
+      // 球速实际量级约 0~5.4，旧 refSpeed=70 使力度映射永远落在最软档；改为 5.2。
+      const step = this.intensityStep(outcome.incidentSpeed, 5.2)
       const k = this.intensityK(step)
       const buf = this.synth("cue", step, (n, sr, kk) => this.genCue(n, sr, kk))
       if (buf) this.play3D(buf, x, y, 0.45 + k * 0.55)
@@ -469,25 +467,34 @@ export class Sound {
     return this.normalize(out)
   }
 
-  /** 库边：橡胶"噗"（中低频 360Hz，带通略窄、衰减略长） */
-  private genCushion(n: number, sr: number): Float32Array {
+  /**
+   * 库边：橡胶"噗/嗒"（中低频共振 + 橡胶摩擦高频）。
+   * 力度系数 k∈[0,1] 连续塑形（此前是构建时固定的单一缓冲，音色不随力度变化）：
+   *  - 轻碰(k↓)：主体频率更低、衰减更长 → 沉闷柔软的"噗"；
+   *  - 重撞(k↑)：主体频率上移更亮、摩擦高频更突出、衰减更短 → 清脆短促的"嗒"。
+   */
+  private genCushion(n: number, sr: number, k: number): Float32Array {
     const out = new Float32Array(n)
+    const bodyFreq = 280 + k * 360
     const body = this.resonate(
       this.noiseBurst(n, sr, 0.03),
       sr,
-      360,
+      bodyFreq,
       5
     )
-    for (let i = 0; i < n; i++) out[i] += body[i] * 0.8
-    // 一点橡胶摩擦高频
+    for (let i = 0; i < n; i++) out[i] += body[i] * (0.8 - k * 0.1)
+    // 摩擦高频：重撞更突出（明亮感）
+    const fricFreq = 900 + k * 1000
     const fric = this.resonate(
       this.noiseBurst(n, sr, 0.018),
       sr,
-      1400,
+      fricFreq,
       8
     )
-    for (let i = 0; i < n; i++) out[i] += fric[i] * 0.25
-    for (let i = 0; i < n; i++) out[i] *= Math.exp(-i / sr / 0.05)
+    for (let i = 0; i < n; i++) out[i] += fric[i] * (0.15 + k * 0.35)
+    // 整体衰减：轻 75ms（拖尾长） → 重 30ms（短促）
+    const tau = 0.075 - k * 0.045
+    for (let i = 0; i < n; i++) out[i] *= Math.exp(-i / sr / tau)
     return this.normalize(out)
   }
 

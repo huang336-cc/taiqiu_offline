@@ -50,7 +50,15 @@ export class Aim extends ControllerBase {
         table.cueball,
         this.container.rules.nextCandidateBall()
       )
+      // v1.3.46：每次进入瞄准状态时复位白球击球点（加塞/高低杆），
+      // 包括玩家击球后、电脑击球后、自由球摆球后等所有非自定义初始球局场景。
       table.cue.aim.elevation = 0
+      // 注意：此刻 aimInputs 仍处于上一杆 playShot() 设的 disabled 状态，
+      // 若调用 setSpin() 会被其内部 isDisabled() 检查提前 return，复位不生效。
+      // 故直接清零击球点偏移并刷新 UI（updateAimInput 内部的 updateVisualState
+      // 不检查 disabled，能可靠地把白球击球点回到中心）。
+      table.cue.aim.offset.set(0, 0, 0)
+      table.cue.updateAimInput()
     }
     this.container.view.camera.suggestMode(this.container.view.camera.aimView)
     // v1.2.33：进入瞄准视角后立即把相机摆到位，避免从俯视/摆球视角 lerp 期间

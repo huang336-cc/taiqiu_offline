@@ -136,9 +136,20 @@ export class BrowserContainer {
       this.speedrun
     )
     if (this.botMode) {
-      // v1.1.31：稳健对手改名为「电脑」，与菜单按钮保持一致
-      Session.getInstance().opponentName =
-        this.botName === "TheFarJaw" ? "电脑 · 激进" : "电脑"
+      // 比分栏 p2 名字最终由 updateScoreHud → orderedNamesForHud().p2Name
+      // （即 Session.opponentName）决定，每次得分更新都会覆盖标签。
+      // 因此把难度直接写进 opponentName，比分栏即可稳定显示
+      // 「电脑(稳健) / 电脑(激进) / 电脑(专业)」，且双语一致。
+      // v1.3.48：补全难度括号（此前菜单可见但游戏内只显示「电脑」）。
+      const isEn = Settings.get().language === "en"
+      const botName = this.botName || "ClawBreak"
+      const diffMap: Record<string, { zh: string; en: string }> = {
+        ClawBreak: { zh: "电脑(稳健)", en: "CPU(Steady)" },
+        TheFarJaw: { zh: "电脑(激进)", en: "CPU(Aggressive)" },
+        Professional: { zh: "电脑(专业)", en: "CPU(Pro)" },
+      }
+      const d = diffMap[botName] ?? diffMap.ClawBreak
+      Session.getInstance().opponentName = isEn ? d.en : d.zh
     }
     applyPhysicsParams(params)
   }

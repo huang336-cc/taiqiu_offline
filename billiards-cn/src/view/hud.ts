@@ -65,9 +65,15 @@ export class Hud {
     })()
     if (this.p1LabelEl) this.p1LabelEl.textContent = isEn ? "You" : "玩家"
     if (this.p2LabelEl) {
-      this.p2LabelEl.textContent = Session.isBotMode()
-        ? (isEn ? "CPU" : "电脑")
-        : (isEn ? "Opponent" : "对手")
+      // 比分栏 p2 名字由 updateScoreHud → orderedNamesForHud().p2Name
+      // （即 Session.opponentName）决定，此处仅作构造时的初始值；
+      // 难度已随 opponentName 写入「电脑(稳健)」等格式（见 BrowserContainer）。
+      if (Session.isBotMode()) {
+        this.p2LabelEl.textContent =
+          Session.getInstance().opponentName ?? (isEn ? "CPU" : "电脑")
+      } else {
+        this.p2LabelEl.textContent = isEn ? "Opponent" : "对手"
+      }
     }
 
     // 训练模式 → body.train-mode（CSS 隐藏 p2 列与共享已进球区）
@@ -151,6 +157,12 @@ export class Hud {
     }
     this.setText(this.p1Element, String(p1))
     this.setText(this.p2Element, String(p2))
+    // v1.3.48：比分栏选手名（含电脑难度「电脑(稳健)」等）此前由 Hud 构造时设置一次，
+    // 而 Hud 在 BrowserContainer.super() 中早于 opponentName 写入，名字停在未带难度的初值；
+    // 且 updateScoreHud 传入的 p2Name 原被 updateScores 直接忽略。此处随每次得分刷新写入，
+    // 确保电脑难度稳定显示，不依赖构造时序。
+    if (_p1Name && this.p1LabelEl) this.p1LabelEl.textContent = _p1Name
+    if (_p2Name && this.p2LabelEl) this.p2LabelEl.textContent = _p2Name
   }
 
   /**

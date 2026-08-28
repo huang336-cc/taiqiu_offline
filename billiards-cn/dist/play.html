@@ -454,16 +454,20 @@
           }
         }
 
-        // 比分栏标签由 hud.ts 在运行时写入（固定 玩家 / 对手 / 电脑），
-        // 需在其之后覆盖，故在 load 事件与语言切换消息里处理。
+        // 比分栏标签由 hud.ts 在运行时写入（含电脑难度如「电脑(稳健)」）。
+        // play.html 这里仅做语言兜底：若 hud 已写入带难度括号的名字，禁止覆盖。
         function applyScoreLabels(l) {
           var p1 = document.getElementById("scP1Label")
           var p2 = document.getElementById("scP2Label")
           var isBot = /[?&]bot=/.test(location.search)
           if (p1) p1.textContent = l === "en" ? "You" : "玩家"
-          if (p2)
+          if (p2) {
+            // v1.3.49：避免把「电脑(稳健)/电脑(激进)/电脑(专业)」覆盖回「电脑」
+            var cur = p2.textContent || ""
+            if (cur.indexOf("(") >= 0) return
             p2.textContent =
               l === "en" ? (isBot ? "CPU" : "Opponent") : isBot ? "电脑" : "对手"
+          }
         }
 
         function applyIndexLang(l) {

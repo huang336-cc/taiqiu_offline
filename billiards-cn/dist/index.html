@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>奥特曼的台球 · v1.3.39 发布中心</title>
+<title>奥特曼的台球 · v1.3.50 发布中心</title>
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; min-height: 100vh;
@@ -27,6 +27,11 @@
     padding: 6px 14px; background: #2d7050; color: #fff; border-radius: 6px;
     font-size: 13px; font-weight: 600; }
   .card:hover .cta { background: #ffd97a; color: #0a1f1a; }
+  /* 即将发布卡片：灰显、禁交互 */
+  .card-pending { opacity: 0.55; cursor: not-allowed; filter: grayscale(0.4); }
+  .card-pending:hover { transform: none; border-color: #2d7050; }
+  .card-pending .cta { background: #555; color: #ccc; }
+  .card-pending:hover .cta { background: #555; color: #ccc; }
   .meta { margin-top: 28px; padding: 14px 16px; background: rgba(0,0,0,0.3);
     border-radius: 8px; font-size: 12px; color: #8a8268; line-height: 1.7; }
   .meta b { color: #ffd97a; }
@@ -60,7 +65,7 @@
 </head>
 <body>
 <div class="wrap">
-  <h1><span class="zh">奥特曼的台球</span><span class="en">Ultraman's Billiards</span><span class="ver">v1.3.39</span></h1>
+  <h1><span class="zh">奥特曼的台球</span><span class="en">Ultraman's Billiards</span><span class="ver">v1.3.50</span></h1>
   <div class="sub"><span class="zh">2026-08-24 · 离线单文件 · 三端同步</span><span class="en">2026-08-24 · Offline single-file · 3-platform sync</span></div>
   <div class="lang-bar">
     <button id="langToggle" class="lang-toggle" aria-label="切换语言 / Switch language">EN</button>
@@ -73,30 +78,34 @@
       <p><span class="zh">点此进入游戏主菜单，选模式即玩，已包含本次四项改动：真实音效、桌布配色、回放「跟随」视角、增强的专业 AI。建议用电脑/横屏体验最佳。</span><span class="en">Enter the game main menu and pick a mode to play—includes all four updates: realistic sound, cloth colors, replay "Follow" view, and a stronger Professional AI. Best on desktop / landscape.</span></p>
       <span class="cta"><span class="zh">开始游戏</span><span class="en">Play Now</span></span>
     </a>
-    <a class="card" href="billiards-cn-v1.3.39.apk">
+    <a class="card" href="billiards-cn-v1.3.50.apk">
       <h2><span class="zh">📲 安卓 App (APK)</span><span class="en">📲 Android App (APK)</span></h2>
-      <p><span class="zh">约 3.9MB · 零权限 · 支持 Android 7.0+ · 适配沉浸全屏。刚构建的 v1.3.39 安装包：修复 v1.3.38 球杆预览反射错位导致的"断节"感，低端机统一用 Phong 高光材质；同时修复 GLTF 模型桌台的袋口/桌边凸点未随主题变色/隐藏的问题。点击下载后到"下载"目录点击安装。</span><span class="en">~3.9MB · Zero permissions · Android 7.0+ · Immersive fullscreen. Freshly built v1.3.39: fixed the v1.3.38 cue reflection scale issue that made the cue look broken, unified Phong specular materials for low-end devices; also fixed GLTF table pockets/rail bumps not theming/hiding. Tap download, then open it from your Downloads folder to install.</span></p>
+      <p><span class="zh">约 2.3MB · 零权限 · 支持 Android 7.0+ · 适配沉浸全屏。v1.3.50：修复音效力度标定——碰撞/击球/进球/碰库四类声音现在随撞击力度连续变化（轻碰沉闷、重撞清脆响亮）；碰库声由固定单一音色改为按力度合成。点击下载后到"下载"目录点击安装。</span><span class="en">~2.3MB · Zero permissions · Android 7.0+ · Immersive fullscreen. v1.3.50: fix sound intensity calibration — ball-collision / cue / pot / cushion sounds now vary continuously with impact force (soft taps vs loud cracks); cushion sound switched from a fixed timbre to force-synthesized. Tap download, then install from Downloads.</span></p>
       <span class="cta"><span class="zh">下载 APK</span><span class="en">Download APK</span></span>
     </a>
-    <a class="card" href="release-v1.3.39.zip">
+    <a class="card" href="release-v1.3.50.zip">
       <h2><span class="zh">📦 发布包（Release）</span><span class="en">📦 Release Package</span></h2>
-      <p><span class="zh">每次变更完代码、构建 APK 时一并打包发布。内含 4 个改动源文件（音效 / 桌布 / 回放视角 / 专业 AI）+ 改动说明，以及已构建好的完整网页产物（publish/ 文件夹，直接打开即用）。</span><span class="en">Packaged alongside the APK after every code change. Contains the 4 modified source files (sound / cloth / replay view / pro AI) plus the change log, and the built web deliverable (publish/ folder, ready to open).</span></p>
+      <p><span class="zh">每次变更完代码、构建 APK 时一并打包发布。内含完整网页产物（dist/ 文件夹，直接打开即用）+ 已构建的 v1.3.50 APK 安装包。</span><span class="en">Packaged with the APK. Contains the full built web deliverable (dist/ folder, ready to open) plus the v1.3.50 APK.</span></p>
       <span class="cta"><span class="zh">下载发布包</span><span class="en">Download Release</span></span>
     </a>
   </div>
 
   <div class="meta" id="meta">
     <details class="ver-item current" open>
-    <summary class="ver-btn"><span class="ver-no"><span class="zh">v1.3.39</span><span class="en">v1.3.39</span></span><span class="ver-title"><span class="zh">当前版本 · 修复预览渲染 / GLTF 桌台</span><span class="en">Current · fix preview render / GLTF table</span></span></summary>
+    <summary class="ver-btn"><span class="ver-no"><span class="zh">v1.3.50</span><span class="en">v1.3.50</span></span><span class="ver-title"><span class="zh">当前版本 · 修复音效力度标定（碰撞/击球/进球/碰库随力度变化）</span><span class="en">Current · fix sound intensity calibration (collision/cue/pot/cushion vary with force)</span></span></summary>
     <div class="ver-body">
-      <span class="zh"><b>v1.3.39 · v1.3.38 后续修复</b><br>
-· <b>球杆预览渲染修复</b>：横置后反射改对 pivot 组镜像（不再压短 cue 长轴），消除"断节/多段"感；低端机统一使用 <code>MeshPhongMaterial</code> 柔和高光，增强主光/轮廓光，减弱地面装饰环。<br>
-· <b>GLTF 桌台修复</b>：v1.3.38 仅改了程序化本地桌台，真机游戏加载的 GLTF 模型未生效。现 GLTF 材质的 <code>blackpocket</code>（6 球洞）随库边色、<code>Material.001</code>（袋口包边）随桌框色、<code>diamond</code>（桌边菱形标记小凸点）直接隐藏。<br>
-<b>约束</b>：仅改展示层，<b>不改动任何物理逻辑、挥杆动画、碰撞参数</b>。</span>
-      <span class="en"><b>v1.3.39 · Follow-up fixes for v1.3.38</b><br>
-· <b>Cue preview render fix</b>: reflection now mirrors via the pivot group (no longer compresses the cue along its long axis), removing the "broken/multi-segment" look; low-end devices use <code>MeshPhongMaterial</code> with soft specular, stronger key/rim lights, subtler floor ring.<br>
-· <b>GLTF table fix</b>: v1.3.38 only changed the procedural local table; the GLTF model used on real devices was unaffected. Now GLTF <code>blackpocket</code> (6 pockets) follows cushion color, <code>Material.001</code> (pocket trim) follows frame color, and <code>diamond</code> rail markers are hidden.<br>
-<b>Constraint</b>: preview/showcase layer only — <b>no physics, swing animation, or collision params changed</b>.</span>
+      <span class="zh"><b>v1.3.50 · 修复音效力度标定错误（球碰撞/击球/进球/碰库四类声音随力度变化）</b><br>
+· <b>根因</b>：引擎球速量级为 <code>maxPower = 160·R ≈ 5.24</code>，实际碰撞/击球速度约 <code>0.3 ~ 5.4</code>；但 <code>sound.ts</code> 把力度参考速度设成碰撞 60 / 击球 70 / 进球 55，<code>speed/refSpeed</code> 恒 < 0.1，合成档位永远落在第 0~1 档（最软），力度差异完全听不出且整体偏软——即「球碰撞声音不对 / 进球的撞库声音不对」。<br>
+· <b>碰库声音不随力度变化</b>：<code>Cushion</code> 原本用构建时固定的单一缓冲，音色一成不变、音量也被早早饱和，即「碰库的声音没按碰撞力度调整」。<br>
+· <b>修复</b>：重新标定参考速度（碰撞 60→5、击球 70→5.2、进球 55→2.6、碰库按力度合成 refSpeed=6）；碰库 <code>genCushion</code> 改为带力度系数——轻碰 280Hz 长衰减柔软「噗」、重撞 640Hz 短衰减明亮「嗒」，音量 0.35→1.0 约 3 倍差。<br>
+· <b>自测</b>：逐字复刻 DSP 渲染 WAV 量化——碰库频谱质心随力度 2463→3317Hz、碰撞 4242→5714Hz、进球 3048→3916Hz；映射对照表证实旧 refSpeed 把 0.3~6.0 全压在 0~1 档、新标定铺满 1~13 档。<br>
+<b>约束</b>：仅改音效合成与力度映射，<b>不改动任何物理逻辑、挥杆动画、碰撞参数</b>。</span>
+      <span class="en"><b>v1.3.50 · Fix sound intensity calibration (collision / cue / pot / cushion now vary with force)</b><br>
+· <b>Root cause</b>: the engine's ball-speed scale is <code>maxPower = 160·R ≈ 5.24</code>, with real collision/shot speeds around <code>0.3 ~ 5.4</code>; but <code>sound.ts</code> used reference speeds of 60 / 70 / 55 for collision / cue / pot, so <code>speed/refSpeed</code> was always < 0.1 and the synthesis step was pinned to 0~1 (softest) — force differences were inaudible and everything sounded weak. That is the "ball-collision sound is wrong / pot cushion sound is wrong" report.<br>
+· <b>Cushion sound didn't follow force</b>: the <code>Cushion</code> branch used a single fixed buffer built at startup — constant timbre, and volume saturated early — i.e. "cushion sound isn't adjusted by impact force".<br>
+· <b>Fix</b>: recalibrate reference speeds (collision 60→5, cue 70→5.2, pot 55→2.6, cushion force-synthesized at refSpeed=6); <code>genCushion</code> now takes a force coefficient — light taps are a soft 280Hz long-decay "puff", hard hits a bright 640Hz short-decay "tok", with volume spanning 0.35→1.0 (~3×).<br>
+· <b>Self-test</b>: verbatim DSP re-implementation rendered WAVs show cushion spectral centroid 2463→3317Hz, collision 4242→5714Hz, pot 3048→3916Hz with force; the mapping table proves old refSpeeds collapsed 0.3~6.0 into steps 0~1 while new calibration spans 1~13.<br>
+<b>Constraint</b>: sound synthesis and force mapping only — <b>no physics, swing animation, or collision params changed</b>.</span>
     </div>
   </details>
   <details class="ver-item">

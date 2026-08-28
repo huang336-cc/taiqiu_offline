@@ -175,6 +175,12 @@ function computeCappedDPR() {
     case 4:
       cap = 2.5
       break
+    // 修复：原 switch 只到 case 4，QualityLevel 最高为 5（"最高画质"），
+    // lod=5 会掉进 default=2，导致「调到最高档反而比 4 档更糊、锯齿更重」。
+    // 现显式给出 3x 超采样，用更高渲染分辨率压制锯齿。
+    case 5:
+      cap = 3
+      break
     default:
       cap = 2
       break

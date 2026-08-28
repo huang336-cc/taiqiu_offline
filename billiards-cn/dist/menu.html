@@ -652,14 +652,12 @@
               </button>
               <!-- v1.2.11 #F5：删除「复制链接」按钮（用户要求删除） -->
             </div>
-            <!-- v1.2.10 #F10：4 个独立按钮（变更履历/开源许可/恢复默认/我的回放）
-                 各自包到 .link-actions，与上方 GitHub 按钮组间距完全统一：
-                 gap:8px + margin:10px 0 4px。 -->
             <div class="link-actions">
               <button class="btn btn-mini" id="btnChangelog">
                 变更履历
               </button>
             </div>
+
             <div class="link-actions">
               <button class="btn btn-mini" id="btnLicense">
                 开源许可与致谢
@@ -774,6 +772,111 @@
             本应用自 v1.0.4（2026-08-03）起的全部版本变更记录，新版本置顶。详细条目可在每个版本下展开。
           </p>
 
+          <div class="setting-group">
+            <h3>v1.3.50 · 2026-08-28 10:02:26</h3>
+            <p class="about-text dim"><b>修复音效力度标定错误（碰撞参考速度 60→5 · 击球 70→5.2 · 进球 55→2.6 · 碰库改为按力度合成 refSpeed=6）</b></p>
+            <ul class="about-text dim">
+              <li><b>根因：音效力度参考速度严重偏大</b>：引擎里球速量级为 <code>maxPower = 160·R ≈ 5.24</code>（单位/秒），实际碰撞/击球速度普遍落在 <code>0.3 ~ 5.4</code> 之间；但 <code>sound.ts</code> 的 <code>intensityStep(speed, refSpeed)</code> 把 <code>refSpeed</code> 设成了碰撞 60 / 击球 70 / 进球 55，导致 <code>speed/refSpeed</code> 永远 < 0.1，量化档位恒为第 0~1 档（最软）。结果：球碰撞声、进球声、击球声都听不出力度差异且整体偏软——正对应用户反馈「球碰撞声音不对 / 进球的撞库声音不对」。</li>
+              <li><b>碰库声音不随力度变化</b>：<code>Cushion</code> 分支原本直接取构建时固定预生成的单一缓冲 <code>genCushion(n, sr)</code>（无力度参数），音量公式 <code>0.3 + incidentSpeed/40</code> 在速度约 2.8 时即饱和到 0.37，音色更是一成不变。这正是用户反馈「碰库的声音没按碰撞力度调整」。</li>
+              <li><b>修复 ①：重新标定四类参考速度</b>：碰撞 <code>60 → 5</code>、击球 <code>70 → 5.2</code>、进球 <code>55 → 2.6</code>（落袋速度通常较慢 0.2~3）、碰库改用 <code>intensityStep(incidentSpeed, 6)</code>。标定后力度→档位映射覆盖玩法全程：轻碰≈低档、中等≈中档、大力对撞/重撞库≈高档，音色与响度随力度连续变化。</li>
+              <li><b>修复 ②：碰库改为按力度合成</b>：<code>genCushion(n, sr, k)</code> 增加力度系数 <code>k</code>——轻碰主体频率 280Hz、衰减长(75ms)、摩擦高频弱 → 沉闷柔软的「噗」；重撞主体 640Hz、衰减短(30ms)、摩擦高频强(1900Hz) → 清脆短促的「嗒」；音量 <code>0.3 + intensityK(step)*0.7</code> 跨 0.35→1.0 约 3 倍响度差。删除原先的固定预生成 <code>prebuildCushion()</code>。</li>
+              <li><b>自测验证</b>：用逐字复刻的 DSP 渲染 WAV 并量化——碰库频谱质心随力度 2463Hz(轻)→3317Hz(重)；碰撞 4242→5714Hz；进球 3048→3916Hz；音量同步拉开。映射对照表证实旧 refSpeed 把 0.3~6.0 全压在 0~1 档，新标定铺满 1~13 档。</li>
+              <li>约束：仅改音效合成与力度映射，不改动任何物理逻辑、挥杆动画、碰撞参数；已重签 APK 并重新发布。</li>
+            </ul>
+          </div>
+<div class="setting-group">
+            <h3>v1.3.49 · 2026-08-28 09:26:39</h3>
+            <p class="about-text dim"><b>修复电脑难度显示被 play.html 语言切换脚本覆盖的问题（比分栏不再显示回「电脑」）</b></p>
+            <ul class="about-text dim">
+              <li><b>修复比分栏电脑名仍显示「电脑」而非难度的问题</b>：v1.3.48 已在 <code>BrowserContainer</code> 写入带难度的 <code>Session.opponentName</code>、并让 <code>Hud.updateScores</code> 真正写入 p2 标签，但 <code>dist/play.html</code> 底部有一组语言切换兜底脚本（<code>applyScoreLabels</code> / <code>watchScoreLabels</code>），每 400ms 轮询检测 #scP1Label / #scP2Label，只要 URL 带 <code>bot=</code> 就把 p2 名强制覆盖成「电脑」或「CPU」。这会把 Hud 已经写好的「电脑(稳健) / 电脑(激进) / 电脑(专业)」再次覆盖回「电脑」。现改为：若 p2 标签当前内容已包含「(」，说明 Hud 已写入带难度名称，直接跳过覆盖；仅对初始静态文本「对手 / Opponent」做兜底，且不再轮询破坏已有值。</li>
+              <li><b>自测验证</b>：headless chromium 访问 <code>play.html?bot=ClawBreak / TheFarJaw / Professional</code>，确认 #scP2Label 分别为「电脑(稳健) / 电脑(激进) / 电脑(专业)」；无 <code>bot=</code> 时仍为「对手」。</li>
+              <li>约束：仅改展示层，不改动任何物理逻辑、挥杆动画、碰撞参数；已重签 APK 并重新发布。</li>
+            </ul>
+          </div>
+<div class="setting-group">
+            <h3>v1.3.48 · 2026-08-28 03:01:06</h3>
+            <p class="about-text dim"><b>修复击球点复位（setSpin 因 aimInputs disabled 早退→改用 aim.offset.set + updateAimInput）· 修复电脑难度显示（BrowserContainer 写入带难度对手名 + Hud.updateScores 真正写入 p2 名）</b></p>
+            <ul class="about-text dim">
+              <li><b>修复击球后白球击球点未自动复位（玩家 / 电脑击球后均生效）</b>：v1.3.46 在 <code>Aim</code> 构造函数里调用 <code>table.cue.setSpin(new Vector3(0,0,0), table)</code> 来复位击球点，但 <code>playShot()</code> 上一杆已对 <code>aimInputs.setDisabled(true)</code>，每杆 <code>new Aim</code> 时 <code>aimInputs</code> 仍处于 disabled 状态，<code>cue.ts</code> 的 <code>setSpin()</code> 内部 <code>if (this.aimInputs.isDisabled()) return</code> 直接提前返回，复位被「吞掉」，所以「击球后自动复位白球击球点」实际从未生效。现改为直接清零偏移 <code>table.cue.aim.offset.set(0,0,0)</code> 并调用 <code>table.cue.updateAimInput()</code>（<code>updateAimInput</code> 内部的 <code>updateVisualState</code> 不检查 disabled，可可靠刷新白球击球点 UI），无论玩家还是电脑击球后，下一杆起击球点都回到球心。同步删除了只用一次的 <code>Vector3</code> import。</li>
+              <li><b>修复比分栏电脑难度显示不生效（电脑(稳健) / 电脑(激进) / 电脑(专业)）</b>：根因有两层。① <code>Hud</code> 在 <code>Container</code> 父类 <code>super()</code> 中构造，早于 <code>BrowserContainer</code> 写入 <code>Session.opponentName</code>，构造时读到 undefined 只能用兜底「电脑」；② <code>Hud.updateScores(...)</code> 原本完全忽略传入的 <code>_p1Name / _p2Name</code> 名字参数（只写分数），且每次 <code>updateScoreHud</code> 都会用 <code>opponentName</code> 覆盖 p2 名，导致即便写入难度也被冲掉。现双向修复：在 <code>BrowserContainer</code> 中按 bot 名写入带难度的双语对手名（ClawBreak→电脑(稳健)/CPU(Steady)、TheFarJaw→电脑(激进)/CPU(Aggressive)、Professional→电脑(专业)/CPU(Pro)）；并让 <code>Hud.updateScores</code> 真正把 <code>_p1Name / _p2Name</code> 写入对应标签，每次刷新比分时都会带上难度，彻底解决时序与覆盖问题。</li>
+              <li>约束：仅改展示层，不改动任何物理逻辑、挥杆动画、碰撞参数；已重签 APK 并重新发布。</li>
+            </ul>
+          </div>
+<div class="setting-group">
+            <h3>v1.3.47 · 2026-08-28 02:04:29</h3>
+            <p class="about-text dim"><b>画质问题修复（最高档掉档 + 球体锯齿）：</b></p>
+            <ul class="about-text dim">
+              <li><b>修复最高画质档(lod=5)DPR 掉档 bug</b>：<code>computeCappedDPR()</code> 原 switch 只到 <code>case 4</code>，<code>QualityLevel</code> 最高为 5，导致选「最高画质」时落到 <code>default = 2</code>，渲染分辨率反而被压到 2x（比 4 档的 2.5x 还低），锯齿更重。现显式给出 <code>case 5 → 3x</code> 超采样，调到最高档真正以 3 倍像素渲染压制锯齿。</li>
+              <li><b>球体号码纹理开启各向异性过滤 + mipmap</b>：<code>BallTextureFactory</code> 创建的号码 <code>CanvasTexture</code> 此前未设各向异性，投影到球体侧面（掠射角）时各向同性采样产生严重锯齿与摩尔纹（即「球体画质很差」）。现设置 <code>anisotropy=16</code>、<code>generateMipmaps=true</code>、<code>minFilter=LinearMipmapLinearFilter</code>，驱动会自动 clamp 到设备上限，球体侧面号码清晰度与边缘锯齿显著改善。</li>
+              <li>约束：仅改展示层，不改动任何物理逻辑、挥杆动画、碰撞参数；已重签 APK 并重新发布。注：游戏内即时切换档位不会重建已存在的 WebGL 上下文，需退出设置页重进游戏方能应用新分辨率（避免 dispose 旧上下文导致黑屏）。</li>
+            </ul>
+          </div>
+<div class="setting-group">
+            <h3>v1.3.46 · 2026-08-28 01:55:21</h3>
+            <p class="about-text dim"><b>3 项游戏内优化（删除桌面网格线 · 击球后自动复位白球击球点 · 比分栏电脑显示难度）：</b></p>
+            <ul class="about-text dim">
+              <li><b>删除桌面网格线</b>：在 <code>src/view/view.ts</code> 中移除 <code>this.scene.add(new Grid().generateLineSegments(...))</code> 调用，桌面不再显示蓝色/白色网格辅助线，保持桌布干净。</li>
+              <li><b>击球后自动复位白球击球点</b>：在 <code>src/controller/aim.ts</code> 中，每次进入瞄准状态且非自定义初始球局时，调用 <code>table.cue.setSpin(new Vector3(0,0,0), table)</code> 并将 <code>elevation</code> 置 0，确保玩家击球后、电脑击球后、自由球摆球后，白球击球点都自动回到中心正击位置。</li>
+              <li><b>比分栏电脑显示难度</b>：在 <code>src/view/hud.ts</code> 中读取 <code>?bot=</code> URL 参数，把 <code>ClawBreak</code> / <code>TheFarJaw</code> / <code>Professional</code> 映射为「稳健 / 激进 / 专业」，比分栏 p2 标签现在显示为「电脑(稳健)」「电脑(激进)」「电脑(专业)」（英文环境显示 <code>CPU(Steady)</code> 等）。</li>
+              <li>约束：仅改展示层与游戏 UI，不改动任何物理逻辑、挥杆动画、碰撞参数；已重签 APK 并重新发布。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.3.45 · 2026-08-28 01:31:51</h3>
+            <p class="about-text dim"><b>恢复变更履历详细格式（v1.3.40-44 条目扩展为完整多 li · bump-version.py 改为生成详细条目结构）：</b></p>
+            <ul class="about-text dim">
+              <li><b>v1.3.40-44 条目扩展为完整多 li</b>：用户反馈变更履历屏中 v1.3.40 及之后的版本被精简为「一行摘要 + 单条约束」，与 v1.3.39 及更早版本的详细多条目格式不一致。现已根据每次代码改动的实际内容，把 v1.3.40、v1.3.41、v1.3.42、v1.3.43、v1.3.44 的条目全部扩展为「子项标题 + 具体改动说明 + 约束」的完整格式，与历史版本保持统一。</li>
+              <li><b>bump-version.py 改为生成详细条目结构</b>：原版本迭代脚本只生成一个摘要段落和一条约束，导致每次自动 bump 出来的新章节都是精简版。现已修改脚本：自动解析摘要中的「（A · B）」或「；」分隔的子项，生成多个 <code>&lt;li&gt;</code> 条目，并保留约束条目在最后，使自动生成的章节在结构上也与手动维护的详细格式一致。</li>
+              <li>约束：仅改菜单展示层与构建脚本，不改动任何物理逻辑、挥杆动画、碰撞参数；已重签 APK 并重新发布。</li>
+            </ul>
+          </div>
+
+          <div class="setting-group">
+            <h3>v1.3.44 · 2026-08-28 01:10:47</h3>
+            <p class="about-text dim"><b>修复变更履历错位并恢复入口（bump-version 插入点修正 · 变更履历按钮恢复 · 历史条目归位）：</b></p>
+            <ul class="about-text dim">
+              <li><b>修正 bump-version 插入锚点</b>：原脚本把新版本变更履历插入到「全文第一个 <code>&lt;div class="setting-group"&gt;</code>」，而该位置位于「游戏设置」屏（语言分组之前），导致 v1.3.40 起每次版本迭代都把变更履历错放到设置页顶部。现已将插入点改为「变更履历屏 <code>#screen-changelog</code> 内、第一条历史条目之前」，新版本只会置顶在变更履历屏。</li>
+              <li><b>恢复「变更履历」入口按钮</b>：上一版误把关于区的「变更履历」按钮删除，现已在「开源许可与致谢」按钮组之前恢复该按钮；点击后正常进入独立的变更履历屏。</li>
+              <li><b>迁移历史条目</b>：将错放在设置页顶部的 v1.3.40、v1.3.41、v1.3.42、v1.3.43 共 4 条变更履历迁回变更履历屏，并按时间倒序排列，保证履历完整连续。</li>
+              <li>约束：仅改菜单展示层与构建脚本，不改动任何物理逻辑、挥杆动画、碰撞参数；已重签 APK 并重新发布。</li>
+            </ul>
+          </div>
+          <div class="setting-group">
+            <h3>v1.3.43 · 2026-08-28 00:56:54</h3>
+            <p class="about-text dim"><b>关于页移除「变更履历」按钮：</b></p>
+            <ul class="about-text dim">
+              <li><b>移除变更履历入口</b>：上一版误将「变更履历」按钮放置在「游戏设置」屏顶部，造成设置页混杂非设置内容。本版按用户反馈先临时移除了关于区的「变更履历」按钮，后续 v1.3.44 已确认真正根因并恢复入口。</li>
+              <li>约束：仅改展示层，不改动任何物理逻辑、挥杆动画、碰撞参数；已重签 APK 并重新发布。</li>
+            </ul>
+          </div>
+          <div class="setting-group">
+            <h3>v1.3.42 · 2026-08-27 16:59:11</h3>
+            <p class="about-text dim"><b>2 项展示层优化（球杆预览恢复锥度+侧前方透视填满弹窗 · 预览弹窗改卡片右侧避免手指遮挡）：</b></p>
+            <ul class="about-text dim">
+              <li><b>球杆预览恢复真实锥度并填满弹窗</b>：v1.3.40 为缩短长度仅渲染粗段，导致预览像一截短圆柱、看不出球杆；v1.3.41 虽居中但仍有大量留白。本版在 <code>cue-preview-3d.js</code> 中保留 butt→grip→ring→shaft（到杆身约 70%）的完整锥度变化，仅去掉最尖尖的皮头；同时把相机改为侧前方透视（PerspectiveCamera 34°，position (-2.2, 1.4, 2.8)，lookAt (0.6, 0, 0)），让球杆从画面左下延伸至右上，填满 300×130 弹窗且一眼可辨认为真实球杆。</li>
+              <li><b>预览弹窗改放卡片右侧</b>：v1.3.41 把弹窗放在卡片上方，第二排卡片时长按手指会挡住预览。本版在 <code>menu-cn.js</code> 的 <code>positionCuePreview</code> 中改为优先放在卡片右侧，空间不足放左侧，垂直方向与卡片中心对齐，避免手指遮挡。</li>
+              <li>约束：仅改展示层，不改动任何物理逻辑、挥杆动画、碰撞参数；已重签 APK 并重新发布。</li>
+            </ul>
+          </div>
+          <div class="setting-group">
+            <h3>v1.3.41 · 2026-08-27 16:33:41</h3>
+            <p class="about-text dim"><b>2 项展示层修正（球杆预览弹窗居中占满+防手指遮挡 · GLTF 袋口颜色真正统一）：</b></p>
+            <ul class="about-text dim">
+              <li><b>球杆预览弹窗居中占满并防手指遮挡</b>：v1.3.40 弹窗 300×130 但球杆仅占中间一小条，四周大量留白。本版把弹窗尺寸与 <code>cue-preview-3d.js</code> 的相机/球杆比例联动，让杆身横置后尽量撑满弹窗；同时把弹窗放在卡片上方，避免手指压住预览区。</li>
+              <li><b>GLTF 袋口颜色真正统一</b>：v1.3.40 把 <code>blackpocket</code> / <code>Material.001</code> 改库边色后，在浅色主题下因原材质保留金属高光与自发光而发白发灰。本版在 <code>Assets.paintTable</code> 中同步把这些材质的 <code>emissive</code> 置黑、<code>metalness</code> 降为 0、<code>roughness</code> 提到 0.75~0.8、关闭多余纹理与 <code>specularIntensity</code>，使袋口/包边与库边色真正一致。</li>
+              <li>约束：仅改展示层，不改动任何物理逻辑、挥杆动画、碰撞参数；已重签 APK 并重新发布。</li>
+            </ul>
+          </div>
+          <div class="setting-group">
+            <h3>v1.3.40 · 2026-08-27 15:31:31</h3>
+            <p class="about-text dim"><b>2 项展示层改动（袋口包边改库边主题色 · 球杆预览仅展示粗段下半部分）：</b></p>
+            <ul class="about-text dim">
+              <li><b>袋口包边颜色改为与球桌主题同色</b>：原 GLTF 桌台的袋口/球洞（<code>blackpocket</code>）和未命名包边件（<code>Material.001</code>）使用固定深色，与部分桌布主题不搭。本版在 <code>src/view/assets.ts</code> 的 <code>Assets.paintTable</code> 中让这两类材质跟随当前皮肤的 <code>cushionColor</code> 上色，切换主题时袋口自动联动，视觉更统一。</li>
+              <li><b>球杆预览仅展示粗段下半部分</b>：用户反馈预览图中的球杆非真实模型、效果差且长度与真实不一致。本版在 <code>dist/cue-preview-3d.js</code> 的 <code>buildCue</code> 中改为仅渲染球杆 butt（杆尾）、grip（握把）、ring（装饰环）和 shaft（杆身前 70%），去掉细长的先角和皮头，使预览长度更贴近真实粗段。</li>
+              <li>约束：仅改展示层，不改动任何物理逻辑、挥杆动画、碰撞参数；已重签 APK 并重新发布。</li>
+            </ul>
+          </div>
           <div class="setting-group">
             <h3>v1.3.39 · 2026-08-27 13:05:00</h3>
             <p class="about-text dim"><b>2 项 v1.3.38 后续修复（球杆预览渲染质量 · GLTF 桌台球洞/凸点）：</b></p>
@@ -2269,7 +2372,7 @@
     </div>
 
     <script>
-      window.__BILLIARDS_VERSION__ = "1.3.39-26082713";
+      window.__BILLIARDS_VERSION__ = "1.3.50-26082713";
     </script>
     <script src="menu-cn.js"></script>
     <script>

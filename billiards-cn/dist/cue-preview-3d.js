@@ -906,19 +906,22 @@
       group.add(seg(ringEnd, gripEnd, gripR * 0.95, gripR * 0.88, mat(gripColor, { map: gripTex, roughness: p.grip ? p.grip.roughness : 0.85 })))
     }
 
-    // 杆身 shaft
+    // v1.3.42-fix：预览展示「粗段 + 一段杆身」而非只截断到握把。
+    // 只显示粗段时像一个短圆柱，完全不像球杆；保留 butt→grip→ring→shaft(前70%)
+    // 的锥度变化，才能一眼认出是真实球杆。不渲染最尖尖的皮头 tip，避免过长。
+    // 长度锚点：butt=-L/2(-2.5) ~ shaftShowEnd≈1.6，显示总长≈4.1。
+    var shaftShowEnd = L / 2 - 0.9  // 约 1.6，在杆身中段偏前
     var shaftParams = p.shaft || { roughness: 0.55 }
     if (shaftParams.transparent) shaftParams.map = shaftTex
     var shaftMatParams = { map: shaftTex }
     for (var k in shaftParams) { if (Object.prototype.hasOwnProperty.call(shaftParams, k)) shaftMatParams[k] = shaftParams[k] }
-    group.add(seg(gripEnd, shaftEnd, shaftR * 0.9, shaftR * 1.02, mat(shaftColor, shaftMatParams)))
-
-    // 先角 ferrule
-    group.add(seg(shaftEnd, ferruleEnd, ferruleR * 0.92, ferruleR, mat("#eeeeee", { shininess: 80 })))
-
-    // 皮头 tip
-    group.add(seg(ferruleEnd, L / 2, tipR * 0.88, tipR, mat(tipColor, { roughness: 0.85 })))
-
+    group.add(seg(gripEnd, shaftShowEnd, shaftR * 0.9, shaftR * 1.02, mat(shaftColor, shaftMatParams)))
+    // 完整杆身模式（可选）才继续构建先角 ferrule + 皮头 tip
+    if (opts.showFull) {
+      group.add(seg(shaftShowEnd, shaftEnd, shaftR * 1.02, shaftR * 1.02, mat(shaftColor, shaftMatParams)))
+      group.add(seg(shaftEnd, ferruleEnd, ferruleR * 0.92, ferruleR, mat("#eeeeee", { shininess: 80 })))
+      group.add(seg(ferruleEnd, L / 2, tipR * 0.88, tipR, mat(tipColor, { roughness: 0.85 })))
+    }
     return group
   } catch (e) {
     console.error("[cuePreview3D] buildCue failed for pattern:", opts.pattern, e)
@@ -971,9 +974,12 @@
     }
 
     this.scene = new THREE.Scene()
+    // v1.3.42-fix：预览展示粗段 + 一段杆身（总长≈4.1），并采用侧前方透视：
+    // 相机位于粗端左上方、看向杆身中段，利用近大远小的透视让球杆从画面左下
+    // 延伸至右上，填满 300×130 弹窗且保留真实锥度，避免“短圆柱”感。
     this.camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100)
-    this.camera.position.set(0, 0.3, 7.5)
-    this.camera.lookAt(0, 0.2, 0)
+    this.camera.position.set(-2.2, 1.4, 2.8)
+    this.camera.lookAt(0.6, 0, 0)
 
     var hemi = new THREE.HemisphereLight(0xaec4e8, 0x070a12, 0.65)
     this.scene.add(hemi)
@@ -993,15 +999,19 @@
     this.scene.add(back)
 
     this.cue = buildCue(this.theme, this.quality)
-    // v1.3.38：球杆横置展示——用 pivot 把沿 Y 轴建模的球杆放平到 X 轴，
+    // v1.3.42：球杆横置展示——用 pivot 把沿 Y 轴建模的球杆放平到 X 轴，
     // 旋转动画只绕 pivot 的 X 轴（即横杆长轴）滚动，呈现产品式水平自转。
-    this.cue.rotation.z = Math.PI / 2
+    this.cue.rotation.z = -Math.PI / 2
+    // v1.3.42-fix：显示范围 local Y∈[-2.5, 1.6]，放平后 world X∈[-1.6, 2.5]，
+    // 中心约 0.45；整体平移 -0.45 使其在画面居中。
+    this.cue.position.x = -0.45
     this.cuePivot = new THREE.Group()
     this.cuePivot.add(this.cue)
     this.scene.add(this.cuePivot)
 
     this.reflection = buildCue(this.theme, this.quality)
-    this.reflection.rotation.z = Math.PI / 2
+    this.reflection.rotation.z = -Math.PI / 2
+    this.reflection.position.x = -0.45
     this.reflection.traverse(function (o) {
       if (o.isMesh) {
         o.material = o.material.clone()
@@ -1026,25 +1036,12 @@
     floor.position.y = -1.35
     this.scene.add(floor)
 
-    var ringMat = new THREE.MeshBasicMaterial({ color: 0x5c7fb8, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false })
-    var ring = new THREE.Mesh(new THREE.RingGeometry(3.25, 3.35, 96), ringMat)
-    ring.position.y = -1.35
+    // 地台装饰：极简化——仅保留一圈极淡的提示光环，去掉刻度等科技感元素，突出球杆本体。
+    var ringMat = new THREE.MeshBasicMaterial({ color: 0x5c7fb8, transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false })
+    var ring = new THREE.Mesh(new THREE.RingGeometry(3.3, 3.38, 96), ringMat)
+    ring.position.y = -1.345
     ring.rotation.x = -Math.PI / 2
     this.scene.add(ring)
-
-    var ticks = new THREE.Group()
-    for (var i = 0; i < 36; i++) {
-      var ang = (i / 36) * Math.PI * 2
-      var tickLen = (i % 9 === 0) ? 0.16 : 0.08
-      var geo = new THREE.CylinderGeometry(0.012, 0.012, tickLen, 8)
-      var m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x7a9fd0, transparent: true, opacity: 0.3 }))
-      var r = 3.58
-      m.position.set(Math.cos(ang) * r, -1.35, Math.sin(ang) * r)
-      m.rotation.z = Math.PI / 2
-      m.rotation.y = -ang
-      ticks.add(m)
-    }
-    this.scene.add(ticks)
 
     this._resize()
     global.addEventListener("resize", this._onResize)
@@ -1071,13 +1068,15 @@
       if (this.cuePivot) this.scene.remove(this.cuePivot)
       if (this.reflectionPivot) this.scene.remove(this.reflectionPivot)
       this.cue = buildCue(this.theme, this.quality)
-      this.cue.rotation.z = Math.PI / 2
+      this.cue.rotation.z = -Math.PI / 2
+      this.cue.position.x = -0.45
       this.cuePivot = new THREE.Group()
       this.cuePivot.add(this.cue)
       this.scene.add(this.cuePivot)
       var self = this
       this.reflection = buildCue(this.theme, this.quality)
-      this.reflection.rotation.z = Math.PI / 2
+      this.reflection.rotation.z = -Math.PI / 2
+      this.reflection.position.x = -0.45
       this.reflection.traverse(function (o) {
         if (o.isMesh) {
           o.material = o.material.clone()

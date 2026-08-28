@@ -1,4 +1,10 @@
-import { CanvasTexture, Color } from "three"
+import {
+  CanvasTexture,
+  Color,
+  LinearMipmapLinearFilter,
+  LinearFilter,
+  SRGBColorSpace,
+} from "three"
 
 export class BallTextureFactory {
   private static readonly textureCache: Map<string, CanvasTexture> = new Map()
@@ -77,6 +83,14 @@ export class BallTextureFactory {
 
     const texture = new CanvasTexture(canvas)
     texture.flipY = false
+    // 关键修复：开启 mipmap + 各向异性过滤，压制球体侧面（掠射角）号码的
+    // 锯齿与摩尔纹。各向同性采样在球侧会严重模糊/走样，各向异性可大幅改善。
+    // anisotropy 设较高请求值，驱动会自动 clamp 到设备支持上限，无兼容性风险。
+    texture.generateMipmaps = true
+    texture.minFilter = LinearMipmapLinearFilter
+    texture.magFilter = LinearFilter
+    texture.anisotropy = 16
+    texture.colorSpace = SRGBColorSpace
     return texture
   }
 }

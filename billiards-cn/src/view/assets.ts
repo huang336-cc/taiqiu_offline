@@ -381,20 +381,34 @@ export class Assets {
         } else if (name === "blackpocket" || name.includes("pocket")) {
           // v1.3.38-fix：GLTF 模型桌台的 6 个球洞（pocket）不再用固定深色，
           // 改为跟随当前桌布皮肤的库边色，使袋口与整体色调协调。
+          // v1.3.41-fix：同步 roughness/metalness/ior/specular，避免原黑色高光材质
+          // 改成亮色后仍显灰白/反光；关闭自发光与多余纹理，让颜色真正统一。
           mat.color.set(cfg.cushionColor)
           if ("emissive" in mat) {
             ;(mat as any).emissive.set(0x000000)
             ;(mat as any).emissiveIntensity = 0
           }
+          ;(mat as any).map = null
+          ;(mat as any).roughness = 0.8
+          ;(mat as any).metalness = 0
+          if ("ior" in mat) { (mat as any).ior = 1.5 }
+          if ("specularIntensity" in mat) { (mat as any).specularIntensity = 0 }
           mat.needsUpdate = true
         } else if (name === "material.001" || name === "material_001") {
           // GLTF 模型中未被命名的金属/包边件（Blender 默认名 Material.001），
-          // 通常是袋口包边或角落金属件，跟随桌框色以融入整体。
-          mat.color.set(cfg.frameColor)
+          // 通常是袋口包边或角落金属件。v1.3.39-fix：改为跟随库边色，
+          // 与 6 个球洞及桌边库边统一，避免单独色块突兀。
+          // v1.3.41-fix：关闭自发光与光滑金属感，否则在亮色主题下会发白突兀。
+          mat.color.set(cfg.cushionColor)
           if ("emissive" in mat) {
-            ;(mat as any).emissive.set(cfg.frameGlow || 0x000000)
-            ;(mat as any).emissiveIntensity = cfg.frameGlow ? 0.5 : 0
+            ;(mat as any).emissive.set(0x000000)
+            ;(mat as any).emissiveIntensity = 0
           }
+          ;(mat as any).map = null
+          ;(mat as any).roughness = 0.75
+          ;(mat as any).metalness = 0
+          if ("ior" in mat) { (mat as any).ior = 1.5 }
+          if ("specularIntensity" in mat) { (mat as any).specularIntensity = 0 }
           mat.needsUpdate = true
         } else if (name === "diamond") {
           // v1.3.38-fix：隐藏 GLTF 模型桌边 diamond（菱形瞄准标记）小凸点，

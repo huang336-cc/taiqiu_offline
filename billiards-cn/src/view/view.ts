@@ -293,8 +293,9 @@ export class View {
     if (this.assets.background) this.scene.add(this.assets.background)
     this.scene.add(this.assets.table)
     this.table.mesh = this.assets.table
-    const isSnooker = this.assets.rules.asset === Snooker.tablemodel
-    this.scene.add(new Grid().generateLineSegments(isSnooker))
+    // v1.3.46：删除桌面网格线（用户要求桌面不显示网格）。
+    // const isSnooker = this.assets.rules.asset === Snooker.tablemodel
+    // this.scene.add(new Grid().generateLineSegments(isSnooker))
     // v1.2.11 #F7：删除台面上的奥特曼 LOGO 圆盘（用户要求删除台球桌面上的图标）。
     // this.applyCushionLogos()
     // 初始应用环境场景

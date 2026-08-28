@@ -1842,17 +1842,29 @@
     if (!cueOverlay) return
     cueOverlay.classList.remove("active")
   }
-  // 把小窗定位到卡片附近（优先右侧，空间不足放左侧，再不足居中），避免超出视口
+  // 把小窗定位到卡片右侧（手指按在卡片上，侧边不会挡）；右侧空间不足放左侧；
+  // 垂直居中于卡片，并做视口边界保护。
   function positionCuePreview(rect) {
     if (!cueOverlay || !rect) return
     var ww = window.innerWidth, wh = window.innerHeight
-    var winW = 220, winH = 150   // 与 CSS .cue-preview-overlay 尺寸一致
-    var left = rect.right + 12
-    if (left + winW > ww - 8) left = rect.left - winW - 12
-    if (left < 8) left = Math.max(8, Math.round((ww - winW) / 2))
+    var winW = 300, winH = 130   // 与 CSS .cue-preview-overlay 尺寸一致
+    var gap = 10
+    // 垂直：以卡片中心为基准
     var top = rect.top + rect.height / 2 - winH / 2
-    if (top < 8) top = 8
-    if (top + winH > wh - 8) top = wh - winH - 8
+    if (top < gap) top = gap
+    if (top + winH > wh - gap) top = wh - winH - gap
+    // 水平：优先放卡片右侧
+    var left = rect.right + gap
+    if (left + winW > ww - gap) {
+      left = rect.left - winW - gap
+    }
+    if (left < gap) {
+      left = gap
+      // 左右都放不下时，改为水平居中并尽量靠上
+      if (rect.width + winW + gap * 3 > ww) {
+        left = Math.max(gap, Math.round((ww - winW) / 2))
+      }
+    }
     cueOverlay.style.left = left + "px"
     cueOverlay.style.top = top + "px"
   }
