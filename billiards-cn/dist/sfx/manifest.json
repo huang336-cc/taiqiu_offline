@@ -1,0 +1,266 @@
+{
+  "version": 1,
+  "sampleRate": 44100,
+  "variants": {
+    "collision_soft": {
+      "cat": "collision",
+      "src": "ballcollision",
+      "file": "sfx/collision_soft.ogg",
+      "duration": 0.1756,
+      "t30": 0.1324,
+      "centroid": 1141.9,
+      "rmsA": 0.0628,
+      "gain": 1.127
+    },
+    "collision_mid": {
+      "cat": "collision",
+      "src": "ballcollision",
+      "file": "sfx/collision_mid.ogg",
+      "duration": 0.13,
+      "t30": 0.0581,
+      "centroid": 2542.4,
+      "rmsA": 0.07,
+      "gain": 0.767
+    },
+    "collision_hard": {
+      "cat": "collision",
+      "src": "ballcollision",
+      "file": "sfx/collision_hard.ogg",
+      "duration": 0.13,
+      "t30": 0.0929,
+      "centroid": 4464.5,
+      "rmsA": 0.0593,
+      "gain": 1.194
+    },
+    "cushion_tight": {
+      "cat": "cushion",
+      "src": "cushion",
+      "file": "sfx/cushion_tight.ogg",
+      "duration": 0.15,
+      "t30": 0.0867,
+      "centroid": 563.1,
+      "rmsA": 0.062,
+      "gain": 0.878
+    },
+    "cushion_full": {
+      "cat": "cushion",
+      "src": "cushion",
+      "file": "sfx/cushion_full.ogg",
+      "duration": 0.1909,
+      "t30": 0.0867,
+      "centroid": 563.3,
+      "rmsA": 0.062,
+      "gain": 0.99
+    },
+    "cue_tight": {
+      "cat": "cue",
+      "src": "cue",
+      "file": "sfx/cue_tight.ogg",
+      "duration": 0.18,
+      "t30": 0.176,
+      "centroid": 2113.8,
+      "rmsA": 0.085,
+      "gain": 0.842
+    },
+    "cue_full": {
+      "cat": "cue",
+      "src": "cue",
+      "file": "sfx/cue_full.ogg",
+      "duration": 0.227,
+      "t30": 0.223,
+      "centroid": 2113.7,
+      "rmsA": 0.085,
+      "gain": 0.938
+    },
+    "pot_light": {
+      "cat": "pot",
+      "src": "pot_light",
+      "file": "sfx/pot_light.ogg",
+      "duration": 0.2422,
+      "t30": 0.2382,
+      "centroid": 1622.3,
+      "rmsA": 0.0678,
+      "gain": 1.118
+    },
+    "pot_mid": {
+      "cat": "pot",
+      "src": "pot_mid",
+      "file": "sfx/pot_mid.ogg",
+      "duration": 0.1692,
+      "t30": 0.1652,
+      "centroid": 2369.6,
+      "rmsA": 0.0632,
+      "gain": 1.199
+    },
+    "pot_heavy_1": {
+      "cat": "pot",
+      "src": "pot_heavy",
+      "file": "sfx/pot_heavy_1.ogg",
+      "duration": 0.2969,
+      "t30": 0.2843,
+      "centroid": 4389.8,
+      "rmsA": 0.0425,
+      "gain": 1.6
+    },
+    "pot_heavy_2": {
+      "cat": "pot",
+      "src": "pot_heavy",
+      "file": "sfx/pot_heavy_2.ogg",
+      "duration": 0.2225,
+      "t30": 0.2185,
+      "centroid": 3759.5,
+      "rmsA": 0.0532,
+      "gain": 1.424
+    },
+    "pot_heavy_3": {
+      "cat": "pot",
+      "src": "pot_heavy",
+      "file": "sfx/pot_heavy_3.ogg",
+      "duration": 0.204,
+      "t30": 0.1958,
+      "centroid": 3558.0,
+      "rmsA": 0.0595,
+      "gain": 1.275
+    },
+    "pot_heavy_4": {
+      "cat": "pot",
+      "src": "pot_heavy",
+      "file": "sfx/pot_heavy_4.ogg",
+      "duration": 0.2731,
+      "t30": 0.2678,
+      "centroid": 2837.6,
+      "rmsA": 0.075,
+      "gain": 0.956
+    },
+    "pot_heavy_5": {
+      "cat": "pot",
+      "src": "pot_heavy",
+      "file": "sfx/pot_heavy_5.ogg",
+      "duration": 0.2473,
+      "t30": 0.242,
+      "centroid": 4156.8,
+      "rmsA": 0.075,
+      "gain": 0.942
+    },
+    "success": {
+      "cat": "success",
+      "src": "success",
+      "file": "sfx/success.ogg",
+      "duration": 0.9799,
+      "t30": 0.793,
+      "centroid": 1170.4,
+      "rmsA": 0.171,
+      "gain": 0.75
+    },
+    "cue_s1": {
+      "cat": "cue",
+      "src": "raw/fs830221.mp3",
+      "file": "sfx/cue_s1.ogg",
+      "duration": 0.1734,
+      "t30": 0.0972,
+      "centroid": 2638.9,
+      "rmsA": 0.0717,
+      "gain": 1.199
+    },
+    "cue_s2": {
+      "cat": "cue",
+      "src": "raw/fs830221.mp3",
+      "file": "sfx/cue_s2.ogg",
+      "duration": 0.204,
+      "t30": 0.1612,
+      "centroid": 3486.3,
+      "rmsA": 0.085,
+      "gain": 0.882
+    },
+    "collision_clack": {
+      "cat": "collision",
+      "src": "raw/fs539854.mp3",
+      "file": "sfx/collision_clack.ogg",
+      "duration": 0.2,
+      "t30": 0.1151,
+      "centroid": 2424.6,
+      "rmsA": 0.07,
+      "gain": 0.665
+    },
+    "pot_sink_1": {
+      "cat": "pot",
+      "src": "raw/fs763601.mp3",
+      "file": "sfx/pot_sink_1.ogg",
+      "duration": 0.2109,
+      "t30": 0.2069,
+      "centroid": 629.3,
+      "rmsA": 0.075,
+      "gain": 0.99
+    },
+    "pot_sink_2": {
+      "cat": "pot",
+      "src": "raw/fs763601.mp3",
+      "file": "sfx/pot_sink_2.ogg",
+      "duration": 0.2054,
+      "t30": 0.2014,
+      "centroid": 867.5,
+      "rmsA": 0.075,
+      "gain": 0.537
+    },
+    "pot_sink_3": {
+      "cat": "pot",
+      "src": "raw/fs763601.mp3",
+      "file": "sfx/pot_sink_3.ogg",
+      "duration": 0.2213,
+      "t30": 0.2173,
+      "centroid": 1022.0,
+      "rmsA": 0.0614,
+      "gain": 1.235
+    },
+    "pot_sink_4": {
+      "cat": "pot",
+      "src": "raw/fs763601.mp3",
+      "file": "sfx/pot_sink_4.ogg",
+      "duration": 0.204,
+      "t30": 0.2,
+      "centroid": 1312.3,
+      "rmsA": 0.075,
+      "gain": 0.608
+    },
+    "pot_sink_5": {
+      "cat": "pot",
+      "src": "raw/fs763601.mp3",
+      "file": "sfx/pot_sink_5.ogg",
+      "duration": 0.204,
+      "t30": 0.2,
+      "centroid": 1561.5,
+      "rmsA": 0.075,
+      "gain": 0.957
+    },
+    "pot_sink_6": {
+      "cat": "pot",
+      "src": "raw/fs763601.mp3",
+      "file": "sfx/pot_sink_6.ogg",
+      "duration": 0.2075,
+      "t30": 0.2035,
+      "centroid": 2000.9,
+      "rmsA": 0.075,
+      "gain": 0.511
+    },
+    "pot_sink_7": {
+      "cat": "pot",
+      "src": "raw/fs763601.mp3",
+      "file": "sfx/pot_sink_7.ogg",
+      "duration": 0.237,
+      "t30": 0.2329,
+      "centroid": 2643.0,
+      "rmsA": 0.075,
+      "gain": 0.629
+    },
+    "pot_sink_8": {
+      "cat": "pot",
+      "src": "raw/fs763601.mp3",
+      "file": "sfx/pot_sink_8.ogg",
+      "duration": 0.2453,
+      "t30": 0.2014,
+      "centroid": 3517.5,
+      "rmsA": 0.075,
+      "gain": 0.817
+    }
+  }
+}

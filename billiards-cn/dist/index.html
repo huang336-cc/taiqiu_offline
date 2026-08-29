@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>奥特曼的台球 · v1.3.54 发布中心</title>
+<title>奥特曼的台球 · v1.3.57 发布中心</title>
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; min-height: 100vh;
@@ -65,7 +65,7 @@
 </head>
 <body>
 <div class="wrap">
-  <h1><span class="zh">奥特曼的台球</span><span class="en">Ultraman's Billiards</span><span class="ver">v1.3.54</span></h1>
+  <h1><span class="zh">奥特曼的台球</span><span class="en">Ultraman's Billiards</span><span class="ver">v1.3.57</span></h1>
   <div class="sub"><span class="zh">2026-08-24 · 离线单文件 · 三端同步</span><span class="en">2026-08-24 · Offline single-file · 3-platform sync</span></div>
   <div class="lang-bar">
     <button id="langToggle" class="lang-toggle" aria-label="切换语言 / Switch language">EN</button>
@@ -78,21 +78,96 @@
       <p><span class="zh">点此进入游戏主菜单，选模式即玩，已包含本次四项改动：真实音效、桌布配色、回放「跟随」视角、增强的专业 AI。建议用电脑/横屏体验最佳。</span><span class="en">Enter the game main menu and pick a mode to play—includes all four updates: realistic sound, cloth colors, replay "Follow" view, and a stronger Professional AI. Best on desktop / landscape.</span></p>
       <span class="cta"><span class="zh">开始游戏</span><span class="en">Play Now</span></span>
     </a>
-    <a class="card" href="billiards-cn-v1.3.54.apk">
+    <a class="card" href="billiards-cn-v1.3.57.apk">
       <h2><span class="zh">📲 安卓 App (APK)</span><span class="en">📲 Android App (APK)</span></h2>
-      <p><span class="zh">约 2.3MB · 零权限 · 支持 Android 7.0+ · 适配沉浸全屏。v1.3.54：球杆预览改用游戏内真实球杆模型。此前预览自己维护了一套简化模型（长径比仅 8.9:1，像一根胖棒槌），与游戏内真实球杆的 46.7:1 完全不是同一根杆；现改为直接复用游戏内的程序化分区贴图与真实几何参数，预览里看到的就是对局中那一根。同时修复了切主题时贴图缓存被误销毁、以及预览关闭时转屏后再打开画面错乱两个问题。点击下载后到"下载"目录点击安装。</span><span class="en">~2.3MB · Zero permissions · Android 7.0+ · Immersive fullscreen. v1.3.54: the cue preview now reuses the real in-game cue. It used to keep its own simplified model (length-to-diameter ratio of just 8.9:1 — basically a stubby baton) instead of the in-game cue's 46.7:1, so what you saw was never the actual cue. It now draws from the same procedural texture factory and the same geometry parameters as the game, so the preview shows the very cue you play with. Also fixed two bugs: the texture cache being disposed when switching themes, and a garbled frame when rotating the device while the preview was closed. Tap download, then install from Downloads.</span></p>
+      <p><span class="zh">约 2.4MB · 零权限 · 支持 Android 7.0+ · 适配沉浸全屏。v1.3.57：修复一个结算判定错误 —— 电脑合法打进黑八/九号获胜时，结算面板却弹"你赢了"。病根是电脑回合的胜负判定从开伦类规则照搬而来：开伦双方各有一个母球（母球 id=玩家序号），而八球/九球全桌只有一个母球（id=0），单机玩家序号又恒为 0，<b>0 === 0 永远为真</b>，无论这杆是谁出的都判玩家赢。现改为电脑出杆导致的自然终局直接判玩家输，正确显示"你输了"。同时删除玩家名旁冗余的 (stripes)/(solids)英文标注 —— 进球托盘已直观显示本方球组，标注纯属冗余。点击下载后到"下载"目录点击安装。</span><span class="en">~2.4MB · Zero permissions · Android 7.0+ · Immersive fullscreen. v1.3.57: fixed a game-end verdict bug — when the CPU legally potted the 8-ball / 9-ball and won, the result panel still said "You Won". The win check for the CPU turn was copied from the carom-style rules, where each player has their own cue ball whose id equals the player index; in pool there is only <b>one</b> cue ball (id 0) and the local player index is always 0, so <b>0 === 0 held forever</b> and every natural end was credited to the player. A natural end caused by the CPU shot now correctly shows "You Lost". Also removed the redundant (stripes)/(solids) label after the player name — the ball tray already shows your group. Tap download, then install from Downloads.</span></p>
       <span class="cta"><span class="zh">下载 APK</span><span class="en">Download APK</span></span>
     </a>
-    <a class="card" href="release-v1.3.54.zip">
+    <a class="card" href="release-v1.3.57.zip">
       <h2><span class="zh">📦 发布包（Release）</span><span class="en">📦 Release Package</span></h2>
-      <p><span class="zh">每次变更完代码、构建 APK 时一并打包发布。内含完整网页产物（dist/ 文件夹，直接打开即用）+ 已构建的 v1.3.54 APK 安装包。</span><span class="en">Packaged with the APK. Contains the full built web deliverable (dist/ folder, ready to open) plus the v1.3.54 APK.</span></p>
+      <p><span class="zh">每次变更完代码、构建 APK 时一并打包发布。内含完整网页产物（dist/ 文件夹，直接打开即用）+ 已构建的 v1.3.57 APK 安装包。</span><span class="en">Packaged with the APK. Contains the full built web deliverable (dist/ folder, ready to open) plus the v1.3.57 APK.</span></p>
       <span class="cta"><span class="zh">下载发布包</span><span class="en">Download Release</span></span>
     </a>
   </div>
 
   <div class="meta" id="meta">
     <details class="ver-item current" open>
-    <summary class="ver-btn"><span class="ver-no"><span class="zh">v1.3.54</span><span class="en">v1.3.54</span></span><span class="ver-title"><span class="zh">当前版本 · 球杆预览改用游戏内真实球杆</span><span class="en">Current · cue preview now uses the real in-game cue</span></span></summary>
+    <summary class="ver-btn"><span class="ver-no"><span class="zh">v1.3.57</span><span class="en">v1.3.57</span></span><span class="ver-title"><span class="zh">当前版本 · 修复胜负判定与名称标注</span><span class="en">Current · verdict & name label fixes</span></span></summary>
+    <div class="ver-body">
+      <span class="zh"><b>v1.3.57 · 修复电脑获胜显示"你赢了"；删除玩家名旁的 (stripes) 标注</b><br>
+· <b>病根：胜负判定恒真</b>。电脑回合的终局判定是 <code>amIWinner = table.cueball.id === session.playerIndex</code>。这行从开伦类规则（三颗星/沙古）照搬而来 —— 开伦<b>双方各有一个母球</b>，母球 id 恰好等于玩家序号（0/1），判定成立；但八球/九球<b>全桌只有一个母球</b>（balls[0]，id=0），单机玩家序号又恒为 0，于是 <code>0 === 0</code> <b>永远为真</b> —— 无论这杆是谁出的，都判玩家赢。<br>
+· <b>为什么只弹"你赢了"而不弹"你输了"</b>：能走进这条判定分支的只有一种情形 —— 电脑出杆后球停、<code>BEGIN</code> 事件触发自然终局（<code>handleGameEnd()</code> 无参调用）。此时出杆方是电脑、玩家必输，旧代码却恒判"你赢了"。而"你输了"的几个入口（玩家犯规进黑八 <code>handleGameEnd(false)</code>、玩家认输）都是显式传参，走的是另一条分支 —— 所以 bug 的表现是单向的：永远偏向玩家。<br>
+· <b>修复</b>：这条分支直接判 <code>amIWinner = false</code>（能进这里必是电脑出的杆）。电脑合法打进黑八/九号获胜时，结算面板正确显示"你输了 🥈"。<br>
+· <b>其余终局路径逐一核查，均不受影响</b>：玩家自己出杆合法打进黑八/九号，走的是 <code>PlayShot → rules.update() → handlePot</code>，判定本来就是玩家赢；玩家犯规进黑八判负、电脑犯规送黑八判玩家赢，两处均显式传参；三颗星/沙古/斯诺克走比分判定分支，原样保留。<br>
+· <b>顺手加固</b>：给八球/九球 <code>handlePot</code> 里同样式的母球判定补了注释 —— 它在单机模式恒真但碰巧是正确结果（能走到那里的必然是玩家自己出的杆），注释明确警告不要把电脑的胜负接到这个判定上，防止将来再踩同一个坑。<br>
+· <b>删除：玩家名旁的 (stripes)/(solids) 标注</b>。八球分完花色后会往玩家名后追加一个硬编码英文标注，形如"玩家(stripes)"—— 中英文混排突兀，且 HUD 左上角的进球托盘本来就直观显示了本方分到的球，标注纯属冗余。电脑名称不受影响（"电脑(专业)"的括号是难度标注，原样保留）。<br>
+<b>约束</b>：只改结算判定与 HUD 名称两处，<b>不碰物理、碰撞参数、渲染、音效与任何规则逻辑</b>。</span>
+      <span class="en"><b>v1.3.57 · Fixed "You Won" shown when the CPU wins; removed the (stripes) name label</b><br>
+&middot; <b>Root cause: a verdict that could never be false</b>. The end-of-game check on the CPU turn was <code>amIWinner = table.cueball.id === session.playerIndex</code>, copied from the carom-style rules (three-cushion / sagu) where <b>each player owns a cue ball</b> whose id equals the player index, so the comparison works there. In pool there is only <b>one</b> cue ball (balls[0], id 0) and the local player index is always 0 — <code>0 === 0</code> is <b>forever true</b>, so every natural end was credited to the player.<br>
+&middot; <b>Why it only ever said "You Won"</b>: the branch is reached in exactly one situation — the CPU's shot comes to rest and the <code>BEGIN</code> event triggers a natural end (<code>handleGameEnd()</code> with no argument). The shooter is the CPU and the player has lost, yet the old code always showed "You Won". The "You Lost" entries (player fouls on the 8-ball, player concedes) all pass the verdict explicitly and take another branch — hence the bug was one-directional, always in the player's favour.<br>
+&middot; <b>Fix</b>: the branch now simply sets <code>amIWinner = false</code>. When the CPU legally pots the 8-ball / 9-ball to win, the panel correctly shows "You Lost" with the silver medal.<br>
+&middot; <b>Every other ending path was audited and is unaffected</b>: the player's own legal 8-ball / 9-ball pot goes through <code>PlayShot &rarr; rules.update() &rarr; handlePot</code> and already credits the player; a player foul on the 8-ball and a CPU foul handing over the win both pass explicit verdicts; three-cushion / sagu / snooker use the score branch, untouched.<br>
+&middot; <b>Hardening</b>: added comments to the same-shaped cue-ball checks in <code>handlePot</code> of eightball / nineball — they are tautologically true in single-player yet happen to be the right result, and the comments now warn against wiring the CPU's verdict into them.<br>
+&middot; <b>Removed</b>: the hardcoded English label appended after the player name once groups were assigned, e.g. "玩家(stripes)" — jarring mixed-script text, and the ball tray already shows your group. The CPU label ("电脑(专业)") keeps its difficulty tag.<br>
+<b>Constraints</b>: verdict + HUD name only — <b>no physics, collision, rendering, audio or rule-logic changes</b>.</span>
+    </div>
+  </details>
+  <details class="ver-item">
+    <summary class="ver-btn"><span class="ver-no"><span class="zh">v1.3.56 · 音效库扩充到 26 变体</span><span class="en">v1.3.56 · sound library expanded to 26 variants</span></span><span class="ver-title"><span class="zh">音效库扩充到 26 变体</span><span class="en">Sound library expanded to 26 variants</span></span></summary>
+    <div class="ver-body">
+      <span class="zh"><b>v1.3.56 · 补采真实录音，音效库 15 → 26 变体，补上"闷落袋"音色</b><br>
+· <b>补的是什么洞</b>：v1.3.55 的 7 条进球音，频谱质心最低也有 <b>1622Hz</b> —— 全是"脆"的，缺了真实台球里最常见的那种：球慢慢滚到袋口、几乎没撞击就掉下去的<b>闷响</b>。慢球进袋听起来跟快球一样脆，这是不真实的。库边和击球是另一类问题：各自<b>只有一条原始录音</b>，靠 tight/full 两种裁剪长度凑出两个变体，同源于同一次撞击，轮转也换不掉"又是同一个音"的感觉。<br>
+· <b>先把现有素材榨干，再往外找</b>：重新扫了已用 7 个原始录音的全部瞬态，能用的只剩 <code>pot_mid #1</code>（707Hz）；<code>cue #1</code> 的 T30 达 0.434s 是混响尾不是击球声；<code>pot_light #0/#2</code> 一个被截了头、一个低 19dB 只是余响；库边那条总共就 1 个事件。所以外部补采是必须的。<br>
+· <b>授权链条全部机器校验后才落盘</b>：新增 <code>fs_search.py</code>（免 API key，抓 Freesound 搜索页 + 逐条开详情页读许可证）与 <code>fs_fetch.py</code>（取 HQ 预览 mp3；原始 wav 下载要登录，进不了管线）。跑了 10 组关键词、57 个候选。<b>所有 CC-BY-NC 一律排除</b>，其中一整批斯诺克素材全是 NC，整体作废。最终只留 3 条（2 条 CC0 + 1 条 CC-BY 4.0），落盘前逐条比对了线上页面。<br>
+· <b>因为听不了，筛选全靠客观指标</b>：新增 <code>eval_candidates.py</code>，量三个数 —— <b>信噪比</b>（阈值 26dB，实测可用素材 48~57dB）、<b>尾部残响比</b>（末 10% RMS ÷ 峰值，阈值 0.02，两条候选因 0.056 / 0.031 的长尾被判掉）、<b>峰均比</b>。<br>
+· <b>峰均比是硬物理上限，不是增益问题</b>（本次关键发现）：有个候选击球素材峰均比高达 <b>22.2</b>，峰值顶到 0.93 天花板时 A 加权 RMS 只能到 0.042，比目标低 7.7dB —— 再拉增益只会削顶，然后被峰值保护原样拉回来，<b>怎么调都到不了</b>。它不是"增益不够"，是这条素材根本不能用。换用的素材峰均比 9.7，可达 0.096。<br>
+· <b>新增 11 个变体，音效库 15 → 26 条 / 138.7KB</b>：进球从一条素材的 105 个事件里按质心<b>对数均匀取 8 条</b>，覆盖从 1622~4390Hz 拉宽到 <b>629~4390Hz</b>；击球补 2 条（2639 / 3486Hz），与原有 2114Hz 合成三种音色；碰撞补 1 条（2425Hz，衰减比 0.0012 是全批最干净的）。进球同时按质心重排为<b>轻/中/重三档各 5 条</b>。<br>
+· <b>库边/击球的重复感用加大抖动弥补</b>：轮转只能消除"同一条连播"，消不掉"这几条本来就像一个音"。变体稀少的类别改用 <b>±7.5%</b> 速率抖动（普通是 ±3.5%）—— 音高上的微小差异比"换一条长度略不同的录音"更容易被察觉，而 ±7.5% 约合 1.25 个半音，仍在同一音级内，不会听成跑调。<br>
+· <b>补采带出的一串连带修复</b>：① <b>事件序号是跨脚本契约</b> —— 两个脚本检测参数不一致，同一条素材数出 53 vs 105 个事件，挑中的"第 N 个"在另一边其实是别的瞬态，会静悄悄切错素材，参数已提到 <code>lib.DETECT</code> 共用；② 增益限幅 0.75~1.30 放宽到 0.50~1.60（补采素材动态范围大得多，实测响度散布 ±3dB 明显不齐）；③ <code>success</code> 的目标值一直卡在增益下限才停在 0.171，放宽下限后它会掉到 0.114（轻 3.5dB），等于凭空改掉玩家已习惯的胜利音音量，已按实测值锁定；④ 起振延迟阈值<b>按类别区分</b>（落袋 60ms / 其余 30ms）—— 进球前 0.044s 是球滚向袋口的过程，保留更真实。<br>
+· <b>验证</b>：26/26 变体解码后无削顶、首尾已归零；真实浏览器里 26 条全部加载、力度分档正确、连播完整轮转、抖动 0.965~1.034、去抖生效、覆盖率 100%、无控制台报错。<br>
+<b>约束</b>：只改音效层，<b>不碰物理、渲染与 UI</b>。库边仍然只有 2 条 —— 已确认 Freesound 上<b>唯一的 CC0 库边素材就是现在这条</b>，外部补采这条路走不通。</span>
+      <span class="en"><b>v1.3.56 · Sound library 15 &rarr; 26 variants, adding the missing dull pot</b><br>
+&middot; <b>What was missing</b>: all seven v1.3.55 pot sounds had a spectral centroid of at least <b>1622 Hz</b> — every one of them crisp. The most common real-world case was absent: the ball rolling slowly to the jaw and dropping with almost no impact, a <b>dull</b> thud. A slow pot sounded exactly like a fast one. Cushion and cue had a different problem: a single source recording each, padded to two variants by trimming tight/full, both cut from the very same impact — rotation could not hide that they are one sound.<br>
+&middot; <b>Squeeze the existing takes first</b>: re-scanning all transients in the seven recordings in use yielded only <code>pot_mid #1</code> (707 Hz) as usable. <code>cue #1</code> has a T30 of 0.434 s — a reverb tail, not a strike. <code>pot_light #0/#2</code> are head-truncated and 19 dB down respectively. The cushion recording contains exactly one event. External sourcing was therefore unavoidable.<br>
+&middot; <b>Licences machine-verified before anything lands</b>: new <code>fs_search.py</code> (no API key — scrapes Freesound search pages and opens each detail page to read the licence) and <code>fs_fetch.py</code> (grabs the HQ preview mp3; original wav downloads require login and cannot be automated). Ten keyword sweeps, 57 candidates. <b>Every CC-BY-NC item was rejected</b>, including an entire snooker batch. Three recordings survived (2&times; CC0 + 1&times; CC-BY 4.0), each cross-checked against its live page before use.<br>
+&middot; <b>Screening is objective because listening is impossible here</b>: new <code>eval_candidates.py</code> measures three numbers — <b>signal-to-noise</b> (26 dB floor; accepted material sits at 48–57 dB), <b>tail ratio</b> (RMS of the last 10% over peak, 0.02 threshold; two candidates were dropped at 0.056 and 0.031), and <b>crest factor</b>.<br>
+&middot; <b>Crest factor is a hard physical ceiling, not a gain problem</b> (the key finding this time): one candidate cue strike has a crest factor of <b>22.2</b>, so with its peak pinned at the 0.93 ceiling its A-weighted RMS can only reach 0.042 — 7.7 dB below target. Raising gain merely clips it and peak protection pulls it straight back, so <b>no amount of gain gets there</b>. Not "not enough gain" — unusable material. The replacement has a crest of 9.7 and reaches 0.096.<br>
+&middot; <b>11 new variants, 15 &rarr; 26 / 138.7 KB</b>: pots are picked <b>log-uniformly by centroid</b> from 105 detected events in one recording, widening coverage from 1622–4390 Hz to <b>629–4390 Hz</b>; two cue strikes added (2639 / 3486 Hz) for three distinct timbres against the existing 2114 Hz; one collision added (2425 Hz, tail ratio 0.0012 — the cleanest of the batch). Pots are re-tiered into <b>light / medium / heavy, five each</b>.<br>
+&middot; <b>Repetition in sparse categories is masked with wider jitter</b>: rotation removes "the same clip twice in a row" but not "these clips all sound alike". Sparse categories now use <b>&plusmn;7.5%</b> rate jitter instead of &plusmn;3.5% — a small pitch difference is far more noticeable than "a slightly longer trim of the same take", and &plusmn;7.5% is about 1.25 semitones, still inside one pitch class, so it never reads as out of tune.<br>
+&middot; <b>Cascading fixes the new material forced</b>: (1) <b>event indices are a cross-script contract</b> — mismatched detection parameters counted 53 vs 105 events in the same file, so "the Nth event" meant different transients in each script and would silently slice the wrong audio; parameters now live in <code>lib.DETECT</code>. (2) Gain clamps widened from 0.75–1.30 to 0.50–1.60 (new material has far wider dynamics; measured loudness was scattering &plusmn;3 dB). (3) <code>success</code> had been resting on the gain floor at 0.171 all along; widening the floor would have dropped it to 0.114 (&minus;3.5 dB) — silently changing a volume players are used to — so it is now pinned to the measured value. (4) Attack-delay threshold is now <b>per category</b> (60 ms for pots, 30 ms otherwise) since the 0.044 s lead-in on a pot is the ball rolling toward the jaw.<br>
+&middot; <b>Verified</b>: 26/26 variants decode without clipping and are zeroed at both ends; in a real browser all 26 load, force tiers resolve correctly, rotation cycles fully, jitter stays within 0.965–1.034, de-bouncing works, coverage is 100%, no console errors.<br>
+<b>Constraints</b>: audio layer only — <b>no physics, rendering or UI changes</b>. Cushion still has just two variants: the <b>only CC0 "pool ball rail" on Freesound is the one already in use</b>, so external sourcing cannot help there.</span>
+    </div>
+  </details>
+  <details class="ver-item">
+    <summary class="ver-btn"><span class="ver-no"><span class="zh">v1.3.55 · 音效改用真实录音</span><span class="en">v1.3.55 · real recorded sound effects</span></span><span class="ver-title"><span class="zh">音效改用真实录音</span><span class="en">Real recorded sound effects</span></span></summary>
+    <div class="ver-body">
+      <span class="zh"><b>v1.3.55 · 进球 / 碰撞 / 击球 / 库边音效改用真实录音</b><br>
+· <b>病根</b>：v1.0.9 曾使用 Freesound 真实录音，但 v1.3.20 重构音效系统时改成了程序化合成。合成音只有 2 个二阶谐振器 —— 频谱上至多 2 个共振峰、衰减是单指数。实测 <b>dB 域衰减非线性仅 1.21dB，而真实录音达 3.14dB</b>（多模态各自按不同时间常数衰减，叠加后是自然的折线而非直线），共振峰数 14.0 对 17.5。这就是"电子味"的量化来源。<br>
+· <b>为什么不能简单换回原来的 ogg</b>：那批素材是<b>未剪辑的现场原始录音</b> —— <code>pot_mid.ogg</code> 前 0.87s 是死寂（进袋后要等快 1 秒才出声）、<code>pot_heavy.ogg</code> 7 秒长音里压着 5 次独立落袋中间夹长静音、<code>ballcollision.ogg</code> 前 0.74s 静音、<code>cushion.ogg</code> 前 0.38s 静音。这正是当年改用合成音的直接原因。<br>
+· <b>做法</b>：新增音效素材加工管线 <code>tools/sounds/</code>。不重新合成、不下载新素材，而是从现有 7 个原始录音里切出<b>单事件干净片段</b>（峰值保持包络做瞬态检测 + 按类别定制切片长度），再做 A 加权等响度对齐。<b>只裁剪与归一，不做任何音色合成，100% 保留原始录音</b>。<br>
+· <b>产出 15 个变体 / 82KB</b>：碰撞 3 条（同一条录音里的三次撞击，天然呈现闷 1142Hz / 中 2542Hz / 脆 4464Hz 三档）、库边 2 条、击球 2 条、落袋 7 条（从 <code>pot_heavy.ogg</code> 里挖出 5 次真实落袋）、成功提示 1 条。<br>
+· <b>播放策略</b>：选哪条录音用<b>绝对速度阈值</b>（碰撞 1.8/3.6 m/s、落袋 2.0/4.0 m/s），音量按力度连续变化；同档内多条录音<b>依次轮转</b>而非纯随机（避免"机关枪效应"）；每次播放再随机微调速率 ±3.5%、增益 ±8%。<br>
+· <b>修复</b>：变体轮转游标原按"类别"记录，跨力度档切换时 <code>indexOf</code> 返回 -1 导致轮转被重置，<b>实测混合力度下永远只用得到前两个重档变体，另外三个成了死素材</b>。改为按 (类别, 力度档) 分别记录，修复后 15/15 全部可命中。<br>
+· <b>清理</b>：<code>outcomeToSound</code> 里处理 <code>"Break"</code> 的分支从未执行过 （<code>OutcomeType</code> 枚举只有 Pot/Cushion/Collision/Hit/Proximity 五种），<code>genBreak()</code>、<code>genRoll()</code> 及全部合成函数一并移除，<code>sound.ts</code> 从 578 行精简到 395 行。<br>
+· <b>保留</b>：3D 空间音频（PannerNode HRTF）、室内混响、压缩限幅、落袋去抖动。混响湿度由 0.22 下调到 0.16（真实录音本身已带现场反射，再叠加会显得空旷）。<br>
+· <b>验证</b>：真实浏览器端到端跑通 —— 15 个变体全部加载成功、旧素材已无任何请求、力度分档正确、重落袋连播 10 次完整轮转 5 个变体、抖动 0.966~1.035、落袋去抖生效、无控制台报错。<br>
+<b>约束</b>：只改音效层，<b>不改动任何物理逻辑、碰撞参数、渲染与 UI</b>；素材全部为 CC0 / CC-BY，署名见"开源声明.md"。</span>
+      <span class="en"><b>v1.3.55 · Real recorded audio for pot / collision / cue / cushion</b><br>
+· <b>Root cause</b>: v1.0.9 used real Freesound recordings, but the v1.3.20 rewrite replaced them with procedural synthesis. A synthesized hit has only two 2-pole resonators — at most 2 spectral peaks and a single-exponential decay. Measured <b>decay non-linearity in the dB domain is just 1.21 dB versus 3.14 dB for real recordings</b>, and 14.0 peaks versus 17.5. That gap is the "electronic" character, quantified.<br>
+· <b>Why not just restore the old oggs</b>: they are <b>untrimmed raw field recordings</b> — <code>pot_mid.ogg</code> has 0.87 s of dead air before the sound, <code>pot_heavy.ogg</code> packs five separate drops into 7 s separated by silence, <code>ballcollision.ogg</code> has 0.74 s of leading silence, <code>cushion.ogg</code> 0.38 s. That is exactly why synthesis was chosen back then.<br>
+· <b>Approach</b>: a new asset pipeline, <code>tools/sounds/</code>. No re-synthesis, no new downloads — it cuts <b>single clean events</b> out of the existing seven recordings (peak-hold envelope transient detection plus per-category slice lengths) and applies A-weighted loudness alignment. <b>Trim and normalize only — zero timbre synthesis, 100% of the original recording is preserved.</b><br>
+· <b>Output: 15 variants / 82 KB</b> — 3 collisions (three hits inside one take, naturally dull 1142 Hz / mid 2542 Hz / crisp 4464 Hz), 2 cushions, 2 cue strikes, 7 pots (five real drops recovered from <code>pot_heavy.ogg</code>), 1 success chime.<br>
+· <b>Playback</b>: variant selection uses <b>absolute speed thresholds</b> (collision 1.8/3.6 m/s, pot 2.0/4.0 m/s) while volume still scales continuously with force; variants <b>rotate</b> rather than being picked at random (random repeats too often when a tier has few variants — the "machine gun" effect); each play is detuned &plusmn;3.5% and gain-jittered &plusmn;8%.<br>
+· <b>Fix</b>: the rotation cursor was keyed by category only, so switching force tiers made <code>indexOf</code> return -1 and reset rotation — <b>only the first two heavy-pot variants were ever used and the other three became dead assets</b>. Now keyed by (category, tier); all 15 are reachable.<br>
+· <b>Cleanup</b>: the <code>"Break"</code> branch in <code>outcomeToSound</code> was never executed (<code>OutcomeType</code> only has Pot/Cushion/Collision/Hit/Proximity), so <code>genBreak()</code>, <code>genRoll()</code> and every synthesis helper were removed; <code>sound.ts</code> shrank from 578 to 395 lines.<br>
+· <b>Kept</b>: 3D spatial audio (PannerNode HRTF), room reverb, limiter compression, pot de-bouncing. Reverb wet was lowered 0.22 → 0.16 since real recordings already carry room reflection and stacking both sounded hollow.<br>
+· <b>Verified</b> end-to-end in a real browser: all 15 variants load, the old assets are no longer requested, force tiers resolve correctly, ten consecutive heavy pots rotate through all five variants, jitter stays within 0.966–1.035, pot de-bouncing works, no console errors.<br>
+<b>Constraints</b>: audio layer only — <b>no physics, collision parameters, rendering or UI changes</b>. All assets are CC0 / CC-BY; credits are listed in the open-source notice.</span>
+    </div>
+  </details>
+  <details class="ver-item">
+    <summary class="ver-btn"><span class="ver-no"><span class="zh">v1.3.54 · 球杆预览改用游戏内真实球杆</span><span class="en">v1.3.54 · Cue preview uses the real in-game cue</span></span><span class="ver-title"><span class="zh">球杆预览改用游戏内真实球杆</span><span class="en">Cue preview now uses the real in-game cue</span></span></summary>
     <div class="ver-body">
       <span class="zh"><b>v1.3.54 · 球杆预览改用游戏内真实球杆模型</b><br>
 · <b>问题</b>：球杆主题的全屏 3D 预览此前自己维护了一套"简化模型"：总长 5.0、杆尾半径 0.28，<b>长径比只有 8.9:1</b>，配色也只用卡片上的两个色值铺色。而游戏内真实球杆（<code>src/view/cue.ts</code> + <code>cuemesh.ts</code>）是全长 <code>R*43</code>、杆尾半径 <code>(R*0.23)/0.5</code>，<b>长径比 46.7:1</b>（与真实球杆 147cm/3cm≈49:1 一致），杆身与杆尾各挂一张 256×1024 的程序化分区贴图。粗细差了 5 倍多，所以预览里那根"一眼就不是真实球杆"。<br>

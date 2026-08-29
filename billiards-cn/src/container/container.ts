@@ -293,13 +293,12 @@ try {
       }
     }
 
-    if (this.rules.rulename === "eightball" && session.p1type !== 0) {
-      const typeLabel = session.p1type === 1 ? "solids" : "stripes"
-      const mySlot = session.playerIndex === 0 ? "p1Name" : "p2Name"
-      if (orderedNames[mySlot]) {
-        orderedNames[mySlot] = `${orderedNames[mySlot]}(${typeLabel})`
-      }
-    }
+    // v1.3.57：删除玩家名旁的 (solids)/(stripes) 花色标注。
+    // v1.2.x 曾在八球分完花色后往自己名字后追加硬编码英文标注，形如
+    // 「玩家(stripes)」——一是中英文混排突兀，二是 HUD 左上角的进球托盘
+    // 已经直观显示了本方分到的球，这行标注纯属冗余。电脑名称不受影响
+    // （标注只加在 orderedNames 的玩家槽位上，电脑名本来就没挂过）。
+
     const hideScore = this.rules.hideScoreHud?.() ?? false
     const isSagu = this.rules.rulename === "sagu"
     const p1Star = isSagu && orderedScores.p1 === p1Target - 1

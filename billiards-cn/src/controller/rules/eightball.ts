@@ -315,7 +315,13 @@ export class EightBall implements Rules {
     this.container.sendEvent(new WatchEvent(table.serialise()))
 
     // 合法打进 8 号球（清完本组后）→ 结束对局。此时 8 号球已计入得分，
-    // 比分栏显示的进球数 = 实际进袋球数（含 8 号），不再被限制为 7。
+    // 比分栏显示的进球数 = 实际进袋数（含 8 号），不再被限制为 7。
+    // v1.3.57 注：能走到这里的必然是玩家自己出的杆（电脑出杆走
+    // WatchShot → BEGIN → BotEventHandler.handleGameEnd，不经 rules.update），
+    // 所以胜负恒为 true 是正确结果，而非判定逻辑正确——落袋游戏只有一个
+    // 母球，`table.cueball === balls[playerIndex]` 在 playerIndex=0 时恒真；
+    // 别把电脑的胜负也接到这个判定上（v1.3.56 及之前 boteventhandler 正是
+    // 照搬了这行，导致电脑赢也显示「你赢了」）。
     if (this.isEndOfGame(outcome)) {
       const myCueBall = table.balls[session.playerIndex]
       const amIWinner = table.cueball === myCueBall

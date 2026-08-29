@@ -272,9 +272,18 @@ export class BotEventHandler {
       this.container.rules.rulename === "eightball" ||
       this.container.rules.rulename === "nineball"
     ) {
-      // v1.2.15：落袋游戏自然结束时，isEndOfGame 触发的一方获胜。
-      // 当前行动方由 cueball.id 判断（玩家=0，电脑=1）。
-      amIWinner = this.container.table.cueball.id === session.playerIndex
+      // v1.3.57 修复「电脑赢了却显示玩家胜利」。
+      // 旧判定 amIWinner = table.cueball.id === session.playerIndex 是从
+      // 开伦类规则（threecushion/sagu：双方各有一个母球，母球 id=玩家序号）
+      // 照搬来的；但八球/九球全桌只有一个母球（balls[0]，id=0），单机玩家
+      // playerIndex 又恒为 0，于是 0 === 0 恒真 —— 无论这杆是谁出的，
+      // 电脑合法打进黑八/九号获胜时也弹「你赢了」。
+      // 能走到这个无参分支的只有一种情形：bot 出杆后球停（BEGIN 事件）
+      // 触发 isEndOfGame 自然结束，出杆方是电脑 → 玩家必输。
+      // （玩家出杆的自然结束走 PlayShot → rules.update() → handlePot，
+      // 不经过这里；「电脑犯规送黑八判玩家赢」「玩家犯规判负」均显式
+      // 传 forcedAmIWinner=true/false，走上面的分支，不受影响。）
+      amIWinner = false
     } else {
       const { p1, p2 } = session.orderedScoresForHud()
       amIWinner = session.playerIndex === 0 ? p1 >= p2 : p2 >= p1

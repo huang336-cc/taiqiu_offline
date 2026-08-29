@@ -136,6 +136,10 @@ export class NineBall implements Rules {
     Session.getInstance().addMyScore(pots)
 
     this.container.sound.playSuccess(table.inPockets())
+    // v1.3.57 注：走到这里的必然是玩家自己出的杆（电脑出杆不经 rules.update，
+    // 见 boteventhandler.handleGameEnd 的注释）。落袋游戏只有一个母球，
+    // table.cueball === balls[playerIndex] 在 playerIndex=0 时恒真，
+    // 碰巧是正确结果——不要把电脑的胜负接到这个判定上。
     if (this.isEndOfGame(outcome)) {
       const session = Session.getInstance()
       const myCueBall = this.container.table.balls[session.playerIndex]

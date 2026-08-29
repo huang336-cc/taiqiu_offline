@@ -2,23 +2,149 @@ import { AudioListener, AudioLoader, Vector3 } from "three"
 import { Settings } from "../utils/settings"
 
 /**
- * 音效系统（v1.3.20 重构）。
+ * 音效系统（v1.3.56）。
  *
- * 设计要点：
- * - 采用原生 Web Audio API 实现「3D 空间音频 + 多音效并发」：每个音效在播放时
- *   新建 BufferSource + PannerNode(HRTF) + Gain 节点，互不阻塞；声源位置取自发声球
- *   的桌面坐标（x, 0, y），监听者固定在球桌原点朝上，不同位置出声有真实左右/前后差异。
- * - 全套 6 类台球音效均由程序化合成生成（零外部依赖、零版权风险、ogg 同等听感），
- *   并预生成 AudioBuffer 缓存复用：
- *      cueSoft / cueMid / cueHard（球杆击球 3 档力度）
- *      collision（球球碰撞）、cushion（库边撞击）、pot（落袋）
- *      roll（球滚动）、break（开球，重击球堆）
- * - 「真实 CC0 素材替换接口」：loadExternalOgg(id, url) 可加载外部 ogg 并覆盖对应音效；
- *   后续拿到 Freesound/OpenGameArt 的 CC0 文件后，调用此方法即可一键替换合成音，
- *   无需改动播放逻辑。
- * - 不改动任何 UI 布局与杆法物理逻辑；保留原公共接口（processOutcomes /
- *   playSuccess / lastOutcomeTime / addCameraToListener）以兼容调用方。
+ * 音源：dist/sfx/ 下的 **Freesound 真实录音**，不再使用程序化合成。
+ *
+ * 为什么换回来
+ * ------------
+ * v1.0.9 曾用真实录音，但那些素材是「未剪辑的现场原始录音」，直接播有明显
+ * 缺陷（pot_mid.ogg 前 0.87s 死寂、pot_heavy.ogg 7 秒长音里压了 5 次落袋），
+ * 于是 v1.3.20 改成了程序化合成。合成音虽然干净，但只有 2 个二阶谐振器，
+ * 频谱上至多 2 个共振峰、衰减是单指数——实测 dB 域衰减非线性仅 1.21dB，
+ * 而真实录音达到 3.14dB（多模态叠加的自然折线），听感就是「电子味」。
+ *
+ * v1.3.55 的做法：不是简单换回原始 ogg，而是先由 tools/sounds/build.py
+ * 把原始录音切成「单事件干净片段」并做 A 加权等响度对齐，再由本文件播放。
+ * 既保留真实录音的全部频谱细节，又没有前导静音和拖尾。
+ *
+ * 保留 v1.3.20 的架构成果
+ * ----------------------
+ * - 3D 空间音频：每次播放新建 BufferSource + PannerNode(HRTF)，声源位置取自发声球
+ * - 室内混响（反馈延迟 + 低通）、masterGain + compressor 限幅
+ * - 力度连续映射（音量随速度平滑变化，不再是固定单一缓冲）
+ * - 落袋去抖动（同一球 250ms 内不重复发声）
+ *
+ * v1.3.20 保留至今
+ * --------------
+ * - 多变体轮转：同类事件有多条真实录音，依次轮换，消除「机关枪效应」
+ * - 力度分档：按实测频谱质心把变体分成轻/中/重档（见 LIB 注释）
+ * - 播放抖动：每条录音播放时随机微调速率与增益，模拟真实世界的不可重复性
+ *
+ * v1.3.56 新增
+ * ------------
+ * - 变体从 15 条扩充到 26 条，其中落袋从 7 条到 15 条
+ * - 补采的落袋素材质心低至 629Hz，补上了原先只有 1622Hz 以上、「没有闷响
+ *   落袋」的空白；15 条落袋按质心均分三档，每档 5 条轮转
+ * - 变体稀少的类别（cushion 仅 2 条且同源于同一次撞击）单独加大播放抖动
+ * - 挑素材时新增峰均比判据：峰均比过高的素材，其响度上限由峰值锁死，
+ *   拉增益只会削波然后被峰值保护原样拉回，这类素材直接弃用（见 build.py）
  */
+
+/** 音效库中的一个真实录音变体 */
+interface Variant {
+  /** 相对 index.html 的路径 */
+  file: string
+  /** 力度档：0 轻 / 1 中 / 2 重。同档内多个变体轮转播放 */
+  tier: number
+}
+
+/**
+ * 真实录音音效库（由 tools/sounds/build.py 生成到 dist/sfx/）。
+ *
+ * tier 不是拍脑袋定的，而是按素材实测的**频谱质心**划分。质心高 = 高频丰富
+ * = 听感"脆"，对应球速快、撞击猛的那一次；质心低 = 闷，对应轻轻滚进去。
+ * 每行注释里的 Hz 就是该变体的实测质心，改素材后应重新跑 build.py 核对。
+ *
+ *   collision  闷 1142Hz→轻 / 2425、2542Hz→中 / 脆 4464Hz→重
+ *   pot        15 条按质心 629→4390Hz 均分成三档，每档 5 条轮转
+ *  cue/cushion 只有一次击球/撞击的素材，靠多条补采 + 加大抖动弥补
+ *
+ * v1.3.56 补采：v1.3.55 的 pot 变体质心全在 1622Hz 以上，缺"闷"的落袋
+ * （球慢慢滚进袋、没有猛烈撞击的那种）。fs763601 一条录音切出 105 个事件，
+ * 按质心对数均匀取 8 条，把落袋音色覆盖拉到 629~3518Hz。
+ */
+const LIB: { [cat: string]: Variant[] } = {
+  collision: [
+    { file: "sfx/collision_soft.ogg", tier: 0 }, // 1142Hz
+    { file: "sfx/collision_clack.ogg", tier: 1 }, // 2425Hz
+    { file: "sfx/collision_mid.ogg", tier: 1 }, // 2542Hz
+    { file: "sfx/collision_hard.ogg", tier: 2 }, // 4464Hz
+  ],
+  cushion: [
+    { file: "sfx/cushion_tight.ogg", tier: 1 }, // 563Hz
+    { file: "sfx/cushion_full.ogg", tier: 1 }, // 563Hz（同源，更长的裁剪）
+  ],
+  cue: [
+    { file: "sfx/cue_tight.ogg", tier: 1 }, // 2114Hz
+    { file: "sfx/cue_full.ogg", tier: 1 }, // 2114Hz（同源，更长的裁剪）
+    { file: "sfx/cue_s1.ogg", tier: 1 }, // 2639Hz
+    { file: "sfx/cue_s2.ogg", tier: 1 }, // 3486Hz
+  ],
+  pot: [
+    // 轻档（闷 629~1562Hz）：球慢慢滚进袋，几乎没有撞击，高频很少
+    { file: "sfx/pot_sink_1.ogg", tier: 0 }, //  629Hz
+    { file: "sfx/pot_sink_2.ogg", tier: 0 }, //  868Hz
+    { file: "sfx/pot_sink_3.ogg", tier: 0 }, // 1022Hz
+    { file: "sfx/pot_sink_4.ogg", tier: 0 }, // 1312Hz
+    { file: "sfx/pot_sink_5.ogg", tier: 0 }, // 1562Hz
+    // 中档（1622~2838Hz）
+    { file: "sfx/pot_light.ogg", tier: 1 }, // 1622Hz
+    { file: "sfx/pot_sink_6.ogg", tier: 1 }, // 2001Hz
+    { file: "sfx/pot_mid.ogg", tier: 1 }, // 2370Hz
+    { file: "sfx/pot_sink_7.ogg", tier: 1 }, // 2643Hz
+    { file: "sfx/pot_heavy_4.ogg", tier: 1 }, // 2838Hz
+    // 重档（脆 3518~4390Hz）：球高速撞上袋口，撞击泛音丰富
+    { file: "sfx/pot_sink_8.ogg", tier: 2 }, // 3518Hz
+    { file: "sfx/pot_heavy_3.ogg", tier: 2 }, // 3558Hz
+    { file: "sfx/pot_heavy_2.ogg", tier: 2 }, // 3760Hz
+    { file: "sfx/pot_heavy_5.ogg", tier: 2 }, // 4157Hz
+    { file: "sfx/pot_heavy_1.ogg", tier: 2 }, // 4390Hz
+  ],
+  success: [{ file: "sfx/success.ogg", tier: 1 }],
+}
+
+/**
+ * 各事件的参考速度：把 incidentSpeed 归一化到 [0,1]，用于**音量**的连续映射。
+ * 沿用 v1.3.20 的实测标定：球速实际量级约 0~5.4（maxPower=160R≈5.24）。
+ * 落袋时球已减速，区间更小，故参考值另取。
+ */
+const REF_SPEED: { [cat: string]: number } = {
+  Hit: 5.2,
+  Collision: 5,
+  Cushion: 6,
+  Pot: 3.2,
+}
+
+/**
+ * 变体分档阈值（m/s，绝对值）。音量用上面的归一化值连续变化，
+ * 但**选哪条录音**必须用绝对阈值。
+ *
+ * 为什么不能复用归一化值：落袋速度实测约 0.2~4，若按 refSpeed 归一化后
+ * 再切三档，2.0 以上的落袋就全落进「重档」，轻/中两档几乎永不使用
+ * （实测 speed=2 就选中了 pot_heavy）。阈值取自 v1.0.9 标注的经验区间：
+ * 轻推 1~2、正常 2~4、重击 4 以上。碰撞按球速区间 0~5.4 三等分。
+ */
+const TIER_SPEED: { [cat: string]: [number, number] } = {
+  Collision: [1.8, 3.6],
+  Pot: [2.0, 4.0],
+}
+
+/** 播放抖动的默认幅度：速率 ±3.5%、增益 ±8% */
+const RATE_JITTER = 0.035
+const GAIN_JITTER = 0.08
+
+/**
+ * 变体稀少的类别用更大的速率抖动。
+ *
+ * 为什么：轮转只能消除"同一条连播"的重复感，消不掉"这几条本来就长得像"的
+ * 重复感。cushion 只有 2 条，而且两条同源于同一次撞击、只是裁剪长短不同，
+ * 光靠轮转听起来还是同一个音。音高上的微小差异比"换一条长度略不同的录音"
+ * 更容易被察觉，所以给它们 ±7.5% 而不是 ±3.5%。
+ *
+ * ±7.5% 约合 1.25 个半音，仍在同一音级内，不会听成"跑调"。
+ */
+const RATE_JITTER_SPARSE = 0.075
 
 export class Sound {
   listener: AudioListener
@@ -43,17 +169,10 @@ export class Sound {
   /** 空间监听者（PannerNode 共享的 listener） */
   private listener3d?: AudioListener
 
-  /**
-   * 力度量化档数（用于「按需合成 + 缓存」）。
-   * 既保证「力度→音色/响度」连续过渡，又避免每帧都重新合成造成 CPU 抖动。
-   * 档位之间增量足够小，人耳听不出跳变。
-   */
-  private static readonly INTENSITY_STEPS = 14
-
-  /** 合成缓存：key(id#step) → buffer。按需合成，按力度档命中。 */
-  private buffers: Map<string, AudioBuffer> = new Map()
-  /** 外部 CC0 ogg 覆盖：id → buffer（优先于合成） */
-  private external: Map<string, AudioBuffer> = new Map()
+  /** 已加载的变体：file → AudioBuffer（边加载边可用，不等全部就绪） */
+  private buffers = new Map<string, AudioBuffer>()
+  /** 变体轮转游标：类别 → 上次使用的变体索引 */
+  private cursor = new Map<string, number>()
 
   loadAssets: boolean
 
@@ -67,63 +186,66 @@ export class Sound {
     this.actx = this.listener.context as unknown as AudioContext
     this.listener3d = this.actx.listener as unknown as AudioListener
     this.setupMasterGain()
+    this.loadAll()
   }
 
   /**
-   * 把「速度」归一化到 [0,1] 的力度系数，再映射到 [0, INTENSITY_STEPS-1] 量化档。
-   * 不同事件用不同参考速度（击球更猛、球碰更脆），让各音效的力度区间贴合实际。
+   * 预加载全部变体。
+   *
+   * 不做「全部就绪才可用」的闸门：每个文件加载完即可播放。开球往往发生在
+   * 资源加载完成之前，若等待全集就绪，开局那一杆会静音。
    */
-  private intensityStep(speed: number, refSpeed: number): number {
-    const k = Math.max(0, Math.min(1, speed / refSpeed))
-    return Math.max(0, Math.min(Sound.INTENSITY_STEPS - 1, Math.round(k * (Sound.INTENSITY_STEPS - 1))))
+  private loadAll() {
+    const seen: string[] = []
+    Object.keys(LIB).forEach((cat) => {
+      LIB[cat].forEach((v) => {
+        if (seen.indexOf(v.file) < 0) seen.push(v.file)
+      })
+    })
+    seen.forEach((file) => {
+      this.audioLoader.load(
+        file,
+        (buf: any) => {
+          if (buf) this.buffers.set(file, buf as AudioBuffer)
+        },
+        () => {},
+        () => {}
+      )
+    })
   }
 
-  /** 力度系数（连续 0..1），供合成函数塑形音色/响度 */
-  private intensityK(step: number): number {
-    return step / (Sound.INTENSITY_STEPS - 1)
-  }
-
-  /** 取/建一个按力度合成的音效 buffer（带轻量缓存） */
-  private synth(
-    id: string,
-    step: number,
-    gen: (n: number, sr: number, k: number) => Float32Array
-  ): AudioBuffer | undefined {
-    const key = id + "#" + step
-    const hit = this.buffers.get(key)
-    if (hit) return hit
-    const sr = this.actx.sampleRate
-    const n = Math.floor(0.9 * sr)
-    const data = gen(n, sr, this.intensityK(step))
-    const buf = this.actx.createBuffer(1, n, sr)
-    buf.copyToChannel(data, 0)
-    this.buffers.set(key, buf)
-    return buf
-  }
-
-  /** 真实 CC0 素材覆盖接口：加载外部 ogg 并替换对应音效（id 见 prebuildSynthesized）。 */
-  loadExternalOgg(id: string, url: string) {
-    if (!this.loadAssets) return
-    this.audioLoader.load(
-      url,
-      (buf: any) => {
-        const ab = this.decodeToWebAudio(buf)
-        if (ab) this.external.set(id, ab)
-      },
-      () => {},
-      () => {}
-    )
-  }
-
-  /** three 的 AudioBuffer → 原生 AudioBuffer（若已是原生则直用） */
-  private decodeToWebAudio(buf: any): AudioBuffer | null {
-    if (buf instanceof AudioBuffer) return buf
-    try {
-      // three 的 AudioBuffer 实为原生 AudioBuffer（AudioLoader 直接返回）
-      return buf as AudioBuffer
-    } catch {
-      return null
+  /**
+   * 挑一个变体：优先在目标力度档内轮转，档内尚未加载则退回整类。
+   *
+   * 用轮转而非纯随机：纯随机在变体少时（如 cushion 只有 2 个）经常连续抽到
+   * 同一个，听上去就是「机关枪效应」；轮转保证相邻两次一定不同。
+   */
+  private pick(cat: string, tier: number): AudioBuffer | undefined {
+    const list = LIB[cat]
+    if (!list) return undefined
+    const inTier: number[] = []
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].tier === tier) inTier.push(i)
     }
+    const pool = inTier.length
+      ? inTier
+      : list.map((_, i) => i)
+    // 游标按 (类别, 力度档) 分别记录，不能只按类别。
+    // 踩过的坑：只用 cat 作 key 时，轻档选中「绝对索引 0」之后再切到重档，
+    // 0 不在重档 pool 里 → indexOf 返回 -1 → 起点被算成 0 → 每次都从头开始。
+    // 实测混合力度下永远只用得到前两个重档变体，其余三个成了死素材。
+    const key = cat + "#" + tier
+    const last = this.cursor.get(key)
+    const start = last === undefined ? 0 : pool.indexOf(last) + 1
+    for (let j = 0; j < pool.length; j++) {
+      const idx = pool[(start + j) % pool.length]
+      const buf = this.buffers.get(list[idx].file)
+      if (buf) {
+        this.cursor.set(key, idx)
+        return buf
+      }
+    }
+    return undefined
   }
 
   private setupMasterGain() {
@@ -138,12 +260,13 @@ export class Sound {
       this.masterGain.connect(this.compressor)
       this.compressor.connect(ctx.destination)
 
-      // 室内混响：短延迟反馈 + 低通，模拟球房的木头/台呢空间反射，
-      // 让合成音不再「干瘪贴脸」，听感更接近真实台球桌。
+      // 室内混响：短延迟反馈 + 低通，模拟球房的木头/台呢空间反射。
+      // 真实录音本身已带现场反射，这里的 wet 比合成音时期调低（0.22→0.16），
+      // 避免两次空间感叠加而显得「空旷」。
       this.reverbInput = ctx.createGain()
       this.reverbInput.gain.value = 1.0
       this.reverbWet = ctx.createGain()
-      this.reverbWet.gain.value = 0.22
+      this.reverbWet.gain.value = 0.16
       const delay = ctx.createDelay(1.0)
       delay.delayTime.value = 0.045 // ~45ms 早期反射
       const fb = ctx.createGain()
@@ -168,11 +291,6 @@ export class Sound {
     this.compressor.ratio.value = 6
     this.compressor.attack.value = 0.003
     this.compressor.release.value = 0.12
-  }
-
-  /** 把一段已生成的 buffer 同时送入干声（主增益）与湿声（混响）链 */
-  private sendToReverb(node: AudioNode) {
-    if (this.reverbInput) node.connect(this.reverbInput)
   }
 
   addCameraToListener(camera) {
@@ -211,10 +329,23 @@ export class Sound {
   }
 
   /**
-   * 3D 空间播放：新建 BufferSource + PannerNode(HRTF) + Gain，连接到主增益链。
+   * 3D 空间播放：新建 BufferSource + PannerNode(HRTF) + Gain，接到主增益链。
    * 每次播放都新建节点 → 天然支持多音效并发；声源位置取自发声球桌面坐标 (x, 0, y)。
+   *
+   * jitter=true 时随机微调速率与增益。真实世界里同一事件不可能两次完全一样，
+   * 这点微小差异是「录音感」的关键；但成功提示音需要稳定可辨，故关闭。
+   *
+   * rateJitter 可覆盖默认抖动幅度，供变体稀少的类别加大抖动（见该常量注释）。
    */
-  private play3D(buffer: AudioBuffer, x: number, y: number, volume: number) {
+  private play3D(
+    buffer: AudioBuffer,
+    x: number,
+    y: number,
+    volume: number,
+    rate = 1,
+    jitter = true,
+    rateJitter = RATE_JITTER
+  ) {
     if (!this.loadAssets || !this.masterGain || !buffer) return
     const ctx = this.actx
     if (ctx.state === "suspended") {
@@ -223,9 +354,15 @@ export class Sound {
     }
     const settings = Settings.get()
     if (!settings.sound || settings.volume <= 0) return
-    const v = Math.max(0, Math.min(1, volume * settings.volume))
+    let v = Math.max(0, Math.min(1, volume * settings.volume))
+    let r = rate
+    if (jitter) {
+      r *= 1 + (Math.random() * 2 - 1) * rateJitter
+      v *= 1 + (Math.random() * 2 - 1) * GAIN_JITTER
+    }
     const src = ctx.createBufferSource()
     src.buffer = buffer
+    src.playbackRate.value = Math.max(0.25, Math.min(4, r))
     const panner = ctx.createPanner()
     panner.panningModel = "HRTF"
     panner.distanceModel = "inverse"
@@ -241,7 +378,7 @@ export class Sound {
       ;(panner as any).setPosition(x, 0, y)
     }
     const g = ctx.createGain()
-    g.gain.value = v
+    g.gain.value = Math.max(0, v)
     src.connect(panner)
     panner.connect(g)
     g.connect(this.masterGain)
@@ -250,32 +387,29 @@ export class Sound {
     src.start()
   }
 
-  /** 取音效 buffer：优先外部 CC0 覆盖，否则合成缓存 */
-  private bufferOf(id: string): AudioBuffer | undefined {
-    return this.external.get(id) ?? this.buffers.get(id)
+  /** 把速度归一化到 [0,1] 的力度系数 */
+  private k(speed: number, cat: string): number {
+    const ref = REF_SPEED[cat] ?? 5
+    return Math.max(0, Math.min(1, (speed ?? 0) / ref))
   }
 
-  /** 落袋：用按力度合成 pot 音（重击落袋更响更脆），按声源位置 3D 播放 */
-  private pot(x: number, y: number, speed: number) {
-    // 落袋速度通常较慢（约 0.2~3），旧 refSpeed=55 使力度映射永远落在最软档。
-    // 改为 2.6，让轻重落袋在音色/响度上分明可辨。
-    const step = this.intensityStep(speed, 2.6)
-    const buf = this.synth("pot", step, (n, sr, k) => this.genPot(n, sr, k))
-    if (!buf) return
-    // 响度随力度连续：轻碰 0.5 → 重撞 1.0
-    this.play3D(buf, x, y, 0.5 + this.intensityK(step) * 0.5)
+  /** 速度 → 变体力度档（0 轻 / 1 中 / 2 重），用绝对阈值（见 TIER_SPEED） */
+  private tierOf(cat: string, speed: number): number {
+    const t = TIER_SPEED[cat]
+    if (!t) return 1
+    return speed < t[0] ? 0 : speed < t[1] ? 1 : 2
   }
 
   outcomeToSound(outcome) {
     const pos = outcome.ballA?.pos
     const x = pos ? pos.x : 0
     const y = pos ? pos.y : 0
+    const speed = outcome.incidentSpeed ?? 0
+
     if (outcome.type === "Collision") {
-      // 球速实际量级约 0~5.4（maxPower=160R≈5.24）；旧 refSpeed=60 使力度映射
-      // 永远落在最软档，碰撞声听不出力度差异且偏软。改为 5，让轻碰≈低档、大力对撞≈高档。
-      const step = this.intensityStep(outcome.incidentSpeed, 5)
-      const buf = this.synth("collision", step, (n, sr, k) => this.genCollision(n, sr, k))
-      if (buf) this.play3D(buf, x, y, 0.35 + this.intensityK(step) * 0.65)
+      const kk = this.k(speed, "Collision")
+      const buf = this.pick("collision", this.tierOf("Collision", speed))
+      if (buf) this.play3D(buf, x, y, 0.35 + kk * 0.65)
     }
     if (outcome.type === "Pot") {
       const ballId = outcome.ballA?.id
@@ -289,30 +423,24 @@ export class Sound {
         this.pottedSoundAt.set(ballId, now)
       }
       this.lastAnyPotAt = now
-      this.pot(x, y, outcome.incidentSpeed)
+      const kk = this.k(speed, "Pot")
+      const buf = this.pick("pot", this.tierOf("Pot", speed))
+      if (buf) this.play3D(buf, x, y, 0.5 + kk * 0.5)
     }
     if (outcome.type === "Cushion") {
-      // 碰库声音此前是构建时固定的单一缓冲，音色不随力度变化、音量也被
-      // incidentSpeed/40 早早饱和，导致「碰库声音没按碰撞力度调整」。
-      // 现改为按力度合成：轻碰沉闷柔软、重撞明亮短促；refSpeed=6 覆盖玩法区间。
-      const step = this.intensityStep(outcome.incidentSpeed, 6)
-      const buf = this.synth("cushion", step, (n, sr, kk) => this.genCushion(n, sr, kk))
-      if (buf) this.play3D(buf, x, y, 0.3 + this.intensityK(step) * 0.7)
+      const kk = this.k(speed, "Cushion")
+      const buf = this.pick("cushion", 1)
+      // cushion 只有 2 条且同源于同一次撞击，用加大抖动弥补变体不足
+      if (buf) this.play3D(buf, x, y, 0.3 + kk * 0.7, 1, true, RATE_JITTER_SPARSE)
     }
     if (outcome.type === "Hit") {
-      // 击球：按力度连续合成（取消三档硬分档），音色+响度随速度平滑变化。
-      // 球速实际量级约 0~5.4，旧 refSpeed=70 使力度映射永远落在最软档；改为 5.2。
-      const step = this.intensityStep(outcome.incidentSpeed, 5.2)
-      const k = this.intensityK(step)
-      const buf = this.synth("cue", step, (n, sr, kk) => this.genCue(n, sr, kk))
-      if (buf) this.play3D(buf, x, y, 0.45 + k * 0.55)
+      const kk = this.k(speed, "Hit")
+      const buf = this.pick("cue", 1)
+      // cue 的 tight/full 同源，实际只有 3 种音色，同样加大抖动
+      if (buf) this.play3D(buf, x, y, 0.45 + kk * 0.55, 1, true, RATE_JITTER_SPARSE)
     }
-    if (outcome.type === "Break") {
-      // 开球：最大力度重击球堆，音色取最高档
-      const step = Sound.INTENSITY_STEPS - 1
-      const buf = this.synth("break", step, (n, sr, kk) => this.genBreak(n, sr, kk))
-      if (buf) this.play3D(buf, x, y, 1.0)
-    }
+    // 注：v1.3.20 曾在此处理 "Break"，但 OutcomeType 枚举中并无该类型
+    // （只有 Pot/Cushion/Collision/Hit/Proximity），那段代码从未执行过，已移除。
   }
 
   processOutcomes(outcomes) {
@@ -336,242 +464,13 @@ export class Sound {
     }
   }
 
+  /**
+   * 成功提示音：三音上行琶音（1068→1250→1432Hz）。
+   * pitch 由调用方传入（连击数相关），用轻微变调表现「连得越多越上扬」。
+   */
   playSuccess(pitch = 0) {
-    // 成功：用中等力度击球音色做一段提示（仍 3D，但放原点）
-    const buf = this.synth("cue", Math.floor(Sound.INTENSITY_STEPS / 2), (n, sr, k) => this.genCue(n, sr, k))
+    const buf = this.buffers.get("sfx/success.ogg")
     if (!buf) return
-    this.play3D(buf, 0, 0, 0.5)
-  }
-
-  /* ---------------- 程序化合成（生成单声道 Float32Array） ----------------
-   * 设计目标：用「噪声瞬态 + 带通共振体 + 多谐波 + 空间混响」重建真实台球声，
-   * 而非单纯正弦波。关键经验：
-   *  - 真实台球/皮头/木腔的"发声"是宽频瞬态（噪声），再由物体固有频率（共振）染色，
-   *    衰减极快（几十毫秒）。所以每段都用 exp 衰减包络 + 带通滤波塑造音色。
-   *  - 球-球碰撞 ≈ 酚醛树脂球的清脆"咔"（高频 2-4kHz 共振，~25ms 衰减）；
-   *  - 球杆击球 = 皮头脆响(高频噪声瞬态) + 球体低频"咚"(150-250Hz) + 木腔余响；
-   *  - 库边 = 橡胶"噗"（中低频 200-500Hz，带通略窄、衰减略长）；
-   *  - 落袋 = 撞袋口(中频噪声) + 低频"咚"滚落(80-160Hz，长衰减)；
-   *  所有音经 masterGain 后还会过一遍室内混响（见 setupMasterGain）。
-   */
-
-  /** 单极点带通共振：把白噪声塑成某固有频率的"撞击体"音色 */
-  private resonate(
-    src: Float32Array,
-    sr: number,
-    freq: number,
-    q: number
-  ): Float32Array {
-    const out = new Float32Array(src.length)
-    const w0 = (2 * Math.PI * freq) / sr
-    const r = Math.exp(-w0 / (2 * q)) // 衰减值
-    const cosw = Math.cos(w0)
-    const sinw = Math.sin(w0)
-    // 二阶谐振器状态
-    let x1 = 0, x2 = 0, y1 = 0, y2 = 0
-    const a0 = 1
-    const a1 = -2 * r * cosw
-    const a2 = r * r
-    // 归一化增益（让不同 freq/q 输出量级接近）
-    const b0 = (1 - r) * Math.sqrt(1 - 1 / (4 * q * q))
-    for (let i = 0; i < src.length; i++) {
-      const x0 = src[i]
-      const y0 = b0 * (x0 - x2) - a1 * y1 - a2 * y2
-      out[i] = y0
-      x2 = x1; x1 = x0
-      y2 = y1; y1 = y0
-    }
-    return out
-  }
-
-  /** 生成一段指数衰减的噪声瞬态（台球声的主体） */
-  private noiseBurst(n: number, sr: number, tau: number): Float32Array {
-    const out = new Float32Array(n)
-    for (let i = 0; i < n; i++) {
-      const t = i / sr
-      out[i] = (Math.random() * 2 - 1) * Math.exp(-t / tau)
-    }
-    return out
-  }
-
-  /**
-   * 球杆击球：皮头脆响(高频噪声瞬态) + 球体低频"咚"(木腔共鸣) + 轻微中频木响。
-   * 力度系数 k∈[0,1] 连续塑形：
-   *  - 越重(k↑)：皮头脆响频率更高更亮、整体衰减更短（更"硬"更"啪"）、瞬态占比更大；
-   *  - 越轻(k↓)：频率下移更闷、衰减更长（更"软"）。
-   */
-  private genCue(n: number, sr: number, k: number): Float32Array {
-    const out = new Float32Array(n)
-    // 皮头脆响频率：轻 2.6k → 重 3.8k（更亮）
-    const tipFreq = 2600 + k * 1200
-    // 整体衰减时长：轻 0.9s（软、拖尾长）→ 重 0.32s（硬、短促）
-    const decay = 0.32 + (1 - k) * 0.58
-    const tip = this.resonate(
-      this.noiseBurst(n, sr, decay * 0.05),
-      sr,
-      tipFreq,
-      6
-    )
-    for (let i = 0; i < n; i++) out[i] += tip[i] * (0.7 + k * 0.4)
-    // 球体低频"咚"：轻 200Hz（闷）→ 重 150Hz（低沉），衰减略长
-    const fLow = 200 - k * 50
-    const low = this.resonate(
-      this.noiseBurst(n, sr, decay * 0.5),
-      sr,
-      Math.max(90, fLow),
-      4
-    )
-    for (let i = 0; i < n; i++) out[i] += low[i] * (0.45 + (1 - k) * 0.2)
-    // 中频木响 ~520Hz，给一点"实体感"（重击略增强）
-    const mid = this.resonate(
-      this.noiseBurst(n, sr, decay * 0.18),
-      sr,
-      520,
-      5
-    )
-    for (let i = 0; i < n; i++) out[i] += mid[i] * 0.3
-    // 力度包络总衰减
-    for (let i = 0; i < n; i++) {
-      const t = i / sr
-      out[i] *= Math.exp(-t / decay)
-    }
-    return this.normalize(out)
-  }
-
-  /**
-   * 球-球碰撞：酚醛树脂球的清脆"咔"。力度 k 连续塑形：
-   *  - 重撞(k↑)：主体频率上移更亮(2.6k→3.4k)、高频"叮"更突出、衰减更短（更硬脆）；
-   *  - 轻碰(k↓)：频率下移更闷(2.6k→2.0k)、衰减略长。
-   */
-  private genCollision(n: number, sr: number, k: number): Float32Array {
-    const out = new Float32Array(n)
-    const bodyFreq = 2000 + k * 1400
-    const body = this.resonate(
-      this.noiseBurst(n, sr, 0.010 + (1 - k) * 0.006),
-      sr,
-      bodyFreq,
-      9
-    )
-    for (let i = 0; i < n; i++) out[i] += body[i] * 0.85
-    // 高频"叮"：重撞更亮更突出
-    const tick = this.resonate(
-      this.noiseBurst(n, sr, 0.005 + (1 - k) * 0.003),
-      sr,
-      4000 + k * 1200,
-      12
-    )
-    for (let i = 0; i < n; i++) out[i] += tick[i] * (0.25 + k * 0.35)
-    // 整体衰减：轻 35ms → 重 22ms
-    const tau = 0.022 + (1 - k) * 0.013
-    for (let i = 0; i < n; i++) out[i] *= Math.exp(-i / sr / tau)
-    return this.normalize(out)
-  }
-
-  /**
-   * 库边：橡胶"噗/嗒"（中低频共振 + 橡胶摩擦高频）。
-   * 力度系数 k∈[0,1] 连续塑形（此前是构建时固定的单一缓冲，音色不随力度变化）：
-   *  - 轻碰(k↓)：主体频率更低、衰减更长 → 沉闷柔软的"噗"；
-   *  - 重撞(k↑)：主体频率上移更亮、摩擦高频更突出、衰减更短 → 清脆短促的"嗒"。
-   */
-  private genCushion(n: number, sr: number, k: number): Float32Array {
-    const out = new Float32Array(n)
-    const bodyFreq = 280 + k * 360
-    const body = this.resonate(
-      this.noiseBurst(n, sr, 0.03),
-      sr,
-      bodyFreq,
-      5
-    )
-    for (let i = 0; i < n; i++) out[i] += body[i] * (0.8 - k * 0.1)
-    // 摩擦高频：重撞更突出（明亮感）
-    const fricFreq = 900 + k * 1000
-    const fric = this.resonate(
-      this.noiseBurst(n, sr, 0.018),
-      sr,
-      fricFreq,
-      8
-    )
-    for (let i = 0; i < n; i++) out[i] += fric[i] * (0.15 + k * 0.35)
-    // 整体衰减：轻 75ms（拖尾长） → 重 30ms（短促）
-    const tau = 0.075 - k * 0.045
-    for (let i = 0; i < n; i++) out[i] *= Math.exp(-i / sr / tau)
-    return this.normalize(out)
-  }
-
-  /**
-   * 落袋：撞袋口(中频噪声) + 低频"咚"滚落(长衰减)。
-   * k 连续塑形：重撞袋口更亮更响、滚落更短促；轻碰更闷更长。
-   */
-  private genPot(n: number, sr: number, k: number): Float32Array {
-    const out = new Float32Array(n)
-    // 撞袋口的"咔"（轻 1.4k → 重 2.2k）
-    const clack = this.resonate(
-      this.noiseBurst(n, sr, 0.016 + (1 - k) * 0.008),
-      sr,
-      1400 + k * 800,
-      8
-    )
-    for (let i = 0; i < n; i++) out[i] += clack[i] * (0.55 + k * 0.25)
-    // 落入袋腔的低频"咚"（~120Hz，长衰减模拟在袋里滚落）
-    const thud = this.resonate(
-      this.noiseBurst(n, sr, 0.10 + (1 - k) * 0.06),
-      sr,
-      120,
-      3
-    )
-    for (let i = 0; i < n; i++) out[i] += thud[i] * 0.6
-    for (let i = 0; i < n; i++) out[i] *= Math.exp(-i / sr / (0.07 + (1 - k) * 0.04))
-    return this.normalize(out)
-  }
-
-  /** 球滚动：窄带噪声持续音（短促一段，模拟滚动摩擦，闷而柔） */
-  private genRoll(n: number, sr: number): Float32Array {
-    const out = new Float32Array(n)
-    const len = Math.floor(sr * 0.5)
-    let last = 0
-    for (let i = 0; i < len; i++) {
-      const t = i / sr
-      const env = Math.exp(-t / 0.18)
-      const w = Math.random() * 2 - 1
-      last = last * 0.6 + w * 0.4 // 低通，模拟滚动的闷响
-      out[i] += last * env * 0.7
-    }
-    return this.normalize(out)
-  }
-
-  /**
-   * 开球：重击球堆——多段清脆碰撞丛集 + 更强低频"轰"。
-   * 开球本就是最大力度事件，k 默认取高值；仍保留 k 形参以便与统一接口一致。
-   */
-  private genBreak(n: number, sr: number, k: number): Float32Array {
-    const out = new Float32Array(n)
-    // 多球连续碰撞：几簇不同高频的"咔"叠加（用确定性抖动模拟球堆炸开）
-    const freqs = [2400, 3000, 1900, 3500]
-    for (let j = 0; j < freqs.length; j++) {
-      const off = Math.floor(sr * 0.006 * j) // 每簇错开几毫秒
-      const burst = this.noiseBurst(n - off, sr, 0.014)
-      const body = this.resonate(burst, sr, freqs[j], 9)
-      for (let i = 0; i < body.length; i++) out[i + off] += body[i] * 0.5
-    }
-    // 低频"轰"（重力度 → 略低更沉）
-    const boom = this.resonate(
-      this.noiseBurst(n, sr, 0.09),
-      sr,
-      145 - k * 20,
-      3
-    )
-    for (let i = 0; i < n; i++) out[i] += boom[i] * 0.7
-    for (let i = 0; i < n; i++) out[i] *= Math.exp(-i / sr / 0.12)
-    return this.normalize(out)
-  }
-
-  private normalize(a: Float32Array): Float32Array {
-    let peak = 0
-    for (let i = 0; i < a.length; i++) peak = Math.max(peak, Math.abs(a[i]))
-    if (peak > 0) {
-      const g = 0.95 / peak
-      for (let i = 0; i < a.length; i++) a[i] *= g
-    }
-    return a
+    this.play3D(buf, 0, 0, 0.32, 1 + pitch * 0.06, false)
   }
 }
