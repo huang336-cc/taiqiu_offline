@@ -69,6 +69,9 @@ export class Assets {
       clothColor: ts.clothColor,
       clothColor2: ts.clothColor2,
       cushionColor: ts.cushionColor,
+      // v1.3.53：袋口（blackpocket / Material.001）优先跟随桌框发光色；
+      // 特效主题外框发光时袋口不再显黑棕，无发光主题保持库边色。
+      pocketColor: ts.frameGlow || ts.cushionColor,
       clothshadeColor: skin.clothshadeColor,
       frameColor: ts.frameColor,
       frameGlow: ts.frameGlow,
@@ -379,11 +382,12 @@ export class Assets {
           }
           mat.needsUpdate = true
         } else if (name === "blackpocket" || name.includes("pocket")) {
-          // v1.3.38-fix：GLTF 模型桌台的 6 个球洞（pocket）不再用固定深色，
-          // 改为跟随当前桌布皮肤的库边色，使袋口与整体色调协调。
+          // v1.3.53-fix：袋口（球洞）颜色不再固定使用深色库边色；
+          // 当主题带桌框发光色（frameGlow）时，改为与发光色同步，使明亮外框下的袋口
+          // 不再显黑棕；无发光主题仍回退到库边色，保持原有协调感。
           // v1.3.41-fix：同步 roughness/metalness/ior/specular，避免原黑色高光材质
           // 改成亮色后仍显灰白/反光；关闭自发光与多余纹理，让颜色真正统一。
-          mat.color.set(cfg.cushionColor)
+          mat.color.set(cfg.pocketColor)
           if ("emissive" in mat) {
             ;(mat as any).emissive.set(0x000000)
             ;(mat as any).emissiveIntensity = 0
@@ -396,10 +400,10 @@ export class Assets {
           mat.needsUpdate = true
         } else if (name === "material.001" || name === "material_001") {
           // GLTF 模型中未被命名的金属/包边件（Blender 默认名 Material.001），
-          // 通常是袋口包边或角落金属件。v1.3.39-fix：改为跟随库边色，
-          // 与 6 个球洞及桌边库边统一，避免单独色块突兀。
+          // 通常是袋口包边或角落金属件。v1.3.53-fix：与 blackpocket 统一逻辑，
+          // 带桌框发光色时同步发光色，使袋口包边与明亮外框一致；无发光时回退库边色。
           // v1.3.41-fix：关闭自发光与光滑金属感，否则在亮色主题下会发白突兀。
-          mat.color.set(cfg.cushionColor)
+          mat.color.set(cfg.pocketColor)
           if ("emissive" in mat) {
             ;(mat as any).emissive.set(0x000000)
             ;(mat as any).emissiveIntensity = 0

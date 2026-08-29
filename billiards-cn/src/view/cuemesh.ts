@@ -1,7 +1,7 @@
 import { R } from "../model/physics/constants"
 import { up } from "../utils/three-utils"
-import { Settings, getSkin, getTableSkin } from "../utils/settings"
-import { getCueTexture } from "./cuetexturefactory"
+import { Settings, getCueTheme, getSkin, getTableSkin } from "../utils/settings"
+import { getCueTexture, getCueButtTexture } from "./cuetexturefactory"
 
 /** 对 0xRRGGBB 颜色做明暗调整（amount>0 提亮，<0 压暗），返回 0xRRGGBB */
 function shade(hex: number, amount: number): number {
@@ -154,8 +154,9 @@ export class CueMesh {
     const skin = getSkin(Settings.get().skin)
     const ashWoodMat = new MeshPhongMaterial({ color: skin.shaftColor, shininess: 50 })
     const ebonyMat = new MeshPhongMaterial({ color: skin.buttColor, shininess: 80 })
+    // 先角：浅米白色硬质材质（v1.3.51，原银白 0xe5e5e5）
     const ferruleMat = new MeshPhongMaterial({
-      color: 0xe5e5e5,
+      color: 0xf0e8d6,
       shininess: 100,
     })
     const tipMat = new MeshPhongMaterial({ color: skin.tipColor, shininess: 5 })
@@ -255,14 +256,19 @@ export class CueMesh {
    * - 具体主题：套用程序化贴图，并把材质色设为白，让贴图本色显示。
    * 颜色恢复在 auto 分支内完成，因此单独切换主题也不会留下上一次的白色。
    */
-  static applyCueTheme(group: Group, themeId: string, skinId: string) {
-    const tex = getCueTexture(themeId)
+  static applyCueTheme(group: Group, themeId: string, _skinId: string) {
+    const theme = getCueTheme(themeId)
+    // v1.3.51：杆身与杆尾使用不同的分区贴图（握把/杆尾装饰/端盖）
+    const shaftTex = getCueTexture(themeId)
+    const buttTex = getCueButtTexture(themeId)
     group.traverse((child) => {
       const mesh = child as Mesh
       if (!(mesh as any).isMesh) return
       if (mesh.name !== "cueShaft" && mesh.name !== "cueButt") return
       const mat = mesh.material as MeshPhongMaterial
       if (!mat) return
+      const isButt = mesh.name === "cueButt"
+      const tex = isButt ? buttTex : shaftTex
       if (tex) {
         mat.map = tex
         mat.color.setHex(0xffffff)
@@ -271,9 +277,16 @@ export class CueMesh {
         // 使「单一外观设置」真正统一（台呢与球杆协调）。
         const ts = getTableSkin(Settings.get().tableSkin)
         const base = ts.clothColor
-        const shaft = mesh.name === "cueButt" ? shade(base, -0.28) : shade(base, 0.12)
+        const shaft = isButt ? shade(base, -0.28) : shade(base, 0.12)
         mat.map = null
         mat.color.setHex(shaft)
+      }
+      // 材质光泽：主题自带 finish 优先（哑光石砚 vs 玻璃/冰晶）；
+      // 无 finish 且为 auto 时恢复几何默认，避免残留上一次主题的光泽。
+      if (theme.finish) {
+        mat.shininess = isButt ? theme.finish.butt : theme.finish.shaft
+      } else if (!tex) {
+        mat.shininess = isButt ? 80 : 50
       }
       mat.needsUpdate = true
     })

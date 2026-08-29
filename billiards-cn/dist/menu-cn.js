@@ -1796,7 +1796,11 @@
   }
 
   // 球杆主题预览：电影级写实 3D（three.js）。
-  // 按需加载 three.standalone.js（挂 window.THREE）+ cue-preview-3d.js（挂 window.CuePreview3D），
+  // 按需加载 three.standalone.js（挂 window.THREE）
+  //   → cue-texture-factory.js（挂 window.CueGameCue：游戏内真实球杆的贴图工厂与几何参数。
+  //     必须在 three 之后注入——打包时 three 是外部依赖，产物会把 window.THREE 提升为
+  //     模块级常量，先注入就会拿到 undefined）
+  //   → cue-preview-3d.js（挂 window.CuePreview3D，预览本体），
   // 仅首次预览时加载一次。关键：WebGLRenderer 整个页面生命周期只创建一次、永不销毁——
   // 松手只停旋转，不 dispose，避免真机 WebView「第二次新建 context 失败/丢失」导致白屏。
   var cueViewer3D = null          // CuePreview3D 实例（只创建一次，复用）
@@ -1814,9 +1818,11 @@
         document.head.appendChild(s)
       }
       inject("three.standalone.js", function () {
-        inject("cue-preview-3d.js", function () {
-          if (window.CuePreview3D) resolve()
-          else reject(new Error("CuePreview3D 未定义"))
+        inject("cue-texture-factory.js", function () {
+          inject("cue-preview-3d.js", function () {
+            if (window.CuePreview3D) resolve()
+            else reject(new Error("CuePreview3D 未定义"))
+          }, reject)
         }, reject)
       }, reject)
     })
@@ -1835,40 +1841,48 @@
     }
   }
 
-  // 球杆主题预览：长按卡片弹出小窗（3D 自动旋转，WebGL 不可用降级 2D）
+  // 球杆主题预览（v1.3.52）：点击「已选中的卡片」全屏弹出，单指拖动旋转 / 双指捏合缩放。
+  // 【红线】关闭时只 stop()，绝不 dispose / 销毁 WebGL 上下文——v1.3.32 的
+  // 「第二次预览白屏」就是销毁后重建 context 失败导致的。
   var cueOverlay = null
-  function closeCuePreviewOverlay() {
+  var cuePushedHistory = false // 本次预览是否为返回键压过一条历史
+  /**
+   * 关闭全屏预览。
+   * @param {boolean} [fromPopState] 是否由 popstate 触发。是则不能再调 history.back()，
+   *   否则会多退一步、直接退出菜单页。
+   */
+  function closeCuePreviewOverlay(fromPopState) {
     if (!cueOverlay) cueOverlay = $("cuePreviewOverlay")
     if (!cueOverlay) return
+    if (!cueOverlay.classList.contains("active")) return
     cueOverlay.classList.remove("active")
-  }
-  // 把小窗定位到卡片右侧（手指按在卡片上，侧边不会挡）；右侧空间不足放左侧；
-  // 垂直居中于卡片，并做视口边界保护。
-  function positionCuePreview(rect) {
-    if (!cueOverlay || !rect) return
-    var ww = window.innerWidth, wh = window.innerHeight
-    var winW = 300, winH = 130   // 与 CSS .cue-preview-overlay 尺寸一致
-    var gap = 10
-    // 垂直：以卡片中心为基准
-    var top = rect.top + rect.height / 2 - winH / 2
-    if (top < gap) top = gap
-    if (top + winH > wh - gap) top = wh - winH - gap
-    // 水平：优先放卡片右侧
-    var left = rect.right + gap
-    if (left + winW > ww - gap) {
-      left = rect.left - winW - gap
-    }
-    if (left < gap) {
-      left = gap
-      // 左右都放不下时，改为水平居中并尽量靠上
-      if (rect.width + winW + gap * 3 > ww) {
-        left = Math.max(gap, Math.round((ww - winW) / 2))
+    // 只停渲染，绝不 dispose / 释放 WebGL 上下文（见上方红线）
+    if (cueViewer3D && cueViewer3D.stop) cueViewer3D.stop()
+    // 清掉为返回键压入的那条历史，避免关闭后残留一次空返回
+    if (cuePushedHistory) {
+      cuePushedHistory = false
+      if (!fromPopState) {
+        try { history.back() } catch (e) { /* 忽略 */ }
       }
     }
-    cueOverlay.style.left = left + "px"
-    cueOverlay.style.top = top + "px"
   }
-  function showCuePreviewOverlay(themeId, rect) {
+  /**
+   * 全屏预览的三种关闭方式：✕ 按钮 / Android 返回键 / Esc。
+   * 不做「点遮罩关闭」——画布几乎铺满屏幕，没有稳定的遮罩区可点。
+   */
+  function bindCuePreviewClose() {
+    document.addEventListener("click", function (e) {
+      var t = e.target
+      if (t && t.closest && t.closest("[data-close-cue-preview]")) closeCuePreviewOverlay()
+    })
+    window.addEventListener("popstate", function () {
+      if (cuePushedHistory) closeCuePreviewOverlay(true)
+    })
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" || e.keyCode === 27) closeCuePreviewOverlay()
+    })
+  }
+  function showCuePreviewOverlay(themeId) {
     if (!cueOverlay) cueOverlay = $("cuePreviewOverlay")
     if (!cueOverlay) return
     var card = document.querySelector(
@@ -1877,16 +1891,28 @@
     var kind = card ? card.getAttribute("data-pattern") : "auto"
     var c1 = card ? card.getAttribute("data-c1") : "#d2b48c"
     var c2 = card ? card.getAttribute("data-c2") : "#1a1a1a"
-    positionCuePreview(rect)
+    // 顶栏显示主题名：全屏预览要让用户一眼知道在看哪一款
+    var nameEl = $("cuePreviewName")
+    if (nameEl) {
+      var nameSpan = card ? card.querySelector(".skin-name") : null
+      nameEl.textContent = nameSpan ? nameSpan.textContent : ""
+    }
     cueOverlay.classList.add("active")
+    // 为返回键压一条历史：Android 主 Activity 对非 play 页面走
+    // webView.canGoBack() ? goBack() : finish()，压一条就能让返回键先关预览，
+    // 无需改 Java（改 Java 会影响「菜单页返回 = 退出应用」的现有行为）。
+    if (!cuePushedHistory) {
+      try {
+        history.pushState({ cuePreview: true }, "", location.href)
+        cuePushedHistory = true
+      } catch (e) { /* 个别环境不支持 pushState，退化为返回键直接退出页面 */ }
+    }
     // 双 rAF 确保浮层布局完成、预览 canvas 有真实尺寸后再初始化 3D 渲染器。
     requestAnimationFrame(function () {
       requestAnimationFrame(function () {
         if (!cueOverlay.classList.contains("active")) return
         var cv = $("cuePreview3D")
         if (!cv) return
-        var hint = document.querySelector(".cue-preview-overlay-tip")
-        if (hint) hint.textContent = "自动旋转中 · 松手关闭"
         // 主题色：c1=杆身主色, c2=握把/杆尾深色；金属色和皮头色从主题派生
         var wood = c1 || "#d2b48c", dark = c2 || "#1a1a1a"
         // 简单派生：金属色 = 主色提亮偏暖；皮头色 = 深色再压暗
@@ -1924,8 +1950,14 @@
               throw err
             }
           }
+          // v1.3.54：先按游戏内 ID 建真实球杆（几何 + 分区贴图），再补倒影压暗色。
+          // setTheme 只记颜色、不重建；重建由 setCueTheme 触发，一次打开只建一遍。
           cueViewer3D.setTheme(wood, dark, deriveMetal(wood), deriveTip(dark), kind)
-          cueViewer3D.setAutoRotate(true)   // 360° 缓慢自转
+          cueViewer3D.setCueTheme(themeId, settings.skin, settings.tableSkin)
+          // 每次打开都重置到统一的展示角度，便于横向对比不同主题
+          if (cueViewer3D.resetView) cueViewer3D.resetView()
+          // v1.3.52：取消自动旋转，改为按需渲染一帧（视角完全由手指控制）
+          if (cueViewer3D.requestRender) cueViewer3D.requestRender()
         }).catch(function (e) {
           // 纯 3D 路径：加载或 WebGL 失败时给出明确提示，不降级 2D
           console.error("[cuePreview] 3D 预览失败:", e)
@@ -1949,59 +1981,35 @@
       if (sel) sel.value = settings.cueTheme || "auto"
       refreshCustomRows()
     }
+    // v1.3.52：触发方式由「长按 380ms」改为「点两下」——第一下选中主题，
+    // 第二下点已选中的卡片开全屏预览。长按那套（pressTimer / longFired /
+    // pointerdown-up-cancel-leave 四个监听，以及 document 上全局 pointerup 关闭）
+    // 整体移除，原因：
+    //   ① 全局「松手即关」与预览窗内的拖动旋转直接冲突——拖完一抬手就关；
+    //   ② 长按在可发现性上远不如点击，改点击后配合选中态卡片的「3D」角标
+    //      与首次选中时的 toast 提示即可。
     Array.prototype.forEach.call(cards, function (c) {
       var themeId = c.getAttribute("data-cuetheme")
-      var pressTimer = null
-      var longFired = false
-      function startPress(e) {
-        longFired = false
-        if (pressTimer) clearTimeout(pressTimer)
-        // 长按 380ms 弹出预览
-        pressTimer = setTimeout(function () {
-          longFired = true
-          c.classList.add("cue-card-longpress")
-          showCuePreviewOverlay(themeId, c.getBoundingClientRect())
-        }, 380)
-      }
-      function cancelPress() {
-        if (pressTimer) { clearTimeout(pressTimer); pressTimer = null }
-        c.classList.remove("cue-card-longpress")
-      }
-      // 指针按下：启动长按计时（鼠标 + 触摸统一用 pointer 事件）
-      c.addEventListener("pointerdown", function (e) {
-        // 仅主键 / 单指
-        if (e.button !== undefined && e.button !== 0) return
-        startPress(e)
-      })
-      c.addEventListener("pointerup", cancelPress)
-      c.addEventListener("pointercancel", cancelPress)
-      c.addEventListener("pointerleave", cancelPress)
-      // 短按 = 选中主题
       c.addEventListener("click", function () {
-        cancelPress()
-        if (longFired) { longFired = false; return }  // 长按已处理，不再触发选中
+        // 已选中 → 再点一下开全屏预览
+        if (c.classList.contains("active")) {
+          showCuePreviewOverlay(themeId)
+          return
+        }
         settings.cueTheme = themeId
         saveSettings(settings)
         syncActive()
         buzz(10)
+        // 首次选中时提示一次，否则用户很难发现「再点一下能预览」
+        try {
+          if (localStorage.getItem("cue3dHintShown") !== "1") {
+            localStorage.setItem("cue3dHintShown", "1")
+            showToast("再点一下卡片可全屏预览 3D 效果")
+          }
+        } catch (e) { /* localStorage 不可用时静默忽略 */ }
       })
     })
-    // 手指 / 鼠标抬起即关闭预览（松手关闭）。在 document 上捕获，
-    // 确保无论指针抬在哪都触发；浮层本身 pointer-events:none 不拦截抬手。
-    function onPointerRelease() {
-      if (cueOverlay && cueOverlay.classList.contains("active")) {
-        // 关键：只停旋转，绝不 dispose / 释放 WebGL 上下文。
-        // renderer 整个页面生命周期仅创建一次，复用可避免真机「第二次 context 失败」白屏。
-        if (cueViewer3D && cueViewer3D.stop) cueViewer3D.stop()
-        closeCuePreviewOverlay()
-        Array.prototype.forEach.call(cards, function (c) {
-          c.classList.remove("cue-card-longpress")
-        })
-      }
-    }
-    // 在 document 上捕获抬起，确保无论指针抬在哪都关闭
-    document.addEventListener("pointerup", onPointerRelease)
-    document.addEventListener("pointercancel", onPointerRelease)
+    bindCuePreviewClose()
     syncActive()
   }
 

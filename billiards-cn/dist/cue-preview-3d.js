@@ -1,7 +1,33 @@
 /*!
- * 球杆主题预览 —— three.js 3D 渲染（主题定制版 v1.3.35）
- * 由 menu-cn.js 在长按时按需初始化，使用 window.THREE（dist/three.standalone.js）。
- * 每个主题有独立的程序化纹理与几何造型。
+ * 球杆主题预览 —— three.js 3D 渲染（v1.3.52 改全屏 + 手势，v1.3.54 复用游戏内真实球杆）
+ * 由 menu-cn.js 在点击「已选中的球杆卡片」时按需初始化，
+ * 使用 window.THREE（dist/three.standalone.js）。
+ *
+ * v1.3.54 改动（本版重点）：
+ *   - 球杆不再由本文件自己拼装。此前预览用的是一套"简化模型"：总长 5.0、杆尾
+ *     半径 0.28（长径比 8.9:1），配色只用卡片上的两个色值；而游戏内真实球杆是
+ *     长径比 46.7:1（全长 R*43、杆尾半径 (R*0.23)/0.5）+ 程序化分区贴图。
+ *     两者完全不同，用户看到的预览"不是真实球杆"。
+ *   - 现改为复用游戏内资源：dist/cue-texture-factory.js（由 tools/cue-textures/
+ *     从 src/view/cuetexturefactory.ts + src/utils/settings.ts 原样打包）挂
+ *     window.CueGameCue，本文件取其真实贴图与真实几何参数组装球杆，
+ *     与 src/view/cuemesh.ts 的 cueGeometry() / applyCueTheme() 逐项对齐。
+ *   - 删除了本文件里那套与游戏内并存的 THEMES 配置表与木纹/皮革绘制器（约 680 行），
+ *     从根源上杜绝"预览与实机不一致"。
+ *
+ * v1.3.52 改动：
+ *   - 预览窗由 300×130 小窗改为全屏；球杆由截断（总长 4.1、无先角/皮头）
+ *     改为完整（总长 5.0，含先角 + 皮头）
+ *   - 相机改为球坐标轨道：yaw 自由 360°、pitch 限位、双指捏合缩放；取消自动旋转
+ *   - 按需渲染（dirty flag）：手指不动时不排任何 rAF，比旧的常驻循环省电
+ *
+ * 【红线】WebGL 渲染上下文整个页面生命周期只创建一次、永不销毁。
+ * 关闭预览时只能 stop()，绝不调用 dispose() / forceContextLoss()——
+ * v1.3.32 的「第二次预览白屏」就是这么来的。详见 dispose() 上的说明。
+ *
+ * 【红线 2】material.map 由 window.CueGameCue 全局缓存持有，
+ * 切主题清理子树时只能 dispose geometry/material，**绝不能 dispose map**——
+ * 否则缓存里的 Texture 被释放后，再次切回该主题球杆会变纯黑。见 disposeTree()。
  */
 ;(function (global) {
   "use strict"
@@ -24,686 +50,6 @@
   }
 
   function clamp(v) { return Math.max(0, Math.min(255, Math.round(v))) }
-
-  function adjust(hex, factor) {
-    var c = parseColor(hex)
-    return rgbToHex({ r: c.r * factor, g: c.g * factor, b: c.b * factor })
-  }
-
-  function mix(a, b, t) {
-    var ca = parseColor(a), cb = parseColor(b)
-    return rgbToHex({ r: ca.r + (cb.r - ca.r) * t, g: ca.g + (cb.g - ca.g) * t, b: ca.b + (cb.b - ca.b) * t })
-  }
-
-  function brighten(hex, amt) {
-    var c = parseColor(hex)
-    return rgbToHex({ r: c.r + amt, g: c.g + amt, b: c.b + amt })
-  }
-
-  function darken(hex, amt) { return brighten(hex, -amt) }
-
-  function luma(hex) {
-    var c = parseColor(hex)
-    return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b
-  }
-
-  function withAlpha(hex, a) {
-    var c = parseColor(hex)
-    return "rgba(" + c.r + "," + c.g + "," + c.b + "," + a + ")"
-  }
-
-  // ---------- 通用 Canvas 绘制工具 ----------
-  function clear(ctx, w, h, color) {
-    ctx.fillStyle = color
-    ctx.fillRect(0, 0, w, h)
-  }
-
-  function noise(ctx, w, h, density, minA, maxA, color) {
-    ctx.save()
-    for (var i = 0; i < density; i++) {
-      var a = minA + Math.random() * (maxA - minA)
-      ctx.fillStyle = withAlpha(color || "#000000", a)
-      ctx.fillRect(Math.random() * w, Math.random() * h, 1 + Math.random() * 2, 1 + Math.random() * 2)
-    }
-    ctx.restore()
-  }
-
-  function stripe(ctx, w, h, color, width, tilt) {
-    ctx.save()
-    ctx.strokeStyle = color
-    ctx.lineWidth = width
-    for (var x = -w; x < w * 2; x += width * 2) {
-      ctx.beginPath()
-      ctx.moveTo(x, 0)
-      ctx.lineTo(x + w * tilt, h)
-      ctx.stroke()
-    }
-    ctx.restore()
-  }
-
-  function radialGlow(ctx, w, h, color, r) {
-    var g = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, r || w * 0.7)
-    g.addColorStop(0, withAlpha(color, 0.35))
-    g.addColorStop(1, withAlpha(color, 0))
-    ctx.fillStyle = g
-    ctx.fillRect(0, 0, w, h)
-  }
-
-  function gradV(ctx, w, h, top, bot) {
-    var g = ctx.createLinearGradient(0, 0, 0, h)
-    g.addColorStop(0, top)
-    g.addColorStop(1, bot)
-    ctx.fillStyle = g
-    ctx.fillRect(0, 0, w, h)
-  }
-
-  // ---------- 主题配置表 ----------
-  var THEMES = {
-    // 默认 / 旧主题：保留通用木纹+皮革
-    auto: {
-      prepare: function (c1, c2) { return { shaft: c1, grip: c2, metal: "#c9a24b", tip: deriveTip(c2) } },
-      shaft: woodTexture,
-      grip: leatherTexture,
-      metal: plainMetal
-    },
-
-    // 1. 墨云龙阙
-    moyunlongque: {
-      prepare: function (c1, c2) {
-        return {
-          shaft: mix(c1, "#1a1a1a", 0.55),
-          grip: mix(c2, "#0f0d0a", 0.5),
-          metal: "#6a6a6a",
-          tip: "#e8e0d0",
-          accent: "#c9a24b"
-        }
-      },
-      shaft: function (ctx, w, h, cols) {
-        gradV(ctx, w, h, cols.shaft, darken(cols.shaft, 30))
-        // 云纹
-        ctx.save()
-        ctx.globalCompositeOperation = "overlay"
-        for (var i = 0; i < 8; i++) {
-          ctx.strokeStyle = withAlpha(cols.accent, 0.12)
-          ctx.lineWidth = 3 + Math.random() * 2
-          ctx.beginPath()
-          var y = Math.random() * h
-          ctx.moveTo(0, y)
-          ctx.bezierCurveTo(w * 0.3, y - 30, w * 0.7, y + 30, w, y)
-          ctx.stroke()
-        }
-        ctx.restore()
-        // 龙鳞暗纹
-        ctx.save()
-        for (var row = 0; row < 10; row++) {
-          for (var col = 0; col < 5; col++) {
-            var cx = (col + 0.5) * (w / 5) + (row % 2) * (w / 10)
-            var cy = (row + 0.5) * (h / 10)
-            ctx.strokeStyle = withAlpha(cols.accent, 0.18)
-            ctx.lineWidth = 1
-            ctx.beginPath()
-            ctx.arc(cx, cy, w / 14, 0, Math.PI, true)
-            ctx.stroke()
-          }
-        }
-        ctx.restore()
-        noise(ctx, w, h, 800, 0.03, 0.08, "#000000")
-      },
-      grip: function (ctx, w, h, cols) {
-        clear(ctx, w, h, cols.grip)
-        woodTexture(ctx, w, h, { shaft: cols.grip, grip: darken(cols.grip, 40) })
-        noise(ctx, w, h, 600, 0.05, 0.12, "#000000")
-      },
-      metal: function (ctx, w, h, cols) {
-        clear(ctx, w, h, cols.metal)
-        noise(ctx, w, h, 300, 0.05, 0.15, "#ffffff")
-        ctx.strokeStyle = withAlpha(cols.accent, 0.3)
-        ctx.lineWidth = 1
-        for (var i = 0; i < 3; i++) {
-          ctx.beginPath()
-          ctx.moveTo(0, h * 0.3 + i * h * 0.2)
-          ctx.quadraticCurveTo(w / 2, h * 0.3 + i * h * 0.2 - 5, w, h * 0.3 + i * h * 0.2)
-          ctx.stroke()
-        }
-      },
-      params: { shaft: { roughness: 0.75, metalness: 0.1 }, grip: { roughness: 0.9 }, metal: { metalness: 0.7, roughness: 0.35 } }
-    },
-
-    // 2. 青竹听风
-    qingzhutingfeng: {
-      prepare: function (c1, c2) {
-        return { shaft: c1, grip: c2, metal: "#a0c0a0", tip: c2 }
-      },
-      shaft: function (ctx, w, h, cols) {
-        gradV(ctx, w, h, brighten(cols.shaft, 20), cols.shaft)
-        // 竹节
-        var segH = h / 6
-        ctx.strokeStyle = withAlpha("#e0ffe0", 0.55)
-        ctx.lineWidth = 2
-        for (var i = 1; i < 6; i++) {
-          var y = i * segH
-          ctx.beginPath()
-          ctx.moveTo(0, y)
-          ctx.lineTo(w, y)
-          ctx.stroke()
-          // 竹节边缘银线
-          ctx.strokeStyle = withAlpha("#ffffff", 0.25)
-          ctx.lineWidth = 1
-          ctx.beginPath(); ctx.moveTo(0, y - 3); ctx.lineTo(w, y - 3); ctx.stroke()
-          ctx.beginPath(); ctx.moveTo(0, y + 3); ctx.lineTo(w, y + 3); ctx.stroke()
-        }
-        // 纵向竹丝
-        ctx.strokeStyle = withAlpha("#ffffff", 0.12)
-        ctx.lineWidth = 1
-        for (var x = 0; x < w; x += 8) {
-          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke()
-        }
-      },
-      grip: function (ctx, w, h, cols) {
-        clear(ctx, w, h, cols.grip)
-        // 竹根粗糙纹理
-        noise(ctx, w, h, 1200, 0.05, 0.18, "#1a3a1a")
-        ctx.strokeStyle = withAlpha("#5a9a5a", 0.25)
-        ctx.lineWidth = 2
-        for (var i = 0; i < 8; i++) {
-          var y = Math.random() * h
-          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y + (Math.random() - 0.5) * 10); ctx.stroke()
-        }
-      },
-      geometry: { butt: "round-root", noMetalRing: true },
-      params: { shaft: { roughness: 0.6 }, grip: { roughness: 0.95 } }
-    },
-
-    // 3. 凤羽鎏金
-    fengyuliujin: {
-      prepare: function (c1, c2) {
-        return {
-          shaft: c1,
-          grip: c2,
-          metal: "#c9a24b",
-          tip: "#f0e6d0",
-          accent: "#ff8fc0"
-        }
-      },
-      shaft: function (ctx, w, h, cols) {
-        clear(ctx, w, h, cols.shaft)
-        // 鲍鱼贝羽翼贴片
-        for (var i = 0; i < 7; i++) {
-          var y = (i + 0.5) * (h / 7)
-          var iw = w * 0.6
-          var ix = (w - iw) / 2
-          var g = ctx.createLinearGradient(ix, y - 20, ix + iw, y + 20)
-          g.addColorStop(0, withAlpha(cols.accent, 0.25))
-          g.addColorStop(0.5, withAlpha("#40e0ff", 0.35))
-          g.addColorStop(1, withAlpha(cols.metal, 0.25))
-          ctx.fillStyle = g
-          ctx.beginPath()
-          ctx.ellipse(w / 2, y, iw / 2, 18, 0, 0, Math.PI * 2)
-          ctx.fill()
-          // 鎏金勾边
-          ctx.strokeStyle = withAlpha(cols.metal, 0.55)
-          ctx.lineWidth = 1.5
-          ctx.stroke()
-        }
-        noise(ctx, w, h, 500, 0.03, 0.08, "#ffffff")
-      },
-      grip: function (ctx, w, h, cols) {
-        clear(ctx, w, h, cols.grip)
-        // 编织缠线
-        ctx.strokeStyle = withAlpha(cols.metal, 0.25)
-        ctx.lineWidth = 2
-        for (var i = -h; i < w + h; i += 10) {
-          ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i + h * 0.6, h); ctx.stroke()
-          ctx.beginPath(); ctx.moveTo(i + h * 0.6, 0); ctx.lineTo(i, h); ctx.stroke()
-        }
-      },
-      metal: function (ctx, w, h, cols) {
-        clear(ctx, w, h, cols.metal)
-        noise(ctx, w, h, 200, 0.05, 0.2, "#ffffff")
-        ctx.strokeStyle = withAlpha("#fff0c0", 0.4)
-        ctx.lineWidth = 1
-        for (var i = 0; i < 4; i++) {
-          ctx.beginPath()
-          ctx.moveTo(0, h * 0.25 + i * h * 0.18)
-          ctx.quadraticCurveTo(w / 2, h * 0.25 + i * h * 0.18 - 8, w, h * 0.25 + i * h * 0.18)
-          ctx.stroke()
-        }
-      },
-      geometry: { butt: "feather-ring" },
-      params: { shaft: { roughness: 0.45, metalness: 0.25 }, metal: { metalness: 0.9, roughness: 0.2 } }
-    },
-
-    // 4. 千里砚山
-    qianliyanshan: {
-      prepare: function (c1, c2) {
-        return { shaft: c1, grip: c2, metal: "#5a6a70", tip: c1 }
-      },
-      shaft: function (ctx, w, h, cols) {
-        clear(ctx, w, h, cols.shaft)
-        // 淡墨山水
-        ctx.fillStyle = withAlpha("#3a4a50", 0.15)
-        for (var i = 0; i < 5; i++) {
-          var y = h * 0.5 + i * 15
-          ctx.beginPath()
-          ctx.moveTo(0, y)
-          ctx.bezierCurveTo(w * 0.25, y - 30 - i * 10, w * 0.75, y - 20 - i * 8, w, y - 10)
-          ctx.lineTo(w, h)
-          ctx.lineTo(0, h)
-          ctx.fill()
-        }
-        noise(ctx, w, h, 700, 0.04, 0.1, "#2a3a40")
-      },
-      grip: function (ctx, w, h, cols) {
-        clear(ctx, w, h, cols.grip)
-        noise(ctx, w, h, 1500, 0.08, 0.2, "#1a2a30")
-      },
-      geometry: { butt: "inkstone", noMetalRing: true },
-      params: { shaft: { roughness: 0.95, metalness: 0 }, grip: { roughness: 1.0 } }
-    },
-
-    // 5. 星核暗芒
-    xinghedanmang: {
-      prepare: function (c1, c2) {
-        return { shaft: c1, grip: c2, metal: "#4a5a70", tip: c2, accent: "#60d0ff" }
-      },
-      shaft: function (ctx, w, h, cols) {
-        clear(ctx, w, h, cols.shaft)
-        // 星尘
-        for (var i = 0; i < 200; i++) {
-          ctx.fillStyle = withAlpha("#ffffff", 0.3 + Math.random() * 0.5)
-          ctx.fillRect(Math.random() * w, Math.random() * h, 1 + Math.random(), 1 + Math.random())
-        }
-        // 青蓝电路纹螺旋
-        ctx.strokeStyle = withAlpha(cols.accent, 0.55)
-        ctx.lineWidth = 1.5
-        ctx.beginPath()
-        for (var y = 0; y < h; y += 4) {
-          var x = w / 2 + Math.sin(y * 0.04) * (w * 0.35)
-          if (y === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
-        }
-        ctx.stroke()
-        noise(ctx, w, h, 400, 0.03, 0.08, "#000000")
-      },
-      grip: function (ctx, w, h, cols) {
-        clear(ctx, w, h, cols.grip)
-        // 点阵
-        ctx.fillStyle = withAlpha(cols.accent, 0.25)
-        for (var y = 4; y < h; y += 8) {
-          for (var x = 4; x < w; x += 8) {
-            if (Math.random() > 0.4) ctx.fillRect(x, y, 2, 2)
-          }
-        }
-      },
-      metal: function (ctx, w, h, cols) {
-        clear(ctx, w, h, cols.metal)
-        noise(ctx, w, h, 300, 0.05, 0.15, "#a0c0e0")
-        // 电路标识
-        ctx.strokeStyle = withAlpha(cols.accent, 0.5)
-        ctx.lineWidth = 1
-        ctx.beginPath()
-        ctx.arc(w / 2, h / 2, w / 5, 0, Math.PI * 2)
-        ctx.stroke()
-        ctx.beginPath(); ctx.moveTo(w / 2, h * 0.25); ctx.lineTo(w / 2, h * 0.75); ctx.stroke()
-        ctx.beginPath(); ctx.moveTo(w * 0.3, h / 2); ctx.lineTo(w * 0.7, h / 2); ctx.stroke()
-      },
-      geometry: { butt: "circuit-disc" },
-      params: { shaft: { roughness: 0.4, metalness: 0.6 }, grip: { roughness: 0.7 }, metal: { metalness: 0.8, roughness: 0.3 } }
-    },
-
-    // 6. 霓虹溯光
-    nihongsuguang: {
-      prepare: function (c1, c2) {
-        return { shaft: c1, grip: c2, metal: "#a0a0ff", tip: c1, accent: "#40c0ff" }
-      },
-      shaft: function (ctx, w, h, cols) {
-        // 半透深紫底
-        clear(ctx, w, h, cols.shaft)
-        // 内部粉蓝渐变带状结构
-        for (var i = 0; i < 3; i++) {
-          var g = ctx.createLinearGradient(0, 0, w, h)
-          g.addColorStop(0, withAlpha(cols.shaft, 0.2))
-          g.addColorStop(0.5, withAlpha(cols.accent, 0.45))
-          g.addColorStop(1, withAlpha("#ff60d0", 0.35))
-          ctx.fillStyle = g
-          ctx.beginPath()
-          var off = i * 40
-          ctx.moveTo(w * 0.2 + off, 0)
-          ctx.bezierCurveTo(w * 0.8 + off, h * 0.3, w * 0.2 + off, h * 0.7, w * 0.8 + off, h)
-          ctx.lineTo(w * 0.6 + off, h)
-          ctx.bezierCurveTo(w * 0.0 + off, h * 0.7, w * 0.6 + off, h * 0.3, w * 0.4 + off, 0)
-          ctx.fill()
-        }
-      },
-      grip: function (ctx, w, h, cols) {
-        clear(ctx, w, h, cols.grip)
-        ctx.strokeStyle = withAlpha("#ffffff", 0.15)
-        ctx.lineWidth = 3
-        for (var x = 6; x < w; x += 12) {
-          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke()
-        }
-      },
-      metal: function (ctx, w, h, cols) {
-        var g = ctx.createLinearGradient(0, 0, w, h)
-        g.addColorStop(0, "#e0e0ff")
-        g.addColorStop(0.5, "#8080ff")
-        g.addColorStop(1, "#e0e0ff")
-        ctx.fillStyle = g
-        ctx.fillRect(0, 0, w, h)
-      },
-      geometry: { butt: "poly-metal" },
-      params: {
-        shaft: { transparent: true, opacity: 0.82, roughness: 0.15, metalness: 0.1 },
-        grip: { roughness: 0.6 },
-        metal: { metalness: 0.95, roughness: 0.05 }
-      }
-    },
-
-    // 7. 虚空裂隙
-    xukonglilie: {
-      prepare: function (c1, c2) {
-        return { shaft: c1, grip: c2, metal: "#4a4a52", tip: c2, accent: "#8a40ff" }
-      },
-      shaft: function (ctx, w, h, cols) {
-        clear(ctx, w, h, cols.shaft)
-        // 纵向裂隙
-        for (var i = 0; i < 5; i++) {
-          var x = (i + 1) * (w / 6)
-          var g = ctx.createLinearGradient(x - 6, 0, x + 6, 0)
-          g.addColorStop(0, withAlpha(cols.shaft, 0))
-          g.addColorStop(0.5, withAlpha(cols.accent, 0.55))
-          g.addColorStop(1, withAlpha(cols.shaft, 0))
-          ctx.fillStyle = g
-          ctx.fillRect(x - 6, 0, 12, h)
-        }
-        noise(ctx, w, h, 500, 0.05, 0.12, "#000000")
-      },
-      grip: leatherTexture,
-      metal: function (ctx, w, h, cols) {
-        clear(ctx, w, h, cols.metal)
-        noise(ctx, w, h, 250, 0.05, 0.15, "#a0a0a0")
-      },
-      geometry: { butt: "blunt-cone" },
-      params: { shaft: { roughness: 0.45, metalness: 0.7 }, grip: { roughness: 0.85 }, metal: { metalness: 0.8, roughness: 0.35 } }
-    },
-
-    // 8. 幽刺夜影
-    youciyeying: {
-      prepare: function (c1, c2) {
-        return { shaft: c1, grip: c2, metal: "#5a5a62", tip: c2, accent: "#80ffd0" }
-      },
-      shaft: function (ctx, w, h, cols) {
-        clear(ctx, w, h, cols.shaft)
-        // 放射尖刺暗纹
-        ctx.strokeStyle = withAlpha("#2a2a32", 0.5)
-        ctx.lineWidth = 2
-        for (var i = 0; i < 24; i++) {
-          var ang = (i / 24) * Math.PI * 2
-          ctx.beginPath()
-          ctx.moveTo(w / 2, h / 2)
-          ctx.lineTo(w / 2 + Math.cos(ang) * w * 0.6, h / 2 + Math.sin(ang) * h * 0.6)
-          ctx.stroke()
-        }
-        // 小块贝母珠光
-        for (var k = 0; k < 12; k++) {
-          var bx = Math.random() * w
-          var by = Math.random() * h
-          var g = ctx.createRadialGradient(bx, by, 0, bx, by, 15)
-          g.addColorStop(0, withAlpha(cols.accent, 0.35))
-          g.addColorStop(1, withAlpha(cols.accent, 0))
-          ctx.fillStyle = g
-          ctx.beginPath(); ctx.arc(bx, by, 15, 0, Math.PI * 2); ctx.fill()
-        }
-      },
-      grip: function (ctx, w, h, cols) {
-        clear(ctx, w, h, cols.grip)
-        // 虎纹压花
-        for (var i = 0; i < 30; i++) {
-          ctx.fillStyle = withAlpha("#1a1a1e", 0.2)
-          var x = Math.random() * w
-          var y = Math.random() * h
-          var rw = 20 + Math.random() * 30
-          var rh = 8 + Math.random() * 12
-          ctx.beginPath(); ctx.ellipse(x, y, rw, rh, Math.random() * Math.PI, 0, Math.PI * 2); ctx.fill()
-        }
-        noise(ctx, w, h, 600, 0.04, 0.1, "#000000")
-      },
-      geometry: { butt: "small-cone" },
-      params: { shaft: { roughness: 0.35, metalness: 0.6 }, grip: { roughness: 0.8 }, metal: { metalness: 0.75, roughness: 0.4 } }
-    },
-
-    // 9. 烬火焚风
-    jinhuofengfeng: {
-      prepare: function (c1, c2) {
-        return { shaft: c1, grip: c2, metal: "#5a3a2a", tip: "#8a1a0a", accent: "#ff3a1a" }
-      },
-      shaft: function (ctx, w, h, cols) {
-        // 黑红渐变底
-        var g = ctx.createLinearGradient(0, 0, 0, h)
-        g.addColorStop(0, cols.shaft)
-        g.addColorStop(1, cols.grip)
-        ctx.fillStyle = g
-        ctx.fillRect(0, 0, w, h)
-        // 熔岩龟裂
-        ctx.strokeStyle = withAlpha(cols.accent, 0.55)
-        ctx.lineWidth = 2
-        for (var i = 0; i < 18; i++) {
-          ctx.beginPath()
-          var x = Math.random() * w
-          var y = Math.random() * h
-          ctx.moveTo(x, y)
-          for (var j = 0; j < 5; j++) {
-            x += (Math.random() - 0.5) * w * 0.3
-            y += (Math.random() - 0.5) * h * 0.15
-            ctx.lineTo(x, y)
-          }
-          ctx.stroke()
-        }
-        // 裂纹发光
-        ctx.strokeStyle = withAlpha(cols.accent, 0.2)
-        ctx.lineWidth = 4
-        for (var i = 0; i < 18; i++) {
-          ctx.beginPath()
-          var x = Math.random() * w
-          var y = Math.random() * h
-          ctx.moveTo(x, y)
-          for (var j = 0; j < 5; j++) {
-            x += (Math.random() - 0.5) * w * 0.3
-            y += (Math.random() - 0.5) * h * 0.15
-            ctx.lineTo(x, y)
-          }
-          ctx.stroke()
-        }
-      },
-      grip: function (ctx, w, h, cols) {
-        clear(ctx, w, h, cols.grip)
-        noise(ctx, w, h, 1000, 0.08, 0.2, "#3a0a05")
-        stripe(ctx, w, h, withAlpha("#5a1a0a", 0.25), 4, 0.1)
-      },
-      geometry: { butt: "lava-rock" },
-      params: { shaft: { roughness: 0.85, emissive: 0xff3a1a, emissiveIntensity: 0.15 }, grip: { roughness: 0.9 } }
-    },
-
-    // 10. 云糖幻梦
-    yuntianghuanmeng: {
-      prepare: function (c1, c2) {
-        return { shaft: c1, grip: c2, metal: "#ffc0e0", tip: c1 }
-      },
-      shaft: function (ctx, w, h, cols) {
-        // 粉白渐变半透底
-        var g = ctx.createLinearGradient(0, 0, 0, h)
-        g.addColorStop(0, withAlpha(cols.shaft, 0.85))
-        g.addColorStop(0.5, withAlpha("#ffffff", 0.55))
-        g.addColorStop(1, withAlpha(cols.grip, 0.75))
-        ctx.fillStyle = g
-        ctx.fillRect(0, 0, w, h)
-        // 柔和云朵暗纹
-        for (var i = 0; i < 6; i++) {
-          var cx = Math.random() * w
-          var cy = Math.random() * h
-          var rg = ctx.createRadialGradient(cx, cy, 5, cx, cy, 40)
-          rg.addColorStop(0, withAlpha("#ffffff", 0.25))
-          rg.addColorStop(1, withAlpha("#ffffff", 0))
-          ctx.fillStyle = rg
-          ctx.beginPath(); ctx.arc(cx, cy, 40, 0, Math.PI * 2); ctx.fill()
-        }
-      },
-      grip: function (ctx, w, h, cols) {
-        clear(ctx, w, h, cols.grip)
-        noise(ctx, w, h, 600, 0.04, 0.1, "#ffffff")
-      },
-      geometry: { butt: "round-soft", noMetalRing: true },
-      params: { shaft: { transparent: true, opacity: 0.78, roughness: 0.25 }, grip: { roughness: 0.5 } }
-    },
-
-    // 11. 冰晶雪魄
-    bingjingxuepo: {
-      prepare: function (c1, c2) {
-        return { shaft: c1, grip: c2, metal: "#d0e8ff", tip: c1, accent: "#a0d0ff" }
-      },
-      shaft: function (ctx, w, h, cols) {
-        clear(ctx, w, h, cols.shaft)
-        // 冰棱丝状纹
-        ctx.strokeStyle = withAlpha(cols.accent, 0.35)
-        ctx.lineWidth = 1.5
-        for (var i = 0; i < 20; i++) {
-          var x = Math.random() * w
-          ctx.beginPath(); ctx.moveTo(x, 0)
-          for (var y = 0; y < h; y += 10) {
-            x += (Math.random() - 0.5) * 4
-            ctx.lineTo(x, y)
-          }
-          ctx.stroke()
-        }
-        // 切面高光
-        ctx.strokeStyle = withAlpha("#ffffff", 0.35)
-        ctx.lineWidth = 2
-        ctx.beginPath(); ctx.moveTo(w * 0.2, 0); ctx.lineTo(w * 0.2, h); ctx.stroke()
-        ctx.beginPath(); ctx.moveTo(w * 0.8, 0); ctx.lineTo(w * 0.8, h); ctx.stroke()
-      },
-      grip: function (ctx, w, h, cols) {
-        clear(ctx, w, h, cols.grip)
-        noise(ctx, w, h, 800, 0.05, 0.12, "#6080a0")
-      },
-      geometry: { butt: "ice-crystal" },
-      params: { shaft: { transparent: true, opacity: 0.85, roughness: 0.2, metalness: 0.15 }, grip: { roughness: 0.55 } }
-    },
-
-    // 12. 万象权杖
-    wanxiangquanzhang: {
-      prepare: function (c1, c2) {
-        return { shaft: c2, grip: c2, metal: c1, tip: "#f0e6d0", accent: c1 }
-      },
-      shaft: function (ctx, w, h, cols) {
-        clear(ctx, w, h, cols.shaft)
-        // 欧式几何浮雕
-        ctx.strokeStyle = withAlpha(cols.metal, 0.45)
-        ctx.lineWidth = 2
-        for (var i = 0; i < 8; i++) {
-          var y = (i + 0.5) * (h / 8)
-          ctx.beginPath()
-          ctx.moveTo(w * 0.1, y)
-          ctx.lineTo(w * 0.3, y - 10)
-          ctx.lineTo(w * 0.5, y)
-          ctx.lineTo(w * 0.7, y + 10)
-          ctx.lineTo(w * 0.9, y)
-          ctx.stroke()
-        }
-        // 竖向雕花
-        ctx.strokeStyle = withAlpha(cols.metal, 0.3)
-        ctx.lineWidth = 1
-        for (var x = 0; x < w; x += 12) {
-          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke()
-        }
-        noise(ctx, w, h, 400, 0.03, 0.08, "#000000")
-      },
-      grip: function (ctx, w, h, cols) {
-        clear(ctx, w, h, cols.grip)
-        // 手工缠绕皮线
-        ctx.strokeStyle = withAlpha(cols.metal, 0.35)
-        ctx.lineWidth = 2
-        for (var i = -h; i < w + h; i += 8) {
-          ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i + h * 0.4, h); ctx.stroke()
-        }
-      },
-      metal: function (ctx, w, h, cols) {
-        var g = ctx.createLinearGradient(0, 0, w, 0)
-        g.addColorStop(0, cols.metal)
-        g.addColorStop(0.5, brighten(cols.metal, 40))
-        g.addColorStop(1, cols.metal)
-        ctx.fillStyle = g
-        ctx.fillRect(0, 0, w, h)
-        noise(ctx, w, h, 150, 0.05, 0.15, "#ffffff")
-        // 卷草纹
-        ctx.strokeStyle = withAlpha("#3a2a10", 0.35)
-        ctx.lineWidth = 1
-        ctx.beginPath(); ctx.arc(w / 2, h / 2, w / 4, 0, Math.PI * 2); ctx.stroke()
-      },
-      geometry: { butt: "ornate-disc" },
-      params: { shaft: { roughness: 0.4, metalness: 0.5 }, grip: { roughness: 0.75 }, metal: { metalness: 0.9, roughness: 0.2 } }
-    }
-  }
-
-  // 默认/旧主题使用的通用纹理
-  function woodTexture(ctx, w, h, cols) {
-    clear(ctx, w, h, cols.shaft || cols.grip || "#d2b48c")
-    var base = cols.shaft || cols.grip || "#d2b48c"
-    var dark = cols.grip || "#5a4a3a"
-    for (var i = 0; i < 160; i++) {
-      var t = Math.random()
-      var c = mix(base, dark, t)
-      ctx.strokeStyle = withAlpha(c, 0.25)
-      ctx.lineWidth = 1 + Math.random() * 2.5
-      var y = Math.random() * h
-      ctx.beginPath()
-      ctx.moveTo(0, y)
-      ctx.bezierCurveTo(w * 0.3, y + (Math.random() - 0.5) * 40,
-                         w * 0.7, y + (Math.random() - 0.5) * 40,
-                         w, y + (Math.random() - 0.5) * 20)
-      ctx.stroke()
-    }
-    var g = ctx.createLinearGradient(0, 0, w, 0)
-    g.addColorStop(0, "rgba(255,255,255,0)")
-    g.addColorStop(0.5, "rgba(255,255,255,0.06)")
-    g.addColorStop(1, "rgba(255,255,255,0)")
-    ctx.fillStyle = g; ctx.fillRect(0, 0, w, h)
-  }
-
-  function leatherTexture(ctx, w, h, cols) {
-    clear(ctx, w, h, cols.grip || "#332222")
-    var base = cols.grip || "#332222"
-    noise(ctx, w, h, 5000, 0.05, 0.15, "#000000")
-    ctx.strokeStyle = withAlpha("#000000", 0.12)
-    ctx.lineWidth = 1
-    for (var j = 0; j < h; j += 6) {
-      ctx.beginPath(); ctx.moveTo(0, j); ctx.lineTo(w, j); ctx.stroke()
-    }
-  }
-
-  function plainMetal(ctx, w, h, cols) {
-    clear(ctx, w, h, cols.metal || "#c9a24b")
-    noise(ctx, w, h, 200, 0.05, 0.2, "#ffffff")
-  }
-
-  function deriveTip(hex) {
-    return adjust(hex || "#1a1a1a", 0.55)
-  }
-
-  function getTheme(pattern) {
-    return THEMES[pattern] || THEMES.auto
-  }
-
-  function makeTexture(drawFn, colors) {
-    var size = 512
-    var canvas = document.createElement("canvas")
-    canvas.width = size; canvas.height = size
-    var ctx = canvas.getContext("2d")
-    drawFn(ctx, size, size, colors)
-    var tex = new THREE.CanvasTexture(canvas)
-    tex.wrapS = THREE.RepeatWrapping
-    tex.wrapT = THREE.RepeatWrapping
-    tex.repeat.set(1, 3)
-    return tex
-  }
 
   function makeFloorTexture() {
     var size = 512
@@ -730,207 +76,178 @@
     return false
   }
 
-  // ---------- 球杆几何组装 ----------
-  function buildCue(opts, quality) {
-    try {
-    var pattern = opts.pattern || "auto"
-    var theme = getTheme(pattern)
-    var colors = theme.prepare ? theme.prepare(opts.wood, opts.dark) : { shaft: opts.wood, grip: opts.dark, metal: opts.metal, tip: opts.tip }
-    colors.metal = colors.metal || opts.metal
-    colors.tip = colors.tip || opts.tip
+  // ---------- 球杆几何组装（v1.3.54：复用游戏内真实球杆） ----------
+
+  /**
+   * 游戏内资源入口。
+   *
+   * dist/cue-texture-factory.js 由 tools/cue-textures/ 从 src/view/cuetexturefactory.ts
+   * 与 src/utils/settings.ts 原样打包而来（three 走 external→window.THREE），挂
+   * window.CueGameCue。预览因此与游戏共用同一份程序化贴图代码与同一组几何参数，
+   * 不再是"另起炉灶的简化模型"——v1.3.54 之前就是这样：预览自己维护了一套
+   * L=5.0 / 杆尾半径 0.28（长径比 8.9:1）的胖棒槌，与游戏内真实球杆的 46.7:1
+   * 完全不同，用户一眼就能看出"不是真实球杆"。
+   */
+  function gameCue() {
+    var G = global.CueGameCue
+    if (!G || !G.CUE_GEOM || !G.getCueTexture) {
+      throw new Error("cue-texture-factory.js 未加载（window.CueGameCue 缺失）")
+    }
+    return G
+  }
+
+  /**
+   * 与 src/view/cuemesh.ts 的 shade() 完全一致：amount>0 提亮，<0 压暗。
+   * auto（随台面）主题用它从台呢色派生杆身 / 杆尾颜色。
+   */
+  function shade(hex, amount) {
+    var r = (hex >> 16) & 0xff
+    var g = (hex >> 8) & 0xff
+    var b = hex & 0xff
+    function f(c) {
+      return Math.max(0, Math.min(255, Math.round(
+        amount >= 0 ? c + (255 - c) * amount : c * (1 + amount)
+      )))
+    }
+    return (f(r) << 16) | (f(g) << 8) | f(b)
+  }
+
+  /**
+   * 组装球杆。四段圆柱 cueButt / cueShaft / cueFerrule / cueTip，周向分段 9，
+   * 与 src/view/cuemesh.ts 的 cueGeometry() + applyCueTheme() 逐项对齐：
+   *   - 比例：杆尾 0.28 / 杆身 0.71 / 先角 0.007，皮头厚 0.0055
+   *   - 半径：杆尾端 (R*0.23)/0.5、杆头端 (R*0.07)/0.5、杆尾顶端 ×0.9、皮头顶端 ×0.93
+   *   - 材质：MeshPhongMaterial；杆身/杆尾套游戏内分区贴图，auto 时由台呢色派生
+   * 几何按游戏内真实尺寸建好后再整体缩放到预览世界尺度（总长 5.0），
+   * 这样相机 / 地面 / 倒影 / 光环的既有常量全部沿用，改动收敛在几何与材质上。
+   */
+  function buildCue(opts) {
+    var G = gameCue()
+    var GEO = G.CUE_GEOM
+    var themeId = opts.cueTheme || "auto"
+    var theme = G.getCueTheme(themeId)
+    var skin = G.getSkin(opts.skin)
+    var cloth = G.getTableSkin(opts.tableSkin).clothColor
+
+    var S = 5.0 / GEO.length // 统一缩放到预览世界尺度（总长 5.0）
+    var L = GEO.length * S
+    var tipR = GEO.tipRadius * S
+    var buttR = GEO.buttRadius * S
+    var buttL = L * GEO.buttLengthRatio
+    var shaftL = L * GEO.shaftLengthRatio
+    var ferruleL = L * GEO.ferruleLengthRatio
+    var tipH = GEO.tipHeight * S
+    var seg = GEO.segments
+
+    // 杆身 / 杆尾两张分区贴图（auto 返回 null，走下面的颜色派生分支）
+    var shaftTex = G.getCueTexture(themeId)
+    var buttTex = G.getCueButtTexture(themeId)
 
     var group = new THREE.Group()
-    var L = 5.0
-    var segs = 40
-    var isLow = quality === "low"
 
-    function mat(color, params) {
-      params = params || {}
-      var p = { color: hexToNum(color) }
-      if (params.map) p.map = params.map
-      if (params.shininess != null) p.shininess = params.shininess
-      if (params.specular != null) p.specular = params.specular
-      if (params.metalness != null) p.metalness = params.metalness
-      if (params.roughness != null) p.roughness = params.roughness
-      if (params.transparent) { p.transparent = true; p.opacity = params.opacity || 0.8 }
-      if (params.emissive != null) p.emissive = params.emissive
-      if (params.emissiveIntensity != null) p.emissiveIntensity = params.emissiveIntensity
-      // v1.3.38-fix：低端机不再强制 Lambert（太平、像塑料），统一用 Phong 以获得高光与立体感；
-      // 若调用方没传 specular/shininess，则补一个柔和默认高光，避免死灰。
-      if (p.specular == null && p.metalness == null && p.roughness == null) {
-        p.specular = 0x333333
-        p.shininess = p.shininess || 35
+    function phong(color, shininess) {
+      return new THREE.MeshPhongMaterial({ color: color, shininess: shininess })
+    }
+    function add(geo, mat, y, name) {
+      var m = new THREE.Mesh(geo, mat)
+      m.name = name
+      m.position.y = y
+      group.add(m)
+      return m
+    }
+
+    // applyCueTheme() 的等价实现：贴图优先，无贴图时按台呢色派生；
+    // 光泽优先取主题 finish，其次才是几何默认值（有贴图时不覆盖，与游戏内一致）。
+    function applyTheme(mat, isButt) {
+      var tex = isButt ? buttTex : shaftTex
+      if (tex) {
+        mat.map = tex
+        mat.color.setHex(0xffffff)
+      } else {
+        mat.map = null
+        mat.color.setHex(isButt ? shade(cloth, -0.28) : shade(cloth, 0.12))
       }
-      if (params.metalness != null || params.roughness != null) return new THREE.MeshStandardMaterial(p)
-      return new THREE.MeshPhongMaterial(p)
-    }
-
-    var shaftTex = makeTexture(theme.shaft || woodTexture, colors)
-    var gripTex = makeTexture(theme.grip || leatherTexture, colors)
-    var metalTex = theme.metal ? makeTexture(theme.metal, colors) : null
-
-    var p = theme.params || {}
-
-    function seg(y0, y1, rTop, rBot, material) {
-      var h = y1 - y0
-      var geo = new THREE.CylinderGeometry(rTop, rBot, h, segs, 1, false)
-      var mesh = new THREE.Mesh(geo, material)
-      mesh.position.y = (y0 + y1) / 2
-      return mesh
-    }
-
-    var buttColor = colors.grip
-    var gripColor = colors.grip
-    var shaftColor = colors.shaft
-    var metalColor = colors.metal
-    var tipColor = colors.tip
-
-    var buttR = 0.28, gripR = 0.24, shaftR = 0.19, ferruleR = 0.155, tipR = 0.12
-    var buttEnd = -L / 2 + 1.1
-    var ringEnd = buttEnd + 0.22
-    var gripEnd = -L / 2 + 2.8
-    var shaftEnd = L / 2 - 0.42
-    var ferruleEnd = L / 2 - 0.12
-
-    // 杆尾 butt
-    var buttStyle = theme.geometry && theme.geometry.butt
-    if (buttStyle === "round-root" || buttStyle === "round-soft") {
-      // 圆润杆尾
-      group.add(seg(-L / 2, buttEnd, buttR * 0.85, buttR, mat(buttColor, { map: gripTex, roughness: 0.8 })))
-    } else if (buttStyle === "inkstone") {
-      // 方正小砚台
-      var box = new THREE.Mesh(
-        new THREE.BoxGeometry(buttR * 2.4, 0.6, buttR * 1.8),
-        mat(buttColor, { roughness: 0.95 })
-      )
-      box.position.y = -L / 2 + 0.35
-      group.add(box)
-      group.add(seg(buttEnd - 0.1, buttEnd, buttR * 0.9, buttR, mat(buttColor, { map: gripTex })))
-    } else if (buttStyle === "lava-rock") {
-      // 不规则熔岩岩石
-      for (var i = 0; i < 8; i++) {
-        var s = 0.12 + Math.random() * 0.14
-        var rock = new THREE.Mesh(
-          new THREE.DodecahedronGeometry(s, 0),
-          mat(buttColor, { roughness: 0.95 })
-        )
-        rock.position.set((Math.random() - 0.5) * buttR * 2, -L / 2 + Math.random() * 0.5, (Math.random() - 0.5) * buttR * 2)
-        group.add(rock)
+      if (theme.finish) {
+        mat.shininess = isButt ? theme.finish.butt : theme.finish.shaft
+      } else if (!tex) {
+        mat.shininess = isButt ? 80 : 50
       }
-      group.add(seg(-L / 2 + 0.5, buttEnd, buttR * 0.8, buttR, mat(buttColor, { map: gripTex })))
-    } else if (buttStyle === "ice-crystal") {
-      // 多面冰晶
-      var crystal = new THREE.Mesh(
-        new THREE.ConeGeometry(buttR * 1.4, 0.8, 6),
-        mat("#eaf6ff", { transparent: true, opacity: 0.75, roughness: 0.2 })
-      )
-      crystal.position.y = -L / 2 + 0.45
-      crystal.rotation.x = Math.PI
-      group.add(crystal)
-      group.add(seg(-L / 2 + 0.55, buttEnd, buttR * 0.85, buttR, mat(buttColor, { map: gripTex })))
-    } else if (buttStyle === "ornate-disc") {
-      // 宽大圆形鎏金浮雕饰盘
-      var disc = new THREE.Mesh(
-        new THREE.CylinderGeometry(buttR * 1.8, buttR * 1.8, 0.18, 48),
-        mat(metalColor, { metalness: 0.9, roughness: 0.2, map: metalTex })
-      )
-      disc.position.y = -L / 2 + 0.5
-      group.add(disc)
-      group.add(seg(-L / 2 + 0.65, buttEnd, buttR * 0.9, buttR, mat(buttColor, { map: gripTex })))
-    } else if (buttStyle === "circuit-disc") {
-      var disc2 = new THREE.Mesh(
-        new THREE.CylinderGeometry(buttR * 1.1, buttR * 1.1, 0.12, 32),
-        mat(metalColor, { metalness: 0.8, roughness: 0.3, map: metalTex })
-      )
-      disc2.position.y = -L / 2 + 0.45
-      group.add(disc2)
-      group.add(seg(-L / 2 + 0.6, buttEnd, buttR * 0.85, buttR, mat(buttColor, { map: gripTex })))
-    } else if (buttStyle === "feather-ring") {
-      var ring = new THREE.Mesh(
-        new THREE.TorusGeometry(buttR * 1.1, 0.06, 12, 48),
-        mat(metalColor, { metalness: 0.9, roughness: 0.2, map: metalTex })
-      )
-      ring.rotation.x = Math.PI / 2
-      ring.position.y = -L / 2 + 0.45
-      group.add(ring)
-      group.add(seg(-L / 2 + 0.6, buttEnd, buttR * 0.9, buttR, mat(buttColor, { map: gripTex })))
-    } else if (buttStyle === "blunt-cone") {
-      var cone = new THREE.Mesh(
-        new THREE.CylinderGeometry(buttR * 0.6, buttR * 1.1, 0.6, 32),
-        mat(metalColor, { metalness: 0.8, roughness: 0.35 })
-      )
-      cone.position.y = -L / 2 + 0.35
-      group.add(cone)
-      group.add(seg(-L / 2 + 0.55, buttEnd, buttR * 0.85, buttR, mat(buttColor, { map: gripTex })))
-    } else if (buttStyle === "small-cone") {
-      var cone2 = new THREE.Mesh(
-        new THREE.ConeGeometry(buttR * 0.85, 0.55, 32),
-        mat(metalColor, { metalness: 0.75, roughness: 0.4 })
-      )
-      cone2.position.y = -L / 2 + 0.32
-      cone2.rotation.x = Math.PI
-      group.add(cone2)
-      group.add(seg(-L / 2 + 0.5, buttEnd, buttR * 0.85, buttR, mat(buttColor, { map: gripTex })))
-    } else if (buttStyle === "poly-metal") {
-      var poly = new THREE.Mesh(
-        new THREE.CylinderGeometry(buttR * 0.9, buttR * 1.15, 0.55, 6),
-        mat(metalColor, { metalness: 0.95, roughness: 0.05 })
-      )
-      poly.position.y = -L / 2 + 0.32
-      group.add(poly)
-      group.add(seg(-L / 2 + 0.55, buttEnd, buttR * 0.85, buttR, mat(buttColor, { map: gripTex })))
-    } else {
-      // 默认圆润杆尾
-      group.add(seg(-L / 2, buttEnd, buttR * 0.85, buttR, mat(buttColor, { map: gripTex, roughness: 0.8 })))
+      mat.needsUpdate = true
     }
 
-    // 金属镶嵌环
-    if (!theme.geometry || !theme.geometry.noMetalRing) {
-      group.add(seg(buttEnd, ringEnd, buttR * 1.08, buttR * 1.08,
-        mat(metalColor, { map: metalTex, metalness: p.metal ? p.metal.metalness : 0.9, roughness: p.metal ? p.metal.roughness : 0.2 })))
-    }
+    // cueGeometry() 的四段材质基色：杆身/杆尾取皮肤色（随后被 applyTheme 覆盖），
+    // 先角为浅米白硬材质、皮头取皮肤 tipColor。
+    var shaftMat = phong(skin.shaftColor, 50)
+    var buttMat = phong(skin.buttColor, 80)
+    applyTheme(shaftMat, false)
+    applyTheme(buttMat, true)
 
-    // 握把 grip
-    if (pattern === "qingzhutingfeng") {
-      // 青竹：竹节凸起
-      var gripSegs = 4
-      var gh = (gripEnd - ringEnd) / gripSegs
-      for (var gi = 0; gi < gripSegs; gi++) {
-        var y0 = ringEnd + gi * gh
-        var y1 = y0 + gh * 0.82
-        var yRing = y0 + gh * 0.82
-        group.add(seg(y0, y1, gripR * 0.92, gripR * 0.88, mat(gripColor, { map: gripTex, roughness: 0.7 })))
-        group.add(seg(y1, yRing + gh * 0.18, gripR * 1.06, gripR * 1.06, mat("#a0d0a0", { shininess: 60 })))
-      }
-    } else {
-      group.add(seg(ringEnd, gripEnd, gripR * 0.95, gripR * 0.88, mat(gripColor, { map: gripTex, roughness: p.grip ? p.grip.roughness : 0.85 })))
-    }
+    var buttY = -L / 2
+    add(new THREE.CylinderGeometry(buttR * GEO.buttTopRatio, buttR, buttL, seg),
+      buttMat, buttY + buttL / 2, "cueButt")
+    var shaftY = buttY + buttL
+    add(new THREE.CylinderGeometry(tipR, buttR * GEO.buttTopRatio, shaftL, seg),
+      shaftMat, shaftY + shaftL / 2, "cueShaft")
+    var ferruleY = shaftY + shaftL
+    add(new THREE.CylinderGeometry(tipR, tipR, ferruleL, seg),
+      phong(GEO.ferruleColor, GEO.ferruleShininess), ferruleY + ferruleL / 2, "cueFerrule")
+    var tipY = ferruleY + ferruleL
+    add(new THREE.CylinderGeometry(tipR * GEO.tipTopRatio, tipR, tipH, seg),
+      phong(skin.tipColor, GEO.tipShininess), tipY + tipH / 2, "cueTip")
 
-    // v1.3.42-fix：预览展示「粗段 + 一段杆身」而非只截断到握把。
-    // 只显示粗段时像一个短圆柱，完全不像球杆；保留 butt→grip→ring→shaft(前70%)
-    // 的锥度变化，才能一眼认出是真实球杆。不渲染最尖尖的皮头 tip，避免过长。
-    // 长度锚点：butt=-L/2(-2.5) ~ shaftShowEnd≈1.6，显示总长≈4.1。
-    var shaftShowEnd = L / 2 - 0.9  // 约 1.6，在杆身中段偏前
-    var shaftParams = p.shaft || { roughness: 0.55 }
-    if (shaftParams.transparent) shaftParams.map = shaftTex
-    var shaftMatParams = { map: shaftTex }
-    for (var k in shaftParams) { if (Object.prototype.hasOwnProperty.call(shaftParams, k)) shaftMatParams[k] = shaftParams[k] }
-    group.add(seg(gripEnd, shaftShowEnd, shaftR * 0.9, shaftR * 1.02, mat(shaftColor, shaftMatParams)))
-    // 完整杆身模式（可选）才继续构建先角 ferrule + 皮头 tip
-    if (opts.showFull) {
-      group.add(seg(shaftShowEnd, shaftEnd, shaftR * 1.02, shaftR * 1.02, mat(shaftColor, shaftMatParams)))
-      group.add(seg(shaftEnd, ferruleEnd, ferruleR * 0.92, ferruleR, mat("#eeeeee", { shininess: 80 })))
-      group.add(seg(ferruleEnd, L / 2, tipR * 0.88, tipR, mat(tipColor, { roughness: 0.85 })))
-    }
     return group
-  } catch (e) {
-    console.error("[cuePreview3D] buildCue failed for pattern:", opts.pattern, e)
-    if (opts.pattern !== "auto") {
-      return buildCue({ wood: opts.wood, dark: opts.dark, metal: opts.metal, tip: opts.tip, pattern: "auto" }, quality)
+  }
+
+  // ---------- v1.3.52 轨道相机常量 ----------
+  var FOV = 34 // 与 new PerspectiveCamera 的第一个参数保持一致
+  var HALF_LEN = 2.5 // 完整球杆半长（含先角 + 皮头，总长 5.0）
+  // v1.3.54：球杆最大半径（杆尾端）不再是写死的 0.28。
+  // 预览改用游戏内真实球杆后，半径由 CUE_GEOM 按真实长径比 46.7:1 反算：
+  //   buttR = ((R*0.23)/0.5) × (5.0 / (R*43)) ≈ 0.0535
+  // 旧值 0.28 对应长径比仅 8.9:1，正是预览"看着不像球杆"的根因。
+  // 用惰性求值：CueGameCue 尚未加载时（模块初始化阶段）先退回旧值，
+  // buildCue() 真正建几何前必然已加载，届时取到的是真实值。
+  var HALF_RAD = 0.28
+  function syncHalfRad() {
+    var G = global.CueGameCue
+    if (G && G.CUE_GEOM) {
+      HALF_RAD = G.CUE_GEOM.buttRadius * (5.0 / G.CUE_GEOM.length)
+      FIT_R = Math.sqrt(HALF_LEN * HALF_LEN + 2 * HALF_RAD * HALF_RAD)
     }
-    throw e
+    return HALF_RAD
   }
-  }
+  var FILL_H = 0.92 // 水平留边：球杆最多占到可视宽度的 92%
+  var FILL_V = 0.86 // 垂直留边：给顶部主题名、底部操作提示留白
+  var ZOOM_MIN = 0.35 // 缩放绝对下限（兜底，见下方 SAFE_CLEAR 说明）
+  var ZOOM_MAX = 1.6
+  // 球杆包围球半径：sqrt(HALF_LEN² + 2·HALF_RAD²)。
+  // 真实球杆下 = sqrt(2.5² + 2×0.0535²) ≈ 2.5011（旧简化模型为 2.5311）。
+  // 用于缩放下限——相机距离小于它就会退进球杆内部，看到背面 / 内壁，画面发黑或过曝。
+  // v1.3.54：HALF_RAD 会随 syncHalfRad() 变化，故 FIT_R 也一并重算（见 syncHalfRad）。
+  var FIT_R = Math.sqrt(HALF_LEN * HALF_LEN + 2 * HALF_RAD * HALF_RAD)
+  // 相机与包围球表面之间保留的最小间隙。v1.3.52-fix：ZOOM_MIN 原先写死 0.35，
+  // 在横屏（baseDist≈4.27）下对应相机距离仅 1.50，远小于包围球半径 2.53——
+  // 双指捏合到底时相机直接穿进球杆里：实测 yaw=88° 时画面平均亮度从 51 崩到 4.7
+  // （全黑），yaw=30° 时又过曝到 172。改为按下限动态求解：
+  //   zoomMin = max(ZOOM_MIN, (FIT_R + SAFE_CLEAR) / baseDist)
+  // 横屏得 0.756（可再拉近约 25%），竖屏 baseDist≈9.90 得 0.316、由绝对下限兜到 0.35。
+  var SAFE_CLEAR = 0.7
+  // pitch 限位。横屏下限 -18° 是硬边界：相机 y = d·sin(pitch) + pan，再低就会
+  // 掉到地板 y=-1.35 以下，倒影直接穿帮。看端盖细节靠 yaw 转到杆头正对相机，
+  // 不需要大俯仰；限制 pitch 还能让球杆始终接近水平，占满屏幕宽度、细节最大。
+  var PITCH_MIN_H = -18
+  var PITCH_MAX_H = 20
+  var PITCH_LIMIT_V = 70 // 竖屏时地面已隐藏，可以随便俯仰
+  // 求 baseDist 时的采样姿态：取这些姿态下需求距离的最大值，保证全角度不出画。
+  // 只需采 0°~180°：包围盒 [±2.5, ±0.28, ±0.28] 中心对称，(yaw, pitch) 与
+  // (yaw+180, −pitch) 完全等价；实测 0~180 与 0~360 逐点扫描结果逐位一致。
+  // pitch 只采「下限 / 0 / 上限」三档：以 0.5° 步长稠密扫描确认最差点必然落在这三档。
+  // 步长 6°（31 个样本）是精度与耗时的平衡点：15° 会漏掉真正的最差点、导致 0.48%
+  // 出画；6° 的残余出画仅 0.006%（≈0.03px，肉眼不可见），relayout 全程约 4ms。
+  var FIT_YAW_STEP = 6
+  var FIT_PITCHES = [-18, 0, 20]
+  var CENTER_ITERS = 18 // 居中二分次数，残差约 2e-5 NDC（≈0.02px）
+  var FIT_ITERS = 22 // 距离二分次数
 
   // ---------- 主类 ----------
   function CuePreview3D(canvas) {
@@ -942,12 +259,30 @@
     this.reflection = null
     this.cuePivot = null
     this.reflectionPivot = null
+    this.floor = null
+    this.ring = null
     this.raf = null
     this.running = false
-    this.spin = 0
-    this.floatPhase = 0
     this.quality = "high"
-    this.theme = { wood: "#d2b48c", dark: "#1a1a1a", metal: "#c9a24b", tip: "#2f7d4f", pattern: "auto" }
+    // v1.3.54：球杆几何与贴图全部由 cueTheme / skin / tableSkin 三个游戏内 ID 决定，
+    // 走 window.CueGameCue 取真实资源（见 buildCue）。
+    // wood / dark / metal / tip 只剩一个用途：倒影的整体压暗色（dark）与兼容旧调用方。
+    this.theme = {
+      wood: "#d2b48c", dark: "#1a1a1a", metal: "#c9a24b", tip: "#2f7d4f",
+      pattern: "auto",
+      cueTheme: "auto", // 球杆主题 ID（CUE_THEMES[].id，与 kind 同名）
+      skin: "classic", // SKINS[].id：皮头色 / 杆身杆尾基色
+      tableSkin: "classic" // TABLE_SKINS[].id：auto 主题的颜色派生源
+    }
+    // v1.3.52：球坐标轨道相机（角度单位：度）。yaw 自由 360°；pitch 限位见下方
+    // PITCH_MIN_H / PITCH_MAX_H / PITCH_LIMIT_V。zoom 是基准距离的倍数，由双指捏合控制。
+    this.orbit = { yaw: 30, pitch: 12, zoom: 1 }
+    this.baseDist = 4.5 // 由 relayout() 按画布宽高比算出的静态基准距离
+    this.zoomMin = ZOOM_MIN // 由 relayout() 按 baseDist 与包围球半径算出，保证相机不进球杆内部
+    this.vertical = false // 竖屏：球杆改为竖直放置并隐藏地面/倒影
+    this._raf = null // 按需渲染的 rAF 句柄（与 start/stop 用的 this.raf 相互独立）
+    this._fitA = 0 // relayout 记忆化：上次拟合用的宽高比（0 = 从未拟合过）
+    this._fitVert = null // relayout 记忆化：上次拟合时的朝向
     this._onResize = this._onResize.bind(this)
     this._loop = this._loop.bind(this)
   }
@@ -959,7 +294,8 @@
       this.renderer = new THREE.WebGLRenderer({
         canvas: this.canvas, antialias: true, alpha: true, preserveDrawingBuffer: false
       })
-      this.renderer.setPixelRatio(Math.min(global.devicePixelRatio || 1, 2))
+      // v1.3.52：全屏下 DPR2 约 1000 万像素，对中低端机压力过大，上限压到 1.5
+      this.renderer.setPixelRatio(Math.min(global.devicePixelRatio || 1, 1.5))
       this.renderer.setClearColor(0x0a1020, 1)
       this.renderer.outputColorSpace = THREE.SRGBColorSpace
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping
@@ -974,12 +310,12 @@
     }
 
     this.scene = new THREE.Scene()
-    // v1.3.42-fix：预览展示粗段 + 一段杆身（总长≈4.1），并采用侧前方透视：
-    // 相机位于粗端左上方、看向杆身中段，利用近大远小的透视让球杆从画面左下
-    // 延伸至右上，填满 300×130 弹窗且保留真实锥度，避免“短圆柱”感。
+    // v1.3.52：机位不再写死。相机改为球坐标轨道（yaw / pitch / zoom），由 applyCamera()
+    // 每次渲染前按 orbit 状态计算；基准距离 baseDist 由 relayout() 依画布宽高比算出。
+    // 旧的 (-2.2, 1.4, 2.8) / lookAt(0.6,0,0) 是为 300×130 小窗调的，全屏后宽高比
+    // 从 2.3 变成 2.17~0.46，固定机位会让球杆严重偏小或偏位。
+    // FOV 仍保持 34°：26°~40° 之间近端膨胀比只从 1.16 变到 1.23，改了不划算。
     this.camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100)
-    this.camera.position.set(-2.2, 1.4, 2.8)
-    this.camera.lookAt(0.6, 0, 0)
 
     var hemi = new THREE.HemisphereLight(0xaec4e8, 0x070a12, 0.65)
     this.scene.add(hemi)
@@ -998,20 +334,17 @@
     back.position.set(0, 5, -6)
     this.scene.add(back)
 
-    this.cue = buildCue(this.theme, this.quality)
-    // v1.3.42：球杆横置展示——用 pivot 把沿 Y 轴建模的球杆放平到 X 轴，
-    // 旋转动画只绕 pivot 的 X 轴（即横杆长轴）滚动，呈现产品式水平自转。
-    this.cue.rotation.z = -Math.PI / 2
-    // v1.3.42-fix：显示范围 local Y∈[-2.5, 1.6]，放平后 world X∈[-1.6, 2.5]，
-    // 中心约 0.45；整体平移 -0.45 使其在画面居中。
-    this.cue.position.x = -0.45
+    // v1.3.54：完整球杆（含先角+皮头，总长 5.0）。摆放统一交给 applyLayout()：
+    // 横屏放平到 X 轴且 position.x = 0（完整杆中心就在原点；旧值 -0.45 是为
+    // 截断杆 local Y∈[-2.5,1.6] 居中的，全杆时会整体偏左）；竖屏保持竖直。
+    // 建几何前先同步真实半径，保证 relayout() 的包围球 / 缩放下限用的是同一套尺寸。
+    syncHalfRad()
+    this.cue = buildCue(this.theme)
     this.cuePivot = new THREE.Group()
     this.cuePivot.add(this.cue)
     this.scene.add(this.cuePivot)
 
-    this.reflection = buildCue(this.theme, this.quality)
-    this.reflection.rotation.z = -Math.PI / 2
-    this.reflection.position.x = -0.45
+    this.reflection = buildCue(this.theme)
     this.reflection.traverse(function (o) {
       if (o.isMesh) {
         o.material = o.material.clone()
@@ -1034,104 +367,570 @@
     )
     floor.rotation.x = -Math.PI / 2
     floor.position.y = -1.35
+    this.floor = floor // v1.3.52：竖屏布局需隐藏（竖直的杆会穿过 y=-1.35 的地面）
     this.scene.add(floor)
 
     // 地台装饰：极简化——仅保留一圈极淡的提示光环，去掉刻度等科技感元素，突出球杆本体。
+    // v1.3.52：光环半径 3.3 → 3.9。旧值是按截断杆（长 4.1）调的，完整杆长 5.0 时偏小。
     var ringMat = new THREE.MeshBasicMaterial({ color: 0x5c7fb8, transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false })
-    var ring = new THREE.Mesh(new THREE.RingGeometry(3.3, 3.38, 96), ringMat)
+    var ring = new THREE.Mesh(new THREE.RingGeometry(3.9, 3.99, 96), ringMat)
     ring.position.y = -1.345
     ring.rotation.x = -Math.PI / 2
+    this.ring = ring // v1.3.52：竖屏布局需隐藏
     this.scene.add(ring)
 
-    this._resize()
+    this.applyLayout() // 先按当前宽高比摆好球杆朝向
+    this._resize() // 内部会调 relayout()：算 baseDist、设 aspect、渲染首帧
+    this.bindControls() // 单指旋转 / 双指捏合
     global.addEventListener("resize", this._onResize)
+    global.addEventListener("orientationchange", this._onResize)
   }
 
   CuePreview3D.prototype._resize = function () {
     if (!this.renderer) return
-    var w = this.canvas.clientWidth || 200
-    var h = this.canvas.clientHeight || 140
-    this.renderer.setSize(w, h, false)
-    this.camera.aspect = w / h
-    this.camera.updateProjectionMatrix()
+    this.relayout()
+    // 兜底：方向切换或浮层刚从 display:none 变成 flex 时，clientWidth 可能还没
+    // 更新到最终值，下一帧再算一次，确保拿到真实尺寸。
+    var self = this
+    global.requestAnimationFrame(function () { self.relayout() })
   }
 
   CuePreview3D.prototype._onResize = function () { this._resize() }
 
+  /**
+   * 只记录颜色（倒影压暗色 + 兼容旧调用方），**不重建几何**。
+   * v1.3.54 起几何与贴图由 setCueTheme() 决定，重建统一收敛到那里，
+   * 避免一次打开预览重复建两遍球杆。
+   */
   CuePreview3D.prototype.setTheme = function (wood, dark, metal, tip, pattern) {
     if (wood) this.theme.wood = wood
     if (dark) this.theme.dark = dark
     if (metal) this.theme.metal = metal
     if (tip) this.theme.tip = tip
     if (pattern) this.theme.pattern = pattern
-    if (this.scene) {
-      if (this.cuePivot) this.scene.remove(this.cuePivot)
-      if (this.reflectionPivot) this.scene.remove(this.reflectionPivot)
-      this.cue = buildCue(this.theme, this.quality)
-      this.cue.rotation.z = -Math.PI / 2
-      this.cue.position.x = -0.45
-      this.cuePivot = new THREE.Group()
-      this.cuePivot.add(this.cue)
-      this.scene.add(this.cuePivot)
-      var self = this
-      this.reflection = buildCue(this.theme, this.quality)
-      this.reflection.rotation.z = -Math.PI / 2
-      this.reflection.position.x = -0.45
-      this.reflection.traverse(function (o) {
-        if (o.isMesh) {
-          o.material = o.material.clone()
-          o.material.transparent = true
-          o.material.opacity = 0.18
-          o.material.color = new THREE.Color(hexToNum(self.theme.dark || "#1a1a1a")).lerp(new THREE.Color(0x000000), 0.45)
-        }
-      })
-      this.reflectionPivot = new THREE.Group()
-      this.reflectionPivot.add(this.reflection)
-      this.reflectionPivot.position.y = -1.35
-      this.reflectionPivot.scale.y = -0.85
-      this.scene.add(this.reflectionPivot)
-    }
   }
 
+  /**
+   * 设置球杆主题并重建球杆（v1.3.54）。
+   * @param {string} themeId    球杆主题 ID（CUE_THEMES[].id，如 "qingzhutingfeng" / "auto"）
+   * @param {string} skinId     皮肤 ID（SKINS[].id），决定皮头色与杆身杆尾基色
+   * @param {string} tableSkinId 桌皮 ID（TABLE_SKINS[].id），auto 主题由此派生颜色
+   */
+  CuePreview3D.prototype.setCueTheme = function (themeId, skinId, tableSkinId) {
+    if (themeId) this.theme.cueTheme = themeId
+    if (skinId) this.theme.skin = skinId
+    if (tableSkinId) this.theme.tableSkin = tableSkinId
+    if (this.scene) this._rebuild()
+  }
+
+  /**
+   * 重建球杆与倒影两棵子树。
+   *
+   * v1.3.52：先把旧的两棵子树彻底 dispose 再移除。旧代码只 remove 不 dispose，
+   * 每次切主题都泄漏一整套 geometry/material + 2 张 512×512 程序化贴图；
+   * 19 个主题连切一遍会累积约 40MB 显存，中低端机有 OOM 风险。
+   * 注意：disposeTree 只作用于 cuePivot / reflectionPivot 子树，
+   * 绝不碰 renderer / scene / camera（见文件顶部红线的说明）。
+   */
+  CuePreview3D.prototype._rebuild = function () {
+    disposeTree(this.cuePivot)
+    disposeTree(this.reflectionPivot)
+    if (this.cuePivot) this.scene.remove(this.cuePivot)
+    if (this.reflectionPivot) this.scene.remove(this.reflectionPivot)
+    // 摆放（放平/竖直、居中）统一由 applyLayout() 负责，这里不再写死
+    syncHalfRad()
+    this.cue = buildCue(this.theme)
+    this.cuePivot = new THREE.Group()
+    this.cuePivot.add(this.cue)
+    this.scene.add(this.cuePivot)
+    var self = this
+    this.reflection = buildCue(this.theme)
+    this.reflection.traverse(function (o) {
+      if (o.isMesh) {
+        o.material = o.material.clone()
+        o.material.transparent = true
+        o.material.opacity = 0.18
+        o.material.color = new THREE.Color(hexToNum(self.theme.dark || "#1a1a1a")).lerp(new THREE.Color(0x000000), 0.45)
+      }
+    })
+    this.reflectionPivot = new THREE.Group()
+    this.reflectionPivot.add(this.reflection)
+    this.reflectionPivot.position.y = -1.35
+    this.reflectionPivot.scale.y = -0.85
+    this.scene.add(this.reflectionPivot)
+    this.applyLayout()
+    // v1.3.54-fix：必须补一次 relayout。
+    // 旧代码重建完就只 requestRender，画布尺寸 / 朝向 / baseDist 全部沿用上次的值。
+    // 若用户「在预览关闭状态下转屏」，resize 事件发生时浮层是 display:none，
+    // canvas.clientWidth 为 0，relayout 会退回 200×140 兜底并把 vertical 算成 false；
+    // 再打开预览时走的就是这条重建路径，于是渲染缓冲停在 200×140 被拉伸到全屏、
+    // aspect 1.429（实际 0.47）、球杆朝向也判断错。实测已复现，故在此补一次重算。
+    // 开销可忽略：relayout 内部按宽高比记忆化，比例没变时只做 setSize + 一帧渲染。
+    this._resize()
+  }
+
+  // v1.3.52：自动旋转已取消，视角完全交给手指。保留这个 API 只为兼容调用方
+  // （menu-cn.js），传 true 时改成"渲染一帧"，不再启动任何动画循环。
   CuePreview3D.prototype.setAutoRotate = function (b) {
-    if (b && !this.running) this.start()
-    else if (!b && this.running) this.stop()
+    if (b) this.requestRender()
   }
 
-  CuePreview3D.prototype.start = function () {
-    if (this.running) return
-    this.running = true
-    this._last = 0
-    this.raf = global.requestAnimationFrame(this._loop)
-  }
+  CuePreview3D.prototype.start = function () { this.requestRender() }
 
   CuePreview3D.prototype.stop = function () {
     this.running = false
     if (this.raf != null) { global.cancelAnimationFrame(this.raf); this.raf = null }
+    if (this._raf != null) { global.cancelAnimationFrame(this._raf); this._raf = null }
   }
 
-  CuePreview3D.prototype._loop = function (ts) {
-    if (!this.running) return
+  // v1.3.52：_loop 不再驱动自转/浮动（那两者依赖常驻 rAF），退化为单帧执行体。
+  CuePreview3D.prototype._loop = function () { this.renderOnce() }
+
+  /** 同步渲染一帧。 */
+  CuePreview3D.prototype.renderOnce = function () {
     if (!this.renderer || !this.scene || !this.camera) return
-    var dt = this._last ? (ts - this._last) / 1000 : 0.016
-    this._last = ts
-    this.spin += dt * 0.45
-    this.floatPhase += dt * 1.2
-    if (this.cuePivot) {
-      this.cuePivot.rotation.x = this.spin
-      this.cuePivot.position.y = Math.sin(this.floatPhase) * 0.05
-    }
-    if (this.reflectionPivot) {
-      this.reflectionPivot.rotation.x = this.spin
-      this.reflectionPivot.position.y = -1.35 + Math.sin(this.floatPhase) * 0.03
-    }
+    this.applyCamera()
     this.renderer.render(this.scene, this.camera)
-    this.raf = global.requestAnimationFrame(this._loop)
   }
 
+  /**
+   * 按需渲染（dirty flag）：同一帧内的 N 次手势事件只合并成一次渲染；
+   * 手指停下后不再排任何 rAF。取消自转后画面本就静止，比旧的常驻循环省电。
+   */
+  CuePreview3D.prototype.requestRender = function () {
+    if (this._raf != null) return
+    var self = this
+    this._raf = global.requestAnimationFrame(function () {
+      self._raf = null
+      self.renderOnce()
+    })
+  }
+
+  // ---------- v1.3.52：轨道相机 ----------
+
+  /**
+   * 按当前宽高比摆放球杆：横屏放平到 X 轴，竖屏保持竖直。
+   * 竖屏下细长杆横放会缩得很小——横放需要水平 FOV 覆盖 5.0，而竖屏 hFov 只有
+   * 约 16°，相机得退到 17.8 才装得下，球杆反而只占屏幕中间一小条；竖放能占满高度。
+   */
+  CuePreview3D.prototype.applyLayout = function () {
+    if (!this.cue || !this.reflection) return
+    var vert = !!this.vertical
+    // 球杆沿 Y 轴建模：rotation.z = -π/2 放平到 X 轴；不转即保持竖直
+    this.cue.rotation.z = vert ? 0 : -Math.PI / 2
+    this.cue.position.set(0, 0, 0) // 完整杆中心就在原点
+    this.reflection.rotation.z = vert ? 0 : -Math.PI / 2
+    this.reflection.position.set(0, 0, 0)
+    // 竖屏隐藏地面 / 光环 / 倒影：竖直的杆会穿过 y=-1.35 的地面
+    if (this.floor) this.floor.visible = !vert
+    if (this.ring) this.ring.visible = !vert
+    if (this.reflectionPivot) this.reflectionPivot.visible = !vert
+  }
+
+  /**
+   * 画布尺寸或方向变化后重算布局朝向 + 静态基准距离 baseDist。
+   * baseDist 取多组姿态下需求距离的最大值：保证转到任何角度都不出画，
+   * 也避免逐帧改距离造成画面"呼吸"（动态距离在转到杆头时会把相机推远 30%，
+   * 与"看清端盖"的目标正好相反）。
+   */
+  CuePreview3D.prototype.relayout = function () {
+    if (!this.renderer || !this.camera) return
+    var w = this.canvas.clientWidth || 200
+    var h = this.canvas.clientHeight || 140
+    var A = w / h
+    var vert = A < 1
+    if (vert !== this.vertical) {
+      this.vertical = vert
+      this.applyLayout()
+      // 竖屏 pitch 限位不同，切换后夹回合法区间
+      var lo = vert ? -PITCH_LIMIT_V : PITCH_MIN_H
+      var hi = vert ? PITCH_LIMIT_V : PITCH_MAX_H
+      this.orbit.pitch = Math.max(lo, Math.min(hi, this.orbit.pitch))
+    }
+    this.renderer.setSize(w, h, false)
+    this.camera.aspect = A
+    this.camera.updateProjectionMatrix()
+    // 记忆化：宽高比与朝向都没变就不必重算——拟合要跑 31×3 个姿态、约 4ms，
+    // 而 resize / orientationchange 在真机上常常连发多次（软键盘、状态栏收放）。
+    if (this._fitA === A && this._fitVert === vert) {
+      this.requestRender()
+      return
+    }
+    var pitches = vert ? [-PITCH_LIMIT_V, 0, PITCH_LIMIT_V] : FIT_PITCHES
+    var maxD = 0
+    for (var y = 0; y <= 180 + 1e-6; y += FIT_YAW_STEP) {
+      for (var j = 0; j < pitches.length; j++) {
+        var d = this.fitDistance(A, y, pitches[j])
+        if (d > maxD) maxD = d
+      }
+    }
+    this.baseDist = maxD
+    // 缩放下限：相机距离 = baseDist × zoom，必须大于「包围球半径 + 间隙」，
+    // 否则捏合到底时相机会穿进球杆内部（见 SAFE_CLEAR 注释）。
+    // 竖屏 baseDist 大，算出来的值很小，由 ZOOM_MIN 兜底。
+    this.zoomMin = Math.max(ZOOM_MIN, (FIT_R + SAFE_CLEAR) / maxD)
+    // 转屏（横→竖）会让 zoomMin 变大，若当前 zoom 已越界就夹回来，
+    // 否则用户会在竖屏下看到一个「相机在杆里」的画面
+    if (this.orbit.zoom < this.zoomMin) this.orbit.zoom = this.zoomMin
+    this._fitA = A
+    this._fitVert = vert
+    this.requestRender()
+  }
+
+  /** 当前布局下球杆包围盒的半尺寸 [x, y, z]。 */
+  CuePreview3D.prototype._half = function () {
+    return this.vertical ? [HALF_RAD, HALF_LEN, HALF_RAD] : [HALF_LEN, HALF_RAD, HALF_RAD]
+  }
+
+  /** 给定 yaw/pitch（弧度），算出相机的三个基向量：right / up / u（由 target 指向相机）。 */
+  function basis(th, ph) {
+    return {
+      rx: Math.cos(th), ry: 0, rz: -Math.sin(th),
+      ux: -Math.sin(th) * Math.sin(ph), uy: Math.cos(ph), uz: -Math.cos(th) * Math.sin(ph),
+      vx: Math.sin(th) * Math.cos(ph), vy: Math.sin(ph), vz: Math.cos(th) * Math.cos(ph)
+    }
+  }
+
+  /**
+   * 求居中平移量 x，使该轴上包围盒的投影居中，即
+   *     max_c((a_c − x) / w_c) + min_c((a_c − x) / w_c) = 0
+   * 其中 a_c 是角点在该轴基向量上的投影，w_c = 深度 × tan(半视角) > 0。
+   *
+   * 关键性质：把相机沿 right / up 平移 T = dr·r + du·u 时，由于 {r, u, v} 正交，
+   *   depth = d − (P − T)·v = d − P·v        ← 与平移量无关
+   *   xc    = (P − T)·r     = P·r − dr       ← 只含 dr
+   *   yc    = (P − T)·u     = P·u − du       ← 只含 du
+   * 于是两轴彻底解耦，且各角点 (a_c − x)/w_c 关于 x 线性递减，max / min 保序，
+   * 目标函数是 x 的分段线性严格递减函数 → 二分必然收敛，不存在迭代发散的可能。
+   *
+   * v1.3.52-fix：旧版用的是不动点迭代 `du += m·d·tanV`，步长里用的是"包围盒中心
+   * 深度 d"，但球杆近端角点的实际深度只有 d−2.5（约近 2.5 倍）。步长因此超调约
+   * 2.5 倍，在球杆几乎正对镜头（yaw≈85°~95°）时来回震荡不收敛，包围盒偏心高达
+   * 0.40 NDC（画面的一半），球杆会被推到屏幕外。改成二分后偏心恒为 0。
+   */
+  function solveCenter(a, w) {
+    var maxa = 0
+    var maxw = 0
+    for (var i = 0; i < 8; i++) {
+      if (Math.abs(a[i]) > maxa) maxa = Math.abs(a[i])
+      if (w[i] > maxw) maxw = w[i]
+    }
+    // 框根：x = ±(maxa + maxw) 时所有角点同号，两端必然异号
+    var lo = -maxa - maxw
+    var hi = maxa + maxw
+    for (var it = 0; it < CENTER_ITERS; it++) {
+      var mid = (lo + hi) * 0.5
+      var mn = Infinity
+      var mx = -Infinity
+      for (var i = 0; i < 8; i++) {
+        var v = (a[i] - mid) / w[i]
+        if (v < mn) mn = v
+        if (v > mx) mx = v
+      }
+      // g(mid) = mn + mx 关于 mid 严格递减：g > 0 说明还偏小，把下界抬上去
+      if (mn + mx > 0) lo = mid
+      else hi = mid
+    }
+    return (lo + hi) * 0.5
+  }
+
+  /**
+   * 精确求居中平移量，并顺带返回居中后的投影跨度。
+   * 返回 { dr, du, sx, sy, ox, oy }：dr/du 为平移量，sx/sy 为 NDC 全跨度，
+   * ox/oy 为残余偏心（理论为 0，实际是二分残差，量级 1e-5）。
+   */
+  CuePreview3D.prototype.computePan = function (d, th, ph, half, aspect) {
+    var b = basis(th, ph)
+    var tanV = Math.tan(FOV * Math.PI / 360)
+    var A = (typeof aspect === "number" && aspect > 0)
+      ? aspect
+      : (this.camera ? this.camera.aspect : 1)
+    var tanH = tanV * A
+    var ax = []
+    var ay = []
+    var wx = []
+    var wy = []
+    for (var c = 0; c < 8; c++) {
+      var px = (c & 1) ? half[0] : -half[0]
+      var py = (c & 2) ? half[1] : -half[1]
+      var pz = (c & 4) ? half[2] : -half[2]
+      // 深度与平移量无关（见 solveCenter 注释），这里直接用未平移的原始角点
+      var depth = d - (px * b.vx + py * b.vy + pz * b.vz)
+      if (depth < 0.05) depth = 0.05
+      ax.push(px * b.rx + pz * b.rz)
+      ay.push(px * b.ux + py * b.uy + pz * b.uz)
+      wx.push(depth * tanH)
+      wy.push(depth * tanV)
+    }
+    var dr = solveCenter(ax, wx)
+    var du = solveCenter(ay, wy)
+    var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+    for (var c = 0; c < 8; c++) {
+      var nx = (ax[c] - dr) / wx[c]
+      var ny = (ay[c] - du) / wy[c]
+      if (nx < minX) minX = nx
+      if (nx > maxX) maxX = nx
+      if (ny < minY) minY = ny
+      if (ny > maxY) maxY = ny
+    }
+    return {
+      dr: dr, du: du,
+      sx: maxX - minX, sy: maxY - minY,
+      ox: (minX + maxX) / 2, oy: (minY + maxY) / 2
+    }
+  }
+
+  /**
+   * 求指定姿态下"居中后刚好装下球杆"的最小相机距离（半跨度正好等于 FILL）。
+   *
+   * v1.3.52-fix：旧版把「距离」与「居中平移」交替迭代——由 |xc| 反解 d、再用新 d
+   * 重算平移，往复 4 次。这在球杆正对镜头时会以约 0.5 的公比缓慢下滑，6 次迭代后
+   * 仍偏大约 1%，且收敛性没有保证。改为对距离直接二分：
+   *   ① 先取 pan=0 时反解的距离作上界。未居中时 max|n| ≥ 跨度/2，故它必为真值上界；
+   *   ② 居中后的半跨度随距离单调递减（已按 0.6→60 逐点验证）→ 二分收敛。
+   * 只装框球杆本体，不含倒影——倒影是 opacity 0.18 的装饰，下缘轻微出画不影响观感。
+   */
+  CuePreview3D.prototype.fitDistance = function (A, yawDeg, pitchDeg) {
+    var th = yawDeg * Math.PI / 180
+    var ph = pitchDeg * Math.PI / 180
+    var b = basis(th, ph)
+    var tanV = Math.tan(FOV * Math.PI / 360)
+    var tanH = tanV * A
+    var half = this._half()
+    // ① 上界：pan=0 时逐角点反解，取最大值。
+    // d ≥ |xc|/(fillH·tanH) + k 中的 k = P·v 是角点沿视线的前后偏移——
+    // 朴素式 2.5/tan(hFov/2) 漏掉了它（近端比中心近约 0.36），会低估约 9%。
+    var hi = 0.5
+    for (var c = 0; c < 8; c++) {
+      var px = (c & 1) ? half[0] : -half[0]
+      var py = (c & 2) ? half[1] : -half[1]
+      var pz = (c & 4) ? half[2] : -half[2]
+      var xc = px * b.rx + pz * b.rz
+      var yc = px * b.ux + py * b.uy + pz * b.uz
+      var k = px * b.vx + py * b.vy + pz * b.vz
+      var nh = Math.abs(xc) / (FILL_H * tanH) + k
+      var nv = Math.abs(yc) / (FILL_V * tanV) + k
+      if (nh > hi) hi = nh
+      if (nv > hi) hi = nv
+    }
+    // 保险①：理论上界已足够，但若因数值边界装不下则向上加倍，保证右端点可行
+    for (var g = 0; g < 40; g++) {
+      var s = this.computePan(hi, th, ph, half, A)
+      if (s.sx / (2 * FILL_H) <= 1 && s.sy / (2 * FILL_V) <= 1) break
+      hi *= 2
+    }
+    // 保险②：向下找第一个"装不下"的点作左端点，确保根被区间框住
+    var lo = hi * 0.5
+    for (var g = 0; g < 40; g++) {
+      var s = this.computePan(lo, th, ph, half, A)
+      if (s.sx / (2 * FILL_H) > 1 || s.sy / (2 * FILL_V) > 1) break
+      hi = lo
+      lo *= 0.5
+    }
+    // ② 二分
+    for (var it = 0; it < FIT_ITERS; it++) {
+      var mid = (lo + hi) * 0.5
+      var s = this.computePan(mid, th, ph, half, A)
+      if (s.sx / (2 * FILL_H) > 1 || s.sy / (2 * FILL_V) > 1) lo = mid
+      else hi = mid
+    }
+    return (lo + hi) * 0.5
+  }
+
+  /** 按 orbit 状态摆放相机。每次渲染前调用。 */
+  CuePreview3D.prototype.applyCamera = function () {
+    var o = this.orbit
+    var d = this.baseDist * o.zoom
+    var th = o.yaw * Math.PI / 180
+    var ph = o.pitch * Math.PI / 180
+    var b = basis(th, ph)
+    var pan = this.computePan(d, th, ph, this._half(), this.camera ? this.camera.aspect : 1)
+    var tx = pan.dr * b.rx + pan.du * b.ux
+    var ty = pan.du * b.uy
+    var tz = pan.dr * b.rz + pan.du * b.uz
+    this.camera.up.set(0, 1, 0)
+    this.camera.position.set(
+      tx + d * b.vx,
+      ty + d * b.vy,
+      tz + d * b.vz
+    )
+    this.camera.lookAt(tx, ty, tz)
+  }
+
+  /**
+   * 拖动改变视角。水平拖 = 绕球杆方位角（自由 360°）；垂直拖 = 俯仰（限位）。
+   * 横屏 pitch 下限 -18° 是硬边界：再低相机 y 会掉到地板 y=-1.35 以下，倒影穿帮。
+   * 看端盖细节靠 yaw 转到杆头正对相机，不需要大俯仰。
+   */
+  CuePreview3D.prototype.orbitBy = function (dYaw, dPitch) {
+    var o = this.orbit
+    o.yaw += dYaw
+    if (o.yaw > 360) o.yaw -= 360
+    if (o.yaw < -360) o.yaw += 360
+    var lo = this.vertical ? -PITCH_LIMIT_V : PITCH_MIN_H
+    var hi = this.vertical ? PITCH_LIMIT_V : PITCH_MAX_H
+    o.pitch = Math.max(lo, Math.min(hi, o.pitch + dPitch))
+  }
+
+  /** 双指捏合 / 滚轮设置相机距离，内部换算成 zoom 并夹在 [0.35, 1.6]。 */
+  CuePreview3D.prototype.setDist = function (d) {
+    this.orbit.zoom = Math.max(this.zoomMin, Math.min(ZOOM_MAX, d / this.baseDist))
+  }
+
+  /**
+   * 重置到统一的展示角度。每次打开预览时由 menu-cn.js 调用，
+   * 这样连续看几款主题时起始机位一致，便于横向对比。
+   */
+  CuePreview3D.prototype.resetView = function () {
+    this.orbit.yaw = 30
+    this.orbit.pitch = 12
+    this.orbit.zoom = 1
+  }
+
+  // ---------- v1.3.52：手势（单指旋转 / 双指捏合）----------
+  // 移植自 src/view/dom/aimslider.ts:113-190，那套实现已在真机上验证过
+  // Android WebView 的几个坑，下面按编号标注。
+  CuePreview3D.prototype.bindControls = function () {
+    var self = this
+    var cv = this.canvas
+    var pts = {}
+    var ids = []
+    var lastX = 0
+    var lastY = 0
+    var didDrag = false
+    var downT = 0
+    var pinchD0 = 0
+    var dist0 = 0
+
+    function cnt() { return ids.length }
+    function spread() {
+      var a = pts[ids[0]]
+      var b = pts[ids[1]]
+      if (!a || !b) return 1
+      var dx = a.x - b.x
+      var dy = a.y - b.y
+      return Math.sqrt(dx * dx + dy * dy) || 1
+    }
+
+    function onDown(e) {
+      // 坑①：preventDefault 必须在第一行。晚于它，浏览器可能把这次按下判定为
+      // "点击并取消"，立刻派发 pointercancel，表现为"按住完全没反应"。
+      try { e.preventDefault() } catch (err) { /* 个别环境不支持，忽略 */ }
+      // 坑②：绝不调用 setPointerCapture。部分 Android WebView 在 pointerdown 上
+      // preventDefault 后再 setPointerCapture，会立刻派发 pointercancel 结束拖动。
+      if (!pts[e.pointerId]) {
+        pts[e.pointerId] = { x: e.clientX, y: e.clientY }
+        ids.push(e.pointerId)
+      }
+      lastX = e.clientX
+      lastY = e.clientY
+      didDrag = false
+      downT = Date.now()
+      if (cnt() === 2) {
+        pinchD0 = spread()
+        dist0 = self.baseDist * self.orbit.zoom
+      }
+      // 坑③：用 window 捕获阶段监听，手指滑出 canvas 之外也能持续收到事件
+      if (cnt() === 1) global.addEventListener("pointermove", onMove, true)
+      global.addEventListener("pointerup", onUp, true)
+      global.addEventListener("pointercancel", onUp, true)
+    }
+
+    function onMove(e) {
+      var p = pts[e.pointerId]
+      if (!p) return
+      p.x = e.clientX
+      p.y = e.clientY
+      var dx = e.clientX - lastX
+      var dy = e.clientY - lastY
+      // 增量式：天然支持中途抬指后的重锚
+      lastX = e.clientX
+      lastY = e.clientY
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didDrag = true
+      var r = cv.getBoundingClientRect()
+      var rw = r.width || 1
+      var rh = r.height || 1
+      if (cnt() >= 2) {
+        // 双指：捏合缩放。注意是 d0/d（张开→距离变大→d 变小→拉近）
+        self.setDist(dist0 * (pinchD0 / spread()))
+      } else {
+        // 单指：整屏宽拖过 = 转 180°，与 OrbitControls 同向
+        self.orbitBy(-(dx / rw) * 180, (dy / rh) * 180)
+      }
+      self.requestRender()
+    }
+
+    function onUp(e) {
+      var i = ids.indexOf(e.pointerId)
+      // 坑④：可能收到非本轮的 pointerId（多指 / 异常序列），直接忽略
+      if (i < 0) return
+      delete pts[e.pointerId]
+      ids.splice(i, 1)
+      // 坑⑤：捏合中抬起一根手指后必须重锚，否则剩下一根会造成视角跳变
+      if (cnt() === 1) {
+        var p = pts[ids[0]]
+        if (p) { lastX = p.x; lastY = p.y }
+        pinchD0 = 0
+      }
+      if (cnt() === 0) {
+        global.removeEventListener("pointermove", onMove, true)
+        global.removeEventListener("pointerup", onUp, true)
+        global.removeEventListener("pointercancel", onUp, true)
+      }
+    }
+
+    cv.addEventListener("pointerdown", onDown)
+    cv.addEventListener("contextmenu", function (e) { e.preventDefault() })
+    // 坑⑥：src/index.ts 的 setupMobileBehaviour() 只编译进 dist/index.js，
+    // menu.html 没加载它，所以这里要自己屏蔽 Safari 的手势事件，
+    // 否则 iOS 上会同时触发页面级双指缩放。
+    var gs = ["gesturestart", "gesturechange", "gestureend"]
+    for (var i = 0; i < gs.length; i++) {
+      cv.addEventListener(gs[i], function (e) { e.preventDefault() })
+    }
+    // 桌面端滚轮缩放（便于在电脑上验证）
+    cv.addEventListener("wheel", function (e) {
+      e.preventDefault()
+      self.setDist(self.baseDist * self.orbit.zoom * (e.deltaY > 0 ? 1.08 : 0.92))
+      self.requestRender()
+    }, { passive: false })
+  }
+
+  /**
+   * 释放一棵子树的 geometry / material / texture。
+   * 只作用于 cuePivot、reflectionPivot 这类模型子树，绝不碰 renderer / scene / camera。
+   */
+  function disposeTree(root) {
+    if (!root) return
+    root.traverse(function (o) {
+      if (o.geometry) o.geometry.dispose()
+      var m = o.material
+      if (!m) return
+      var arr = Object.prototype.toString.call(m) === "[object Array]" ? m : [m]
+      for (var i = 0; i < arr.length; i++) {
+        // v1.3.54-fix：**绝不能 dispose material.map**。
+        // 杆身/杆尾贴图来自 window.CueGameCue 的全局缓存（同一主题多次预览、
+        // 甚至游戏内都在共用同一张 Texture）。一旦在这棵子树里把它 dispose 掉，
+        // 下次切回该主题拿到的还是缓存里那个已释放 GPU 资源的对象，
+        // 球杆会直接变成纯黑/纯白。贴图由工厂统一持有、随页面生命周期存在。
+        arr[i].dispose()
+      }
+    })
+  }
+
+  /**
+   * 【红线 · 全项目禁止调用】
+   * v1.3.32 曾出现「第一次预览正常、第二次及以后全白」，根因就是关闭时调了
+   * dispose() → renderer.dispose() + forceContextLoss() 释放了 WebGL 上下文，
+   * 而真机 WebView 在首个 context 被销毁后再次创建会失败或拿到损坏的 context。
+   * 现行策略：renderer 整个页面生命周期只创建一次、永不销毁，关闭时只 stop()。
+   * 本方法仅为完整性保留，menu-cn.js 里没有任何地方调用它，请不要新增调用。
+   * 需要释放模型资源时请用 disposeTree()（只作用于模型子树）。
+   */
   CuePreview3D.prototype.dispose = function () {
     this.stop()
     global.removeEventListener("resize", this._onResize)
+    global.removeEventListener("orientationchange", this._onResize)
     if (this.scene) {
       this.scene.traverse(function (o) {
         if (o.geometry) o.geometry.dispose()

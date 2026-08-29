@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>奥特曼的台球 · v1.3.50 发布中心</title>
+<title>奥特曼的台球 · v1.3.54 发布中心</title>
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; min-height: 100vh;
@@ -65,7 +65,7 @@
 </head>
 <body>
 <div class="wrap">
-  <h1><span class="zh">奥特曼的台球</span><span class="en">Ultraman's Billiards</span><span class="ver">v1.3.50</span></h1>
+  <h1><span class="zh">奥特曼的台球</span><span class="en">Ultraman's Billiards</span><span class="ver">v1.3.54</span></h1>
   <div class="sub"><span class="zh">2026-08-24 · 离线单文件 · 三端同步</span><span class="en">2026-08-24 · Offline single-file · 3-platform sync</span></div>
   <div class="lang-bar">
     <button id="langToggle" class="lang-toggle" aria-label="切换语言 / Switch language">EN</button>
@@ -78,34 +78,40 @@
       <p><span class="zh">点此进入游戏主菜单，选模式即玩，已包含本次四项改动：真实音效、桌布配色、回放「跟随」视角、增强的专业 AI。建议用电脑/横屏体验最佳。</span><span class="en">Enter the game main menu and pick a mode to play—includes all four updates: realistic sound, cloth colors, replay "Follow" view, and a stronger Professional AI. Best on desktop / landscape.</span></p>
       <span class="cta"><span class="zh">开始游戏</span><span class="en">Play Now</span></span>
     </a>
-    <a class="card" href="billiards-cn-v1.3.50.apk">
+    <a class="card" href="billiards-cn-v1.3.54.apk">
       <h2><span class="zh">📲 安卓 App (APK)</span><span class="en">📲 Android App (APK)</span></h2>
-      <p><span class="zh">约 2.3MB · 零权限 · 支持 Android 7.0+ · 适配沉浸全屏。v1.3.50：修复音效力度标定——碰撞/击球/进球/碰库四类声音现在随撞击力度连续变化（轻碰沉闷、重撞清脆响亮）；碰库声由固定单一音色改为按力度合成。点击下载后到"下载"目录点击安装。</span><span class="en">~2.3MB · Zero permissions · Android 7.0+ · Immersive fullscreen. v1.3.50: fix sound intensity calibration — ball-collision / cue / pot / cushion sounds now vary continuously with impact force (soft taps vs loud cracks); cushion sound switched from a fixed timbre to force-synthesized. Tap download, then install from Downloads.</span></p>
+      <p><span class="zh">约 2.3MB · 零权限 · 支持 Android 7.0+ · 适配沉浸全屏。v1.3.54：球杆预览改用游戏内真实球杆模型。此前预览自己维护了一套简化模型（长径比仅 8.9:1，像一根胖棒槌），与游戏内真实球杆的 46.7:1 完全不是同一根杆；现改为直接复用游戏内的程序化分区贴图与真实几何参数，预览里看到的就是对局中那一根。同时修复了切主题时贴图缓存被误销毁、以及预览关闭时转屏后再打开画面错乱两个问题。点击下载后到"下载"目录点击安装。</span><span class="en">~2.3MB · Zero permissions · Android 7.0+ · Immersive fullscreen. v1.3.54: the cue preview now reuses the real in-game cue. It used to keep its own simplified model (length-to-diameter ratio of just 8.9:1 — basically a stubby baton) instead of the in-game cue's 46.7:1, so what you saw was never the actual cue. It now draws from the same procedural texture factory and the same geometry parameters as the game, so the preview shows the very cue you play with. Also fixed two bugs: the texture cache being disposed when switching themes, and a garbled frame when rotating the device while the preview was closed. Tap download, then install from Downloads.</span></p>
       <span class="cta"><span class="zh">下载 APK</span><span class="en">Download APK</span></span>
     </a>
-    <a class="card" href="release-v1.3.50.zip">
+    <a class="card" href="release-v1.3.54.zip">
       <h2><span class="zh">📦 发布包（Release）</span><span class="en">📦 Release Package</span></h2>
-      <p><span class="zh">每次变更完代码、构建 APK 时一并打包发布。内含完整网页产物（dist/ 文件夹，直接打开即用）+ 已构建的 v1.3.50 APK 安装包。</span><span class="en">Packaged with the APK. Contains the full built web deliverable (dist/ folder, ready to open) plus the v1.3.50 APK.</span></p>
+      <p><span class="zh">每次变更完代码、构建 APK 时一并打包发布。内含完整网页产物（dist/ 文件夹，直接打开即用）+ 已构建的 v1.3.54 APK 安装包。</span><span class="en">Packaged with the APK. Contains the full built web deliverable (dist/ folder, ready to open) plus the v1.3.54 APK.</span></p>
       <span class="cta"><span class="zh">下载发布包</span><span class="en">Download Release</span></span>
     </a>
   </div>
 
   <div class="meta" id="meta">
     <details class="ver-item current" open>
-    <summary class="ver-btn"><span class="ver-no"><span class="zh">v1.3.50</span><span class="en">v1.3.50</span></span><span class="ver-title"><span class="zh">当前版本 · 修复音效力度标定（碰撞/击球/进球/碰库随力度变化）</span><span class="en">Current · fix sound intensity calibration (collision/cue/pot/cushion vary with force)</span></span></summary>
+    <summary class="ver-btn"><span class="ver-no"><span class="zh">v1.3.54</span><span class="en">v1.3.54</span></span><span class="ver-title"><span class="zh">当前版本 · 球杆预览改用游戏内真实球杆</span><span class="en">Current · cue preview now uses the real in-game cue</span></span></summary>
     <div class="ver-body">
-      <span class="zh"><b>v1.3.50 · 修复音效力度标定错误（球碰撞/击球/进球/碰库四类声音随力度变化）</b><br>
-· <b>根因</b>：引擎球速量级为 <code>maxPower = 160·R ≈ 5.24</code>，实际碰撞/击球速度约 <code>0.3 ~ 5.4</code>；但 <code>sound.ts</code> 把力度参考速度设成碰撞 60 / 击球 70 / 进球 55，<code>speed/refSpeed</code> 恒 < 0.1，合成档位永远落在第 0~1 档（最软），力度差异完全听不出且整体偏软——即「球碰撞声音不对 / 进球的撞库声音不对」。<br>
-· <b>碰库声音不随力度变化</b>：<code>Cushion</code> 原本用构建时固定的单一缓冲，音色一成不变、音量也被早早饱和，即「碰库的声音没按碰撞力度调整」。<br>
-· <b>修复</b>：重新标定参考速度（碰撞 60→5、击球 70→5.2、进球 55→2.6、碰库按力度合成 refSpeed=6）；碰库 <code>genCushion</code> 改为带力度系数——轻碰 280Hz 长衰减柔软「噗」、重撞 640Hz 短衰减明亮「嗒」，音量 0.35→1.0 约 3 倍差。<br>
-· <b>自测</b>：逐字复刻 DSP 渲染 WAV 量化——碰库频谱质心随力度 2463→3317Hz、碰撞 4242→5714Hz、进球 3048→3916Hz；映射对照表证实旧 refSpeed 把 0.3~6.0 全压在 0~1 档、新标定铺满 1~13 档。<br>
-<b>约束</b>：仅改音效合成与力度映射，<b>不改动任何物理逻辑、挥杆动画、碰撞参数</b>。</span>
-      <span class="en"><b>v1.3.50 · Fix sound intensity calibration (collision / cue / pot / cushion now vary with force)</b><br>
-· <b>Root cause</b>: the engine's ball-speed scale is <code>maxPower = 160·R ≈ 5.24</code>, with real collision/shot speeds around <code>0.3 ~ 5.4</code>; but <code>sound.ts</code> used reference speeds of 60 / 70 / 55 for collision / cue / pot, so <code>speed/refSpeed</code> was always < 0.1 and the synthesis step was pinned to 0~1 (softest) — force differences were inaudible and everything sounded weak. That is the "ball-collision sound is wrong / pot cushion sound is wrong" report.<br>
-· <b>Cushion sound didn't follow force</b>: the <code>Cushion</code> branch used a single fixed buffer built at startup — constant timbre, and volume saturated early — i.e. "cushion sound isn't adjusted by impact force".<br>
-· <b>Fix</b>: recalibrate reference speeds (collision 60→5, cue 70→5.2, pot 55→2.6, cushion force-synthesized at refSpeed=6); <code>genCushion</code> now takes a force coefficient — light taps are a soft 280Hz long-decay "puff", hard hits a bright 640Hz short-decay "tok", with volume spanning 0.35→1.0 (~3×).<br>
-· <b>Self-test</b>: verbatim DSP re-implementation rendered WAVs show cushion spectral centroid 2463→3317Hz, collision 4242→5714Hz, pot 3048→3916Hz with force; the mapping table proves old refSpeeds collapsed 0.3~6.0 into steps 0~1 while new calibration spans 1~13.<br>
-<b>Constraint</b>: sound synthesis and force mapping only — <b>no physics, swing animation, or collision params changed</b>.</span>
+      <span class="zh"><b>v1.3.54 · 球杆预览改用游戏内真实球杆模型</b><br>
+· <b>问题</b>：球杆主题的全屏 3D 预览此前自己维护了一套"简化模型"：总长 5.0、杆尾半径 0.28，<b>长径比只有 8.9:1</b>，配色也只用卡片上的两个色值铺色。而游戏内真实球杆（<code>src/view/cue.ts</code> + <code>cuemesh.ts</code>）是全长 <code>R*43</code>、杆尾半径 <code>(R*0.23)/0.5</code>，<b>长径比 46.7:1</b>（与真实球杆 147cm/3cm≈49:1 一致），杆身与杆尾各挂一张 256×1024 的程序化分区贴图。粗细差了 5 倍多，所以预览里那根"一眼就不是真实球杆"。<br>
+· <b>做法</b>：新增 <code>tools/cue-textures/</code>，把游戏内的 <code>cuetexturefactory.ts</code>（19 个主题的贴图工厂）与 <code>settings.ts</code> <b>原样打包</b>成 <code>dist/cue-texture-factory.js</code>（挂 <code>window.CueGameCue</code>，three 走 external→window.THREE，故不含 three、仅 45KB），预览直接取用真实贴图与真实几何参数，而不是照着抄一份。该构建已并入 <code>npm run build</code>，源码改了产物会自动更新。<br>
+· <b>对齐细节</b>：四段圆柱 <code>cueButt</code>/<code>cueShaft</code>/<code>cueFerrule</code>/<code>cueTip</code>，比例 0.28/0.71/0.007 + 皮头厚 0.0055，周向分段 9，半径系数（杆尾顶端 ×0.9、皮头顶端 ×0.93）与游戏内一致；材质走 <code>MeshPhongMaterial</code> 并对齐 <code>applyCueTheme()</code>——有贴图时基色置白，<code>auto</code>（随台面）时按 <code>shade(台呢色, +0.12/−0.28)</code> 派生，光泽取主题 <code>finish</code>、无 finish 且无贴图时回落 50/80。几何按真实尺寸建好后整体缩放到预览世界尺度，相机/地面/倒影等既有常量全部沿用。<br>
+· <b>清理</b>：预览里那份 <code>THEMES</code> 配置表与木纹/皮革/金属绘制器（约 680 行）已无引用，一并删除，从根源杜绝"预览与实机两套外观再次跑偏"；<code>cue-preview-3d.js</code> 由 65.6KB / 1640 行降到 42.2KB / 953 行。<br>
+· <b>修复 ①</b>：切主题时 <code>disposeTree()</code> 原先会连 <code>material.map</code> 一起销毁，改用全局缓存贴图后这会让再次切回该主题的球杆变纯黑。现只 dispose geometry 与 material，贴图由工厂统一持有。<br>
+· <b>修复 ②</b>：预览关闭状态下转屏，<code>resize</code> 时浮层 <code>display:none</code> 导致 <code>clientWidth=0</code>，<code>relayout()</code> 退回 200×140 兜底并把朝向算错；再打开预览就沿用这套错误值（缓冲 200×140 被拉伸到全屏、aspect 1.429）。现改为重建后补一次 <code>_resize()</code>。<br>
+· <b>说明</b>：「随台面」主题在暗色桌台（黑曜石黑、熔岩裂纹等）下会很暗，这是它由台呢色派生的真实表现，与对局中一致；换亮色桌台或选其余 18 款自带贴图的主题即可看到明亮杆身。<br>
+<b>约束</b>：仅改展示层（预览渲染与资源打包），<b>不改动任何物理逻辑、挥杆动画、碰撞参数</b>，也不改游戏内球杆本身的行为。</span>
+      <span class="en"><b>v1.3.54 · Cue preview now reuses the real in-game cue</b><br>
+· <b>Issue</b>: the fullscreen 3D cue preview kept its own <i>simplified</i> model — 5.0 long with a 0.28 butt radius, a length-to-diameter ratio of just <b>8.9:1</b> — colored from two flat swatches on the card. The real in-game cue (<code>src/view/cue.ts</code> + <code>cuemesh.ts</code>) is <code>R*43</code> long with a <code>(R*0.23)/0.5</code> butt radius, <b>46.7:1</b> (matching a real 147cm/3cm cue at ~49:1), with a 256×1024 procedural texture on both shaft and butt. The preview was over 5× too fat, so it never looked like an actual cue.<br>
+· <b>Fix</b>: added <code>tools/cue-textures/</code>, which bundles the game's own <code>cuetexturefactory.ts</code> (all 19 themes) and <code>settings.ts</code> <b>as-is</b> into <code>dist/cue-texture-factory.js</code> (<code>window.CueGameCue</code>; three is an external mapping to <code>window.THREE</code>, so the bundle ships no three and weighs 45KB). The preview now pulls the real textures and real geometry parameters instead of hand-copying them, and the step is wired into <code>npm run build</code> so the artifact can never drift from source again.<br>
+· <b>Alignment</b>: four cylinders — <code>cueButt</code>/<code>cueShaft</code>/<code>cueFerrule</code>/<code>cueTip</code> — at 0.28/0.71/0.007 plus a 0.0055 tip, 9 radial segments, with the same radius factors as the game (butt top ×0.9, tip top ×0.93). Materials are <code>MeshPhongMaterial</code> matching <code>applyCueTheme()</code>: white base when a texture is present, <code>shade(clothColor, +0.12/−0.28)</code> for <i>auto</i> (follow-table), and shininess from the theme's <code>finish</code> falling back to 50/80. Geometry is built at true scale then uniformly scaled to the preview's world size, so all existing camera/floor/reflection constants still hold.<br>
+· <b>Cleanup</b>: the leftover <code>THEMES</code> table and wood/leather/metal painters (~680 lines) had no remaining callers and were deleted, removing the root cause of preview/gameplay divergence. <code>cue-preview-3d.js</code> went from 65.6KB / 1,640 lines to 42.2KB / 953 lines.<br>
+· <b>Bugfix ①</b>: <code>disposeTree()</code> used to dispose <code>material.map</code> as well. With globally cached textures that freed the GPU resource still held in cache, turning the cue pure black the next time you switched back. It now disposes only geometry and material.<br>
+· <b>Bugfix ②</b>: rotating the device while the preview was closed meant <code>resize</code> fired while the overlay was <code>display:none</code>, so <code>clientWidth</code> was 0 and <code>relayout()</code> fell back to 200×140 with the wrong orientation — and reopening reused those stale values (a 200×140 buffer stretched fullscreen, aspect 1.429). Rebuilds now call <code>_resize()</code>.<br>
+· <b>Note</b>: the "Follow table" (<i>auto</i>) theme looks very dark on dark tables (Obsidian Black, Lava Cracks, …) because its color is derived from the cloth — exactly as it appears in a real match. Pick a bright table skin, or any of the other 18 textured cue themes, for a brighter shaft.<br>
+<b>Constraint</b>: presentation layer only (preview rendering and asset bundling) — <b>no physics, swing animation, or collision parameters changed</b>, and the in-game cue itself behaves exactly as before.</span>
     </div>
   </details>
   <details class="ver-item">

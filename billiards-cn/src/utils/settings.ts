@@ -391,6 +391,12 @@ export interface CueThemeDef {
   /** UI 色块渐变（左=杆身，右=杆尾） */
   swatch: string
   accent: number
+  /**
+   * 材质光泽（MeshPhongMaterial.shininess）。
+   * 值越大越亮/越光滑（玻璃、冰晶、抛光金属）；越小越哑光（石砚、磨砂金属、粗陶）。
+   * shaft 作用于杆身段，butt 作用于杆尾段。
+   */
+  finish?: { shaft: number; butt: number }
 }
 
 export const CUE_THEMES: CueThemeDef[] = [
@@ -443,13 +449,15 @@ export const CUE_THEMES: CueThemeDef[] = [
     swatch: "linear-gradient(135deg,#e8eef2 0%,#c81f1f 100%)",
     accent: 0xe8eef2,
   },
-  // ===== 新增 12 款特色球杆皮肤（v1.3.23）=====
+  // ===== 12 款特色球杆皮肤（v1.3.23 新增，v1.3.51 重做分区贴图与材质光泽）=====
   {
     id: "moyunlongque",
     name: "墨云龙阙",
     kind: "moyunlongque",
     swatch: "linear-gradient(135deg,#3a3320 0%,#0c0a07 100%)",
     accent: 0xc9a24a,
+    // 乌木哑光 + 暗金浮刻：低调厚重
+    finish: { shaft: 22, butt: 18 },
   },
   {
     id: "qingzhutingfeng",
@@ -457,6 +465,8 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "qingzhutingfeng",
     swatch: "linear-gradient(135deg,#bfe3a0 0%,#3f7d2f 100%)",
     accent: 0x9fd67a,
+    // 竹质素雅温润：微弱光泽
+    finish: { shaft: 34, butt: 28 },
   },
   {
     id: "fengyuliujin",
@@ -464,6 +474,8 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "fengyuliujin",
     swatch: "linear-gradient(135deg,#1a1410 0%,#caa24a 100%)",
     accent: 0xe8c878,
+    // 黑檀 + 鲍鱼贝虹彩 + 鎏金：明显光泽
+    finish: { shaft: 62, butt: 55 },
   },
   {
     id: "qianliyanshan",
@@ -471,6 +483,8 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "qianliyanshan",
     swatch: "linear-gradient(135deg,#8a99a0 0%,#39474d 100%)",
     accent: 0x6b7d85,
+    // 石砚哑光雾面 / 粗陶磨砂：几乎无高光
+    finish: { shaft: 12, butt: 10 },
   },
   {
     id: "xinghedanmang",
@@ -478,6 +492,8 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "xinghedanmang",
     swatch: "linear-gradient(135deg,#1b2a4a 0%,#05060a 100%)",
     accent: 0x39c6ff,
+    // 深空哑光黑 + 金属磨砂
+    finish: { shaft: 28, butt: 22 },
   },
   {
     id: "nihongsuguang",
@@ -485,6 +501,8 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "nihongsuguang",
     swatch: "linear-gradient(135deg,#ff7be0 0%,#3a1d6e 100%)",
     accent: 0xff5fd0,
+    // 半透玻璃 / 多边形切面镜面反光
+    finish: { shaft: 88, butt: 70 },
   },
   {
     id: "xukonglilie",
@@ -492,6 +510,8 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "xukonglilie",
     swatch: "linear-gradient(135deg,#2a1840 0%,#050507 100%)",
     accent: 0x9b5cff,
+    // 纯哑光炭黑金属
+    finish: { shaft: 18, butt: 15 },
   },
   {
     id: "youciyeying",
@@ -499,6 +519,8 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "youciyeying",
     swatch: "linear-gradient(135deg,#3a3a42 0%,#0d0d10 100%)",
     accent: 0xb8a0d8,
+    // 炭黑金属 + 贝母珠光 + 真皮
+    finish: { shaft: 42, butt: 34 },
   },
   {
     id: "jinhuofengfeng",
@@ -506,6 +528,8 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "jinhuofengfeng",
     swatch: "linear-gradient(135deg,#ff5a2a 0%,#1a0805 100%)",
     accent: 0xff7a1f,
+    // 黑红熔岩，厚重粗犷
+    finish: { shaft: 32, butt: 26 },
   },
   {
     id: "yuntianghuanmeng",
@@ -513,6 +537,8 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "yuntianghuanmeng",
     swatch: "linear-gradient(135deg,#ffe3ef 0%,#c9b6ff 100%)",
     accent: 0xffb8d8,
+    // 半透果冻 / 柔雾硅胶
+    finish: { shaft: 72, butt: 62 },
   },
   {
     id: "bingjingxuepo",
@@ -520,6 +546,8 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "bingjingxuepo",
     swatch: "linear-gradient(135deg,#eaf6ff 0%,#9fc6e0 100%)",
     accent: 0xcfeaff,
+    // 透白冰晶：通透冷调，高光最强
+    finish: { shaft: 95, butt: 80 },
   },
   {
     id: "wanxiangquanzhang",
@@ -527,6 +555,8 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "wanxiangquanzhang",
     swatch: "linear-gradient(135deg,#caa24a 0%,#0c0a07 100%)",
     accent: 0xe8c878,
+    // 黑金撞色金属：局部哑光、局部抛光
+    finish: { shaft: 78, butt: 68 },
   },
 ]
 
