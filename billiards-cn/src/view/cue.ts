@@ -50,6 +50,18 @@ export class Cue {
   hitAnimationWeight: number = 0
 
   /**
+   * v1.3.58：本杆送杆动画是否已经走完并把杆收起。
+   * 由 retractAfterStroke() 置位，进入下一杆瞄准（aimMode）时复位。
+   */
+  private strokeRetracted = false
+
+  /**
+   * 击球动画曲线的终点时刻，与 hitAnimationCurve() 控制点的最大 t 保持一致。
+   * t 达到该值时送杆到位，正是真实台球里「击完即收杆」的时机。
+   */
+  private static readonly STROKE_END_T = 3
+
+  /**
    * 辅助线显示状态（item 1：仅在玩家调整瞄准时显示）。
    *
    * 分两类交互，缺一不可：
@@ -199,6 +211,7 @@ export class Cue {
     const { angle, power, offset, elevation } = this.aim
     this.t = 0
     this.hittingAnimation = true
+    this.strokeRetracted = false
     ball.state = State.Sliding
     const strike = cueStrike(angle, power, offset, elevation)
     ball.vel.copy(strike.vel)
@@ -396,8 +409,31 @@ export class Cue {
 
   update(t) {
     this.t += t
+    // v1.3.58：送杆到底立刻收杆，见 retractAfterStroke()。
+    if (
+      this.hittingAnimation &&
+      !this.strokeRetracted &&
+      this.t >= Cue.STROKE_END_T
+    ) {
+      this.retractAfterStroke()
+    }
     this.moveTo(this.aim.pos)
     this.refreshTargetLine()
+  }
+
+  /**
+   * v1.3.58：击球（送杆）动画走完后把球杆收起来。
+   *
+   * 旧行为里球杆在整个「出杆 → 所有球静止」期间都保持可见，而且 strokeX 停在
+   * 送杆末端的 -4R 处不再变化，等于把一根杆横在击球点上一动不动；母球早就跑
+   * 远了，画面上却还杵着一根杆，既挡住观察球的走向，也不符合真实台球击完即
+   * 收杆的动作。现在曲线跑完（t >= STROKE_END_T，送杆到位）就隐藏杆身与杆的
+   * 投影，下一杆进入 Aim 时由 aimMode() 恢复。
+   */
+  private retractAfterStroke(): void {
+    this.strokeRetracted = true
+    if (this.mesh) this.mesh.visible = false
+    if (this.shadowMesh) this.shadowMesh.visible = false
   }
 
   /** 持续型瞄准交互开始（按住画布拖动、按住滑条） */
@@ -450,12 +486,14 @@ export class Cue {
     if (this.shadowMesh) this.shadowMesh.visible = false
     if (this.placerMesh) this.placerMesh.visible = true
     this.aim.angle = 0
+    this.strokeRetracted = false
   }
 
   aimMode() {
     if (this.mesh) this.mesh.visible = true
     if (this.shadowMesh) this.shadowMesh.visible = true
     if (this.placerMesh) this.placerMesh.visible = false
+    this.strokeRetracted = false
   }
 
   spinOffset(aim: AimEvent = this.aim) {

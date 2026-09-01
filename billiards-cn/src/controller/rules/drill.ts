@@ -46,7 +46,7 @@ export class Drill extends ThreeCushion {
     this.preShotState = this.container.recorder.entries[last]?.state ?? []
 
     if (Outcome.isThreeCushionPoint(this.cueball, outcomes)) {
-      this.container.sound.playSuccess(outcomes.length / 3)
+      // v1.3.59：删除进球后的 success 特效提示音（与落袋音叠加显得多余吵闹）
       this.currentBreak++
     } else {
       this.previousBreak = this.currentBreak

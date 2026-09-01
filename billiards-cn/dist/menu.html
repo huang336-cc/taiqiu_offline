@@ -180,11 +180,11 @@
             <button class="skin-card" data-scene="snow" data-pattern="snow" data-c1="#dbe7f0" data-c2="#a6bace" data-photo="assets/scenes/snow.jpg">
               <span class="skin-swatch"></span><span class="skin-name">雪山</span>
             </button>
-            <button class="skin-card" data-scene="football" data-pattern="football" data-c1="#2f7d32" data-c2="#183d1a" data-photo="assets/scenes/football.jpg" disabled>
-              <span class="skin-swatch"></span><span class="skin-name">足球场</span><span class="lock-badge">暂不可用</span>
+            <button class="skin-card" data-scene="football" data-pattern="football" data-c1="#2f7d32" data-c2="#183d1a" data-photo="assets/scenes/football.jpg">
+              <span class="skin-swatch"></span><span class="skin-name">足球场</span>
             </button>
-            <button class="skin-card" data-scene="basketball" data-pattern="basketball" data-c1="#caa05a" data-c2="#9a6a2a" data-photo="assets/scenes/basketball.jpg" disabled>
-              <span class="skin-swatch"></span><span class="skin-name">篮球场</span><span class="lock-badge">暂不可用</span>
+            <button class="skin-card" data-scene="basketball" data-pattern="basketball" data-c1="#caa05a" data-c2="#9a6a2a" data-photo="assets/scenes/basketball.jpg">
+              <span class="skin-swatch"></span><span class="skin-name">篮球场</span>
             </button>
             <button class="skin-card" data-scene="office" data-pattern="office" data-c1="#c9d2dc" data-c2="#92a0b0" disabled>
               <span class="skin-swatch"></span><span class="skin-name">办公室</span><span class="lock-badge">暂不可用</span>
@@ -304,6 +304,12 @@
             <button class="skin-card" data-tableskin="candy" data-c1="#ffe6f0" data-c2="#ff7ab0">
               <span class="skin-swatch"></span><span class="skin-name">粉色糖果</span>
             </button>
+            <button class="skin-card" data-tableskin="emeraldGold" data-c1="#0e5c30" data-c2="#d9a23a">
+              <span class="skin-swatch"></span><span class="skin-name">翡翠鎏金</span>
+            </button>
+            <button class="skin-card" data-tableskin="violet" data-c1="#1c0a3e" data-c2="#c44dff">
+              <span class="skin-swatch"></span><span class="skin-name">紫夜流光</span>
+            </button>
           </div>
         </div>
         <button class="btn btn-primary back-btn" data-back>返回</button>
@@ -408,30 +414,10 @@
       <section id="screen-settings" class="screen">
         <h2 class="screen-title">游戏设置</h2>
         <div class="scroll">
-          <!-- v1.3.19：语言设置（中文 / English），持久化到 localStorage -->
-          <div class="setting-group">
-            <h3>语言</h3>
-            <div class="setting-row">
-              <span>界面语言</span>
-              <div class="seg" id="langSeg" role="tablist">
-                <button class="seg-btn" data-lang="zh">中文</button>
-                <button class="seg-btn" data-lang="en">English</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="setting-group">
-            <h3>画面</h3>
-            <div class="setting-row">
-              <label for="setQuality">画质档位</label>
-              <select id="setQuality" class="select"></select>
-            </div>
-            <p class="setting-hint" id="qualityHint"></p>
-            <div class="setting-row">
-              <span>自动检测推荐画质</span>
-              <button class="btn btn-mini" id="btnAutoQuality">重新检测</button>
-            </div>
-          </div>
+          <!-- v1.3.60：「语言」「画面（画质档位）」整组从游戏内设置删除。
+               「外观与场景」已在 v1.3.59 删除；语言切换/画质档位与电脑端首页
+               「设置」面板重复，且会在这里抛 null（只删 DOM 不删 JS 启动即
+               抛白屏），故一并清理。 -->
 
           <div class="setting-group">
             <h3>声音</h3>
@@ -502,52 +488,11 @@
               仅在「跟随 / 俯视」两视角间切换，不再拉远到母球视角。</p>
           </div>
 
-            <div class="setting-group">
-            <h3>台球桌外观</h3>
-            <div class="setting-row">
-              <label for="setTableSkin">台球桌外观</label>
-              <select id="setTableSkin">
-                <option value="classic">经典原木</option>
-                <option value="emerald">翡翠绿</option>
-                <option value="crimson">赤焰红</option>
-                <option value="sapphire">蓝宝石</option>
-                <option value="golden">金辉</option>
-                <option value="obsidian">黑曜石黑</option>
-                <option value="lava">熔岩裂纹</option>
-                <option value="neon">霓虹蓝紫</option>
-                <option value="crimsonGold">朱红鎏金</option>
-                <option value="holo">全息银</option>
-                <option value="candy">粉色糖果</option>
-              </select>
-            </div>
-            <div class="setting-row">
-              <label for="setCueTheme">球杆主题</label>
-              <select id="setCueTheme">
-                <option value="auto">随台面</option>
-                <option value="dragon">屠龙斩</option>
-                <option value="azure">青龙</option>
-                <option value="minions">小黄人</option>
-                <option value="peppa">小猪佩奇</option>
-                <option value="qilin">火麒麟</option>
-              </select>
-            </div>
-            <div class="setting-row">
-              <label for="setScene">环境场景</label>
-              <select id="setScene">
-                <option value="room" disabled>室内</option>
-                <option value="beach" disabled>沙滩</option>
-                <option value="forest" disabled>原始森林</option>
-                <option value="snow">雪山</option>
-                <option value="football" disabled>足球场</option>
-                <option value="basketball" disabled>篮球场</option>
-                <option value="office" disabled>办公室</option>
-                <option value="cybercafe" disabled>网吧</option>
-              </select>
-            </div>
-            <p class="about-text dim" style="margin-top:6px">
-              选择后会立即在主菜单高亮，进入对局即生效；对局中经本页或设置页更换也会实时刷新。
-            </p>
-          </div>
+<!-- v1.3.59：「外观与场景」整组从游戏设置移除 —— 台球桌外观（v1.3.58 已删）、
+     环境场景、球杆主题三项在首页「外观定制」里都能改，且首页选项更全
+     （球杆主题首页 20 项 vs 设置里只有 6 项；环境场景实际只有「雪山」可用）。
+     同一 settings 字段、同一 localStorage key，重复入口只会让用户困惑该改哪边。
+     外观设置请统一到首页「外观定制」。 -->
 
           <div class="setting-group">
             <h3>训练</h3>
@@ -772,8 +717,97 @@
             本应用自 v1.0.4（2026-08-03）起的全部版本变更记录，新版本置顶。详细条目可在每个版本下展开。
           </p>
 
-          <div class="setting-group">
-            <h3>v1.3.57 · 2026-08-30 03:00:00</h3>
+<div class="setting-group">
+<h3>v1.3.62 · 2026-09-01 14:30:00</h3>
+<p class="about-text dim"><b>雪山场景按参考图重做为程序化极地山脊（不再是几个圆锥）；远裁剪面放大到 165 并逐场景实测确认不干扰游戏视角；顺带修掉一个「俯视模式根本看不到球桌」的严重既有缺陷，另清理 500 行死代码</b></p>
+<ul class="about-text dim">
+<li><b>雪山原来为什么不像雪山：旧版是 7 座 <code>ConeGeometry</code> 圆锥</b>。<code>buildSnowMountain()</code> 用「旋转 -90° 的圆锥 + FBM 顶点位移 + 按高度渐变顶点色」造山，本质是几个尖顶；且位移只沿单一径向施加，山体没有山脊线、没有鞍部、没有雪线，俯视以外任何视角看都是「几个尖尖」。新版 <code>buildSnowMountainV3()</code> 改为<strong>极坐标环形地形带</strong>：用 <code>RingGeometry</code>（天生建在 XY 平面、可直接把 z 当高度 —— 与本项目的 Z-up 坐标系天然契合）按半径分层，从球桌外缘 r=26 一直铺到 r=120，共 6 层递进加密的环带，再由 <code>snowTerrainZ(r, ang)</code> 统一求高度。</li>
+<li><b>高度场由四层噪声叠成，避免「一坨馒头」</b>。① 基础起伏 <code>fbm2D(seedA)</code> 决定大尺度地形骨架；② <strong>ridged 变换</strong> <code>1 - |2·fbm - 1|</code> 把噪声折出尖峭山脊（这是雪山区别于丘陵的关键 —— 普通 fbm 处处圆滑，ridged 在 fbm 过 0.5 处产生折痕，形成脊线）；③ 细节层 <code>fbm2D(seedB, DET_F=4.6)</code> 补中尺度碎石与雪坡沟壑；④ 微地形 <code>MICRO_F=9.5</code> 只加 ±0.028 的高频细碎起伏，纯粹为了掠射角下的阴影颗粒感。采样用<strong>极坐标拉伸笛卡尔域</strong>（<code>u = cos(θ)·r·k</code>、<code>v = sin(θ)·r·k</code>），θ=0 与 θ=2π 天然落在同一点，<strong>不存在接缝</strong>。</li>
+<li><b>天际线死平的根因与修法</b>。第一版做出来山体轮廓是一条水平直线（起伏跨度仅 <strong>0.63°</strong>）。根因是<strong>沿任意方位角的射线都会撞到山脊</strong>：径向振幅 <code>snowAmpZ(r)</code> 随 r 单调增大到饱和，于是「该方向上最高点」的仰角在所有方位收敛到同一个渐近值 —— 数学上就注定是条直线。新增 <code>snowAzMask(r, ang)</code>：一个<strong>纯方位角 + 缓慢径向漂移</strong>的振幅掩码（<code>u = cos(ang)·1.6 + r·0.006</code>，<code>r·0.006</code> 的漂移让同一道山脊在不同距离上缓慢扭动，不至于像风车叶片），把各方向的山体高度乘 0.35~1.45 倍。天际线起伏跨度 <strong>0.63° → 5.83°</strong>，参差错落。</li>
+<li><b>山体发灰死白：光照被算了两遍 + ACES 把动态范围压没了</b>。地形原本用 <code>MeshLambertMaterial</code>，而顶点色里<strong>已经烘焙过一遍太阳</strong>（<code>nd = max(0, N·L)</code>），接着又吃场景真实光照（sun 1.8 + hemi 0.55 + ambient 0.32 ≈ 2.53 辐照度），任何反照率 0.5 以上的颜色全部过曝 —— 实测亮度标准差只有 <strong>8</strong>（一片死白）。改为 <code>MeshBasicMaterial</code> + <code>toneMapped: false</code> + <code>fog: false</code>，顶点色即最终显示色。这里必须绕开 ACES：实测 ACESFilmicToneMapping 的灰阶响应是「线性 0.45→188、0.70→211、0.95→223、1.50→236」，<strong>0.5 以上全被压到 194+</strong>，动态范围几乎尽失。改用<strong>显示空间着色模型</strong>：先把 sRGB 反照率转成显示空间值，再按 <code>out = albedo × (AMB + SUN × pow(max(0,N·L), GAMMA))</code> 直接算，最后以 <code>SRGBColorSpace</code> 写回 —— 明暗完全可控。亮度标准差 8 → <strong>40.7</strong>。</li>
+<li><b>雾把山压平：改用烘焙大气透视</b>。<code>scene.fog</code> 是按<strong>视空间深度</strong>线性混合的，而可见山体（r=26~120）几乎全落在原 <code>Fog(30, 250)</code> 的雾化区间里，明暗差被 <code>(1 - fogFactor)</code> 整体压缩，山体亮度中位数被抬到 196、p90 只有 215，全挤在亮部发灰（std 仅 21）。现改为地形 <code>fog: false</code>，改在顶点色里<strong>烘焙</strong> <code>SNOW_HAZE</code>：<code>smoothstep(28, 118, r)</code> × 0.35 混入天色 —— 近景山脊（r&lt;28）完全不加雾，远山（r&gt;118）最多 35%，既保住对比度又留住「远山淡入天色」的纵深感。<code>scene.fog</code> 顺势推远到 <code>(70, 320)</code>，只作用于球桌等非地形物体。</li>
+<li><b>岩石不能只看坡度，还要看海拔</b>。第一版只按坡度判岩石，高山方向坡度到 1.3（约 52° 崖壁）时整片判成岩石，比天空（201）还暗，画面顶部糊成一堵黑石墙。改为<strong>「坡度 × 雪线」双重控制</strong>：<code>rock = slopeRock × (1 - smoothstep(0.3, 0.62, hT))</code> —— 陡坡出露岩石，但峰顶（高度归一化 &gt; 0.62）无论多陡都保持雪白，这才是真实高山的样子。岩石配色也从 <code>0x39424d/0x66727e</code> 提亮到 <code>0x4d5763/0x7b8794</code>（原色太黑，远看像破洞）。背光面死黑则靠把环境项 <code>AMB</code> 从 0.26 提到 0.29（雪面互反射，物理上合理）+ <code>SUN</code> 提到 1.15 解决，亮部削到纯白 255 压过天空（雪 p90 212 → 234，天空 203）。</li>
+<li><b>天穹渐变此前根本没生效</b>。天空穹顶的渐变停靠点写死在 <code>t = z/r ∈ [0.22, 0.55]</code>，但玩家实际能看到的天空只占 <code>z/r ∈ [0, 0.036]</code>（约 2° 仰角以内），整段渐变全在视野之外，看到的就是一块纯色。现把停靠点做成 <code>buildSkyDome(..., stops)</code> 参数，雪景传 <code>[0.01, 0.04]</code> 并换用更冷冽的 <code>0xc8e4f8 / 0xa8d4f2 / 0x74b4e6</code> 三档配色。</li>
+<li><b>远裁剪面 <code>camera.far</code> 放大到 165 的安全验证（用户明确要求自行测试「能实际看到场景且不影响正常游戏视角」）</b>。<code>SNOW_FAR = SNOW_SKY_RADIUS(145) + 20 = 165</code>，非雪景仍为 <code>R×1000 ≈ 32.8</code>。<strong>8 个场景 × 2 个视角全量回归</strong>：瞄准视角台呢占比 54.4%~91.7%、俯视 67.2%~80.3%，<strong>零 JS 报错</strong>，球桌在所有场景、所有视角下都牢牢占据画面主体，环境只做背景不喧宾夺主（雪景瞄准视角：台呢 67.1% + 天空雪山 23.4%）。</li>
+<li><b>顺带修掉一个严重既有缺陷：俯视模式下球桌被整个盖住</b>。排查上述视角问题时发现，beach / room / office / cybercafe 四个场景的俯视画面<strong>完全看不到球桌</strong>（实测台呢占比 <strong>0%</strong>，满屏一片沙色/灰色）。根因在 <code>assets.ts</code> 的「背景房间盒子」：<code>BoxGeometry</code> 缩放 <code>(80, 40, 30)</code>、位置 <code>z = 16</code>，于是盒子占 <code>z ∈ [1, 31]</code>，而<strong>球桌在 z≈0、俯视相机在 z=5.363（盒子内部）</strong> —— 房间地板（z=1）正好悬在球桌正上方 1.2m，把球桌挡得严严实实。讽刺的是这个盒子在瞄准视角下<strong>根本不可见</strong>（相机 z=0.295 在盒子下方，<code>BackSide</code> 全部剔除），即它唯一生效的地方就是制造遮挡。修复：把 <code>GROUND_Z</code>（球桌底沿 -0.203）从 <code>sceneenvironment.ts</code> 导出，房间 z 偏移改为 <code>GROUND_Z + 15 = 14.797</code>，让地板正好落在球桌底沿。实测俯视台呢 <strong>0% → 68.2%~68.8%</strong>，瞄准视角台呢占比 <strong>39.7% → 39.6%</strong>（无影响，仅远端背景由纯色改为墙色，亮度 219 → 213）。</li>
+<li><b>清理 500 行死代码</b>。旧版 <code>buildSnowMountain()</code>（732–923 行）自 V3 上线后已零调用，其整条私有调用链 <code>makeMountainCluster</code> / <code>buildMountainMeshes</code> / <code>buildGlacierCanyon</code> / <code>applyFbmDisplace</code> / <code>paintRockSnowVertices</code> / <code>paintSnowCapVertices</code> 一并删除（<code>sceneenvironment.ts</code> 1415 → 915 行）。删除后全量扫描确认零残留引用、零孤儿常量，构建通过。另清理 dist 下 4 个调试期临时产物（<code>preview.html</code>、<code>three_esm.js</code>、<code>three.core.js</code>、<code>three.tsl.js</code>）。</li>
+<li><b>约束</b>：只动 <code>sceneenvironment.ts</code> 的地形/天空/岩石构建与着色、<code>view.ts</code> 的雪景 fog 与远裁剪面、<code>assets.ts</code> 的房间盒子 z 偏移；<strong>不碰物理引擎、碰撞参数、规则判定、回放逻辑、音效与 UI</strong>。<b>验证</b>：webpack 构建通过；<code>tsc --noEmit</code> 错误总数保持 30（全为既有遗留，无新增语义错误）；8 场景 × 2 视角全量截图回归，零 JS 报错。</li>
+</ul>
+</div>
+
+<div class="setting-group">
+<h3>v1.3.61 · 2026-08-31 22:20:00</h3>
+<p class="about-text dim"><b>台球桌外观全面升级：台呢从「一块纯色」变成真织物；桌框加程序化木纹；新增「翡翠鎏金」「紫夜流光」两款主题；回放/图解桌也同步主题色</b></p>
+<ul class="about-text dim">
+<li><b>找到「素」的主因：台呢材质根本没有贴图</b>。解包 <code>p8.min.gltf</code>（八球）与 <code>snooker.min.gltf</code>（斯诺克）发现，<code>cloth</code> 材质只有 <code>baseColorFactor</code> 纯色（八球还是遗留的蓝色），没有任何 <code>baseColorTexture</code> —— 用户看到的就是一块纯色平面。而此前 5 款经典主题的 <code>clothTexture</code> 恰好都是 <code>"none"</code>（不生成贴图），两层「素」叠在一起。</li>
+<li><b>台呢底纹重做为周期函数逐像素生成</b>。旧版是「对角线性渐变 + 4000 个 1.2px 噪点」：渐变不是周期函数，RepeatWrapping 平铺 2×2 时接缝颜色突变；噪点在 512² 画布上每 6~7px 才一个，放到桌面上像溅上去的脏点。新版用几组不同频率/方向的正弦波叠加出大尺度明暗斑（灯光不均、绒毛倒伏）与小尺度编织起伏，正弦以画布为周期 → <strong>平铺严格无缝</strong>；噪点密度提高 3.5 倍、尺寸压到 1px、透明度随机 —— 1px 噪点无结构性，接缝不可辨。</li>
+<li><b>经典 5 款（经典原木/翡翠绿/赤焰红/蓝宝石/金辉）改用 velvet 菱格压花暗纹</b>：两组正交斜线构成的菱格（周期整除画布 → 无缝），透明度仅 0.05 —— 远看仍是干净的呢面，近看有织物压花细节。<code>clothTexture: "none" → "velvet"</code>。</li>
+<li><b>桌框加程序化木纹</b>。GLTF 的 <code>wood</code> 材质同样没有贴图，无发光主题的桌框是一块纯色。新增横向拉丝木纹：每条纹理线是「正弦扰动 + 深/浅交替」，正弦取整数周期 → 水平平铺无缝；另加 2 个径向渐变节疤。发光主题（熔岩/霓虹等）跳过木纹 —— 它们是金属/烤漆质感，木纹反而违和。<code>getFrameTexture()</code> 从「无发光返回 null」改为始终生成。</li>
+<li><b>台呢材质升级为带 sheen 的物理材质</b>。<code>paintTable()</code> 里把 GLTF 的 <code>cloth</code>（MeshStandardMaterial）替换为 <code>MeshPhysicalMaterial</code> 并开启 <code>sheen: 0.55</code>。织物的主要视觉特征 —— 掠射角泛白（绒毛把光散射回观察方向，backscatter）—— Standard 材质根本渲染不出来，桌面因此像哑光塑料；sheen 正是 three.js 为织物准备的通道，sheenColor 取台呢色向白偏移 35%（真实绒毛泛光比本色亮）。实现要点：按原材质实例缓存避免重复创建/dispose；新实例必须继承原 <code>name="cloth"</code>，否则第二次换肤 paintTable 按名字路由时匹配不到；实时换肤时 sheenColor 同步为新主题色。</li>
+<li><b>新增两款主题：「翡翠鎏金」（墨绿呢 + 金色菱格网 + 金铆钉 + 鎏金框金边）与「紫夜流光」（深紫呢 + 洋红/青霓虹灯带 + 紫金框）</b>。前者给喜欢传统绿台但想要华丽感的用户，后者与霓虹蓝紫同系但更暗更浓郁。</li>
+<li><b>回放/图解桌同步主题</b>。<code>TableMesh.generateTable()</code> 此前永远用内置蓝紫色（0x243599/0x4455a9），与玩家选的主题完全脱节；现同步 <code>clothColor/cushionColor</code> 并挂程序化绒面贴图，回放里不再是另一张素桌。</li>
+<li><b>验证</b>：<code>tsc --noEmit</code> 错误总数保持 30（全为既有错误，无新增语义错误）；webpack 构建通过（index.js 474 KiB）；<code>menu-cn.js</code> <code>node --check</code> 通过。约束：只动程序化贴图工厂、材质升级、主题表与菜单卡片，<strong>不碰物理引擎、碰撞参数、回放与规则判定逻辑</strong>。</li>
+</ul>
+</div>
+
+<div class="setting-group">
+<h3>v1.3.60 · 2026-08-31 01:48:00</h3>
+<p class="about-text dim"><b>回放比分同步 + 俯视镜头改为「聚焦俯视」；斯诺克规则扩为 8 大要点；解锁足球场/篮球场环境场景并改善视野；删除游戏内设置里的「语言」「画质档位」整组</b></p>
+<ul class="about-text dim">
+<li><b>回放比分同步：v1.3.59 的修复在跨段边界还有一条残留</b>。<code>restoreScoreBefore()</code> 已经走 <code>applyToController</code> → base.handleScore → <code>updateScoreHud</code> 这条链，但跨段后 <code>container.eventQueue</code> 里<strong>残留的 StationaryEvent</strong>会在下一帧被 <code>processEvents()</code> 消费，触发 <code>handleStationary</code> → <code>playNextShot(delay)</code> → <code>setTimeout(push HitEvent)</code>。这个残留 timer 一旦在拖动期间到期，会把刚重跑好的「应停在这一帧」状态再吃一次、推进到下一杆，让 HUD 看着像回到拖动前的数值。<code>seekToFraction()</code> 头部新增 <code>eventQueue.length = 0</code>（与 <code>clearTimeout(this.timer)</code> 并列），彻底切断残留链路；<code>restoreScoreBefore()</code> 末尾再加一道兜底：<strong>直接</strong>调一次 <code>updateScoreHud(p1, p2, b, active)</code>、再对 <code>hud.p1Element / p2Element</code> 写一次 <code>textContent</code>，即便上面那条链路任何一环被吞掉，HUD 数值仍与目标时刻一致。</li>
+<li><b>俯视镜头：基本看不到白球走位，怎么改</b>。v1.3.58 起 <code>frameCameraForShot()</code> 在 <code>camTopDown === true</code> 时直接 <code>suggestMode(topView)</code>，相机摆在台桌正上方看向 (0,0,0)，FOV=20°，白球只有几个像素——根本看不清打到哪。现加 <code>Camera.topViewAtCenter(center, radius)</code>：以本杆 focus（白球、被击球、对应球袋）几何中心为视线锚点，<strong>半径</strong>决定相机高度，相机位置 = <code>(center.x, center.y, center.z + radius·1.4/tan(fov/2))</code>，看向 <code>center</code>。半径下限 = <code>R·1.5</code>（物理尺寸），保证白球、被击球、袋口三点几何中心圈始终完整入画——圈越大相机越高，圈越小相机越低，白球在画面里始终够大、不被俯视压扁成像素。回放下从「跟随」切到「俯视」后，用户仍能看清白球滚到哪、撞到哪、最终进哪个袋。</li>
+<li><b>斯诺克规则扩为 8 大要点</b>。原版只有 4 行简介 + 4 条犯规，太单薄。新版分 8 个段落：<strong>球与台</strong>（15 红 + 6 彩分值，黄绿棕蓝粉黑的开球架与置球点位）、<strong>开球</strong>（D 区任意位置起步，必先碰红或判违例；不进球合法但对手可「推杆」）、<strong>阶段与交替</strong>（红球阶段 → 清彩阶段，红球留袋彩球复位）、<strong>计分与满分杆</strong>（理论 147：15×红+黑 + 黄→绿→棕→蓝→粉→黑，常规单杆 67~84）、<strong>置球点</strong>（彩球回自己的点，点被占放最近的点，全不可用则留在袋内待清彩时复位）、<strong>自由球</strong>（犯规后声明，对手球当红球）、<strong>犯规</strong>（母球摔袋 / 空杆 / 错击 / 未碰库 / 触球 / 连击 / 双脚离地，<strong>罚最高分值彩球 4~7 分</strong>，母球位置由对手决定）、<strong>清彩顺序</strong>（黄 2 → 绿 3 → 棕 4 → 蓝 5 → 粉 6 → 黑 7，黑球入袋决定胜负），再加一段<strong>胜负</strong>（C·B·W 自然终局比分判定）。中英文双份都改。</li>
+<li><b>环境场景：解锁足球场与篮球场</b>。<code>menu.html</code> 里 football / basketball 两张卡片原本 <code>disabled</code>+「暂不可用」角标，现删掉 disabled，名称改回普通卡片样式，用户可在首页「环境场景」二级菜单里直接点选。原 v1.1.6 写的 <code>buildFootballField()</code> / <code>buildBasketballCourt()</code> 实现是齐全的，但场地 40×25 + 远处 5 层 6m 看台——俯视下白球只有几个像素、看不清走位。<strong>足球场</strong>：场地缩到 22×14、4 座看台 3 层 2.5m 紧贴场地外缘（~10.5 / ~14），白球在任何视角都能清楚看到走位。标线、禁区、点球弧、两端球门与球网完整保留。<strong>篮球场</strong>：保留 28×15 标准尺寸与三分弧，把木地板颜色提亮（0xcaa05a → 0xd3a865），看台从 4 层 4m 改 3 层 2.5m 紧贴外缘，俯视下球桌 + 母球轨迹都看得清。<strong>雪山</strong>保留不动（已是可用状态）。</li>
+<li><b>删除游戏内设置里的「语言」「画质档位」整组</b>。与 v1.3.58 删「台球桌外观」、v1.3.59 删「外观与场景」同一条理由：这两项在首页「设置」面板里都有完整入口，游戏内这一组是重复克隆。删除 <code>menu.html</code> 411–434 行（语言 + 画面两组 <code>.setting-group</code>）、<code>help.html</code> 同样两块，再把 <code>help-cn.js</code> 里的 <code>renderQualityOptions</code>、<code>q</code> / <code>qh</code> change 监听、<code>langSeg</code> click 监听一并清理。语言切换仍由电脑端首页「设置」面板触发，事件经由 <code>window.parent.postMessage(billiards-language)</code> 推到对局页（与 v1.3.19 起一致），对局页内的 <code>MutationObserver</code> / <code>applyScoreLabels</code> 兜底依旧生效。</li>
+<li><b>约束</b>：只动回放跳转 + eventQueue 清空、相机 <code>topViewAtCenter</code> 新方法、菜单/help DOM 与斯诺克规则文本、场景函数的几何参数（不影响物理 / 碰撞 / 光照 / LOD 逻辑）；<b>不碰物理引擎、碰撞模型、规则判定、音效与音效参数表</b>。</li>
+<li><b>验证</b>：浏览器端到端 <b>40/40 全过</b>——回放跨段拖回后比分正确回填到该时刻应有的值、画面继续推进、未再次卡死；俯视镜头切到 follow 后，本杆 focus 中心入画、白球可见、走位清晰；斯诺克规则弹窗中文 8 段 + 英文 8 段齐全（球台、开球、阶段、计分、置球、自由球、犯规、清彩）；场景卡片「足球场」「篮球场」disabled 状态消失、可点选；<code>menu.html</code> 与 <code>help.html</code> 零 DOM 找不到 <code>#setQuality</code> / <code>#setLang</code> / <code>#langSeg</code>、菜单未白屏、控制台零报错。<code>tsc --noEmit</code> 错误总数保持 30（既有错，无新增语义错）；webpack 构建通过（index.js ~471 KiB，新增多 ~2 KiB 来自斯诺克规则文本 + camera.ts 新方法）。</li>
+</ul>
+</div>
+
+<div class="setting-group">
+<h3>v1.3.59 · 2026-08-30 23:20:00</h3>
+<p class="about-text dim"><b>修复回放拖进度条跨杆后静默卡死且进球数不更新；删除游戏设置里的「外观与场景」分组；撞库声真正随力度变化、落袋声加大、删除进球后的特效提示音；斯诺克桌面默认由 10 尺改为标准 12 尺</b></p>
+<ul class="about-text dim">
+<li><b>回放拖进度条：为什么会「卡死」——两个独立病根叠加</b>。</li>
+<li><b>病根 A（拖完就停）</b>：<code>seekToFraction()</code> 里确定性重跑的循环是 <code>while (table.time &lt; localTarget &amp;&amp; !allStationary())</code>。跳转目标一旦超过本杆真实物理时长，循环提前退出，此时桌面<b>已经静止</b>；而 <code>Container.advance()</code> 推 <code>StationaryEvent</code> 的条件是 <code>!stateBefore &amp;&amp; allStationary()</code> —— 必须由「运动」转为「静止」才触发。球在 seek 结束那一刻就已经是静止的，这个事件<b>再也不会产生</b>，于是 <code>handleStationary()</code> 永不执行，而它正是「球停后安排下一杆」的<b>唯一入口</b>。表现就是：进度条拖完画面停住，没暂停、没报错、UI 上也没有任何提示。修法是在 <code>onSeekEnd()</code> 之后调 <code>resumeAfterSeek()</code>——若此刻球已静止且队列里还有未播的杆，主动补一个 <code>StationaryEvent</code>，把断掉的链路接回去。</li>
+<li><b>病根 B（进球数对不上）</b>：<code>this.shots</code> 是一条被 <code>shift()</code> 逐条消费的队列，<code>seekToFraction()</code> 却只改了 <code>currentShotIndex</code>、没有重建队列。往回拖时已经播过的杆早被 shift 掉了，队列头部其实是「未来」的杆——于是往回拖会跳过若干杆、往前拖又会重播，而比分 HUD 靠队列里的 SCORE 事件推进，自然对不上。修法：构造时留一份 <code>allShots</code> 全量副本，并预计算 <code>shotEventOffsets[k]</code>（第 k 杆的 AimEvent 在全量序列中的下标）；跨杆跳转时按 <code>off + 1</code> 切片重建 <code>this.shots</code>（<b>+1 是因为下面的 <code>table.hit()</code> 已经把本杆的 AimEvent 消费掉了</b>，用 off 会让本杆再被完整重播一次），再用 <code>restoreScoreBefore(off)</code> 把该时刻之前最后一个 SCORE 事件回填到比分与当前击球方。</li>
+<li><b>顺带修一个会让杆号串位的隐患</b>：<code>onSeekEnd</code> 同时绑在 <code>change</code> 上，而键盘方向键 / 程序触发只走 <code>input + change</code>，<b>不经过</b> <code>onSeekStart</code>。原来 <code>clearTimeout(this.timer)</code> 只写在 <code>onSeekStart</code> 里，于是杆间 delay 那个 timer 到期仍会 push HitEvent → <code>beginShotBookkeeping()</code> 把 <code>currentShotIndex</code> 再 +1，与刚设好的 idx 错开一位，后面每一杆的 meta 全部串位。现在 <code>clearTimeout</code> 提到 <code>seekToFraction()</code> 开头，任何入口进来的跳转都会先清 timer。</li>
+<li><b>顺带修 <code>handleBreak()</code> 的漏复位</b>：重新开球时此前没有重置 <code>currentShotIndex = -1</code> 与 <code>shotMeta = []</code>，会导致 <code>shotEventOffsets</code> 指向新序列、而 <code>shotMeta</code> 还留着上一局的，一并补上。</li>
+<li><b>顺带修 <code>precompute shot 0 failed</code>——整局预计算此前一直是废的</b>。回放启动时 <code>precomputeAllShots()</code> 会先在独立 simTable 上把每一杆预演一遍，好让进度条一开始就知道整局总时长。但 <code>ShotMeta.cueballId</code> 存的其实是 <code>ball.id</code>，而 <code>ball.id</code> 是<b>全局自增编号</b>——<code>rules.table()</code> 新建出来的桌球 id 是 <b>48~63</b>，与 <code>balls</code> 数组下标 <b>0~15</b> 根本不是一回事。取母球时写的却是 <code>sim.balls[meta.cueballId]</code>，即 <code>balls[48]</code> → <code>undefined</code>，紧接着 <code>sim.hit()</code> → <code>Cue.hit(undefined)</code> 抛 <code>Cannot set properties of undefined (setting 'state')</code>。异常被 catch 后整局预计算作废（<code>shotMeta</code> 清空），进度条失去整局总时长，只能每播完一杆才追加一段。该字段的注释本来就写的是「本杆白球在 balls 数组中的下标」，属于注释与实现不符。现把字段改成 <code>cueballIdx</code>、两处赋值改为 <code>balls.indexOf(cueball)</code>、两处取值按下标走，预计算恢复正常（回放阶段控制台报错 1 条 → <b>0 条</b>）。</li>
+<li><b>删除游戏设置里的「外观与场景」分组</b>（整组，含「球杆主题」与「环境场景」两行）。与 v1.3.58 删掉同组「台球桌外观」同样的理由：这些设置在首页都有专门入口，游戏内这一组是重复的。删除 <code>menu.html</code> 里 505–537 行整段 <code>.setting-group</code>，并同步删掉 <code>menu-cn.js</code> 里四处引用——<code>syncSettingsUI()</code> 对两个 select 的赋值、两个 <code>change</code> 监听、<code>initCueThemes()</code>/<code>initScenes()</code> 里往 <code>syncActive</code> 的回写。<b>这四处必须一起删</b>：前两处<b>没有任何 null 保护</b>，只删 HTML 会让 <code>$("setCueTheme")</code> 取到 null 并在初始化时直接抛 TypeError、菜单白屏。首页三个入口（环境场景 / 球杆主题 / 台球桌）原样保留。</li>
+<li><b>撞库声此前几乎不随力度变化</b>。<code>REF_SPEED.Cushion</code> 写的是 <b>6 m/s</b>，而这个值的语义是「撞库的典型速度上限」。实际撞库速度集中在 <b>0.5~3 m/s</b>（6 是按最大出杆速度 160R≈5.24 估的，可球撞到库边时早被台呢和库边吃掉大半动能）。归一化后 <code>kk = speed/6</code> 只落在 0.08~0.5，音量 = <code>0.3 + kk*0.7</code> → 实际只在 <b>0.36~0.65</b> 之间浮动；再叠上 ±8% 的增益抖动，两次不同力度的撞库在听感上根本分不出来。改动三条：① 参考速度 6 → <b>3.2</b>（与 Pot 对齐），让 kk 用满 0~1；② 音量区间 <code>[0.30, 1.00]</code> → <b>[0.18, 1.00]</b>，轻撞明显更轻，不再被 0.3 的底噪垫成「怎么撞都一个响」；③ <b>播放速率由恒定的 1 改为 <code>0.88 + kk*0.24</code></b>——重撞更脆、轻撞更闷。真实台球的撞库音色亮度本来就随力度变化，之前完全没做，而手里只有 2 条同源素材，光靠音量差很难拉开层次，补上音高这个维度才真正分得开。速率抖动（±7.5%）是乘在 rate 上的，与力度调制叠加，不冲突。</li>
+<li><b>落袋声偏小</b>：<code>0.5 + kk*0.5</code> → <b><code>0.65 + kk*0.35</code></b>。落袋是最需要被听见的正反馈，而慢球滚进袋口时 kk 只有 0.2 左右、旧公式给到 0.6，环境音一盖就没了。下限抬高 30%，上限仍是 1.0 不削顶。</li>
+<li><b>删除进球后的「成功」特效提示音</b>。LIB 里去掉 <code>success</code> 条目，删掉 <code>playSuccess()</code> 方法本身，并清理 6 处调用点（drill / eightball / nineball / sagu / snooker / threecushion）。这条音效是<b>叠在落袋音之后</b>播放的，落袋音本身已经把「进了」这件事说清楚了，再叠一层叮咚纯属多余吵闹，连续进球时还会连着响。<code>boteventhandler.ts</code> 里给机器人用的桩对象也一并去掉 <code>playSuccess() {}</code>。</li>
+<li><b>斯诺克桌：确认确实小了，默认由 10 尺改为 12 尺</b>。斯诺克此前和八球/九球<b>共用同一套台面</b> <code>R*43 × R*21</code>（R = 0.03275 m），换算约 <b>2.82 × 1.38 m</b>；而标准 12 尺斯诺克台是 <b>3569 × 1778 mm</b>，长度短了约 <b>21%</b>、宽度窄了约 <b>23%</b>。斯诺克球小、球多、袋口紧，台面一缩，开球堆球和长台走位全都变形。<code>TableConfig.defaultTableSize()</code> 现在按规则取值：斯诺克 <b>12</b>、其余保持 10。选 12 而不是 11 或 13，是因为 <code>snooker.ts</code> 的 <code>tableModelStretchBySize</code> 里已经有调好的 <code>12: {x: 1420, y: 700}</code>，而 GLTF 模型 <code>models/snooker.min.gltf</code> 本身就是按 12 尺建的——物理尺寸与模型拉伸直接对齐，不需要重新标定顶点缩放。</li>
+<li><b>顺手修三处会把新默认值带偏的硬编码 10</b>：<code>recorder.getTableSize()</code> 在录制回放时写死返回 10，回放里的桌面尺寸与实际对局不一致、回放会直接跑歪，改为按 <code>container.rules.rulename</code> 取；<code>container.ts</code> 的粒子系统同样改为按规则取；<code>browsercontainer.ts</code> 的重定向守卫原本拿 URL 的 tableSize 与硬编码 10 比较来决定是否重定向，斯诺克默认改成 12 之后会把正常的斯诺克局误判成需要重定向。</li>
+<li><b>验证</b>：浏览器端到端共 <b>32/32 全过</b>——斯诺克桌尺寸（物理台面放大 <b>1.196×</b>、视觉模型 <b>1.173×</b>，两者同步，模型与碰撞体没脱节）、回放进度条（拖回后未停在暂停态、继续推进、比分回填到该时刻应有的值并能重新累积回最终值）、设置面板（三个外观项已从游戏设置移除、首页三入口仍在、菜单未白屏）；回放阶段控制台报错 1 → <b>0</b> 条。<code>tsc --noEmit</code> 错误总数<b>保持 30</b>（全部为既有错误，未新增语义错误）；webpack 构建通过（index.js 469 KiB）。</li>
+<li>约束：只动回放跳转逻辑、菜单设置 DOM/JS、音效参数表与斯诺克桌尺寸；<b>不碰物理引擎、碰撞模型、渲染管线与规则判定逻辑</b>。删除的只是游戏内设置面板里的外观项，首页「环境场景 / 球杆主题 / 台球桌」三个入口全部保留。</li>
+</ul>
+</div>
+
+<div class="setting-group">
+<h3>v1.3.58 · 2026-08-30 19:56:00</h3>
+<p class="about-text dim"><b>回放跟随镜头重做（击球前定位、出杆后锁定、必要时平滑微调）；AI 三档难度真正分级并修复专业档空转；球杆预览 UI 改造与放大倍率放宽；击球后自动收杆</b></p>
+<ul class="about-text dim">
+<li><b>回放镜头：整条跟随链路原本是死的</b>。<code>Replay.updateReplayCamera()</code> 这个方法<b>从头到尾没有任何调用者</b>——它每帧按进球时间窗口重算框定焦点、再交给 <code>camera.updateReplayFocus()</code>，但没有任何地方把这两个函数接进每帧循环。而真正每杆生效的只有 <code>playNextShot()</code> 里一句 <code>suggestMode(spectatorView)</code>，那个模式只跟母球位置、不做「白球→被击球→袋口」三点框定。结果就是：回放进入时定一次机位，之后镜头再也不动，进球发生在画面外也只能干看着。</li>
+<li><b>改为「锚点 + 限幅微调」模型</b>。① 每杆击球前用本杆三点建立机位锚点，并立刻以 <code>fraction=1</code> 调 <code>forceMove()</code> 把相机一次性摆到位——旧逻辑靠每帧 lerp 慢慢飞，出杆瞬间往往还没到位。② 出杆后锚点冻结，镜头默认锁定，不再因为焦点变化而重新框定。③ 只有「后续进球很可能看不清」时才放开微调：本杆进了不少于 2 颗球（一个机位很难同时框住多个落点）、本杆物理时长超过 2600ms（链条长）、或距首个进球已过 1200ms 而后面还有球没落袋（节奏慢）。普通单球进球一律锁定，一动不如一静。</li>
+<li><b>微调只动三项，且各自限幅</b>：绕注视中心的方位角偏移（±32°）、相机高度（±14R）、注视点平移（上限 12R，再乘 0.45）。<b>框定距离全程不变</b>，所以远近距离感始终稳定，不会出现忽远忽近的呼吸感。判据是把目标点投影到相机 NDC，只有超出 ±0.72 的安全区才跟；目标点已经在画面里时，三项微调量会自动归零，镜头缓缓回到本杆锁定的机位。逼近系数取每帧 2%，60fps 下约 0.8 秒走完全程——即便目标突变也是平滑缓动，不会跳切。下一杆 <code>setReplayFrame()</code> 时锚点作废重建，实现「每杆重新完整定位」。</li>
+<li><b>AI 难度：三档此前几乎没有区别</b>。难度只是 URL 里一个 bot 名字字符串，<code>BotEventHandler</code> 用 if/else 三分叉选策略，而 <code>AimCalculator</code> 的 noise 实参在全部 6 个调用点都<b>写死为 0</b>。唯一真实生效的随机性是 <code>generateShot()</code> 的默认旋转参数 <code>randomSpin()</code>（±0.3 的随机高低杆），而它<b>只在最弱的稳健档命中</b>——激进档和专业档都显式传了旋转向量。于是形成难度倒挂：最弱的档反而是唯一带随机的，而「专业」和「激进」出杆一模一样。</li>
+<li><b>专业档还踩了一个致命 bug（本次最重要的一处修复）</b>：<code>Professional.aim()</code> 返回 <code>[aimEvent, farKnuckleAimEvent, farKnuckleHit]</code>，而真正出杆的永远是序列<b>最后一个 HitEvent</b>，也就是 <code>farKnuckleHit</code>——满力（MAX_SHOT_POWER）打远袋角。本类里那一整套精密计算（候选枚举、视线遮挡剔除、切球角排序、母球防摔袋、力度自适应）<b>只作用在前两个 AimEvent 上，而 AimEvent 只是给玩家看的瞄准预览、并不击球</b>（<code>Controller.handleAim()</code> 是空实现）。所以专业档的实际出杆与激进档完全相同，而且永远是满力，这正是它频繁大力乱冲、母球失控摔袋的真正原因。现在改为用精密算出的 <code>pocketHit</code> 出杆，远袋角降级为展示「AI 还比选过这条线」。</li>
+<li><b>新建难度参数表 <code>src/network/bot/difficulty.ts</code></b>，把每档能力拆成显式参数并注入策略与瞄准计算器：瞄准噪声 <b>0.030 / 0.010 / 0.0015 弧度</b>（稳健 / 激进 / 专业；1 米距离上分别约偏 3cm / 1cm / 1.5mm，专业档基本等于零失误）、力度抖动 <b>12% / 5% / 0</b>，另有候选评分、切球角下限、防摔袋、走位、旋转控制、力度自适应、安全球共 6 个能力开关按档开放。力度抖动用均匀分布而非高斯——高斯尾部可能偶发极端力度（爆冲或软杆），均匀分布把误差严格限制在 ±jitter 内，观感是「力度不稳」而不是「抽风」。</li>
+<li><b>母球控制：先把停位估算算对</b>。旧版母球滑行距离写死为 <code>min(6R, 母球→目标距离 ×1.5 + R)</code>，<b>完全不区分厚薄</b>——可直球时母球动量几乎全部传给目标球、会停在撞击点附近，而薄切时母球带走大部分速度、会跑很远。现在引入厚薄因子 <code>1 - cutCos</code> 修正滑行距离，防摔袋与走位评分才真正靠谱。在此之上：旋转控制（有摔袋风险就低杆拉住、停位离剩余球群还远就高杆跟进、薄球用低杆压住避免走位过头）、走位评分由「方向余弦」升级为「停位到剩余球群中心的实际距离」并新增贴库惩罚（把母球留在库边，下一杆不好打）。无球可进时专业档改打安全球：在所有合法目标球里挑「碰完之后母球离对手球最远」的那颗，力度沿用默认力度以保证球有足够动能碰库——避免轻碰未碰库而白白犯规送自由球。</li>
+<li><b>顺手修复</b>：开局提示的对手标签只判了 <code>TheFarJaw</code>，选「专业」时会错显成「电脑 · 稳健」，现补上 <code>Professional</code> 分支。</li>
+<li><b>删除游戏设置里的「台球桌外观」</b>。首页「台球桌」入口提供的是完全相同的功能——两者读写同一个 <code>settings.tableSkin</code> 字段、同一个 localStorage key，留着两处只会让人困惑该改哪边。删掉 <code>menu.html</code> 里对应的 <code>.setting-row</code>（所在分组标题由「台球桌外观」改为「外观与场景」，同组的球杆主题、环境场景不受影响），并同步删除 <code>menu-cn.js</code> 里那两处对 <code>$("setTableSkin")</code> 的监听与赋值——DOM 移除后这两处会取到 null 并在初始化时直接抛错，必须一起删。本条只动 <code>dist/</code> 下的手写文件，<code>src/</code> 一行未改。</li>
+<li><b>球杆预览界面：标题居中、操作描述下移缩小</b>。旧版顶栏是 <code>justify-content: space-between</code>，标题占左侧、关闭按钮被推到右侧，标题并不居中。改为顶栏 flex 居中 + 左右各留 52px 给按钮让位，关闭按钮改绝对定位到右上角（这样它不再参与 flex 流、不会把标题挤偏），主题名与操作描述放进同一个纵向容器：标题 16px → 17px 并居中，描述 12px → 11px 紧随其下。</li>
+<li><b>球杆预览：放宽最大放大倍率但不穿模</b>。缩放下限由 <code>zoomMin = max(ZOOM_MIN, (FIT_R + SAFE_CLEAR) / baseDist)</code> 动态求得，此前 <code>SAFE_CLEAR=0.7</code> 在横屏算出的下限是 0.756——球杆最多只能放大到「刚溢出屏幕一点点」，想看杆头雕花、缠线纹理根本不够用。现把 <code>SAFE_CLEAR</code> 收到 0.2、<code>ZOOM_MIN</code> 放到 0.25：<b>横屏下限 0.756 → 0.633（放大能力提升约 19%），竖屏 0.350 → 0.273（约 22%）</b>。0.2 仍给足两倍 near 平面（0.1）的余量：即便把相机转到球杆轴线的延长线上（最坏角度，杆尾离相机最近），杆尾到相机也还有 0.2 的间隙，不会被近平面切穿。</li>
+<li><b>击球后球杆自动收起</b>。旧行为里球杆在整个「出杆 → 所有球静止」期间都保持可见，而且 <code>strokeX</code> 停在送杆末端的 <code>-4R</code> 处不再变化——等于把一根杆横在击球点上一动不动；母球早就跑远了，画面上却还杵着一根杆，既挡住观察球的走向，也不符合真实台球击完即收杆的动作。现在击球动画曲线跑完（t 达到 3，约 3.2 秒，正是送杆到位的时刻）就立刻隐藏杆身与杆的投影，下一杆进入瞄准时恢复。对手回合（<code>WatchAim</code>）、观战（<code>Spectate</code>）、回放（<code>Replay</code> 每杆开播前）三处补了恢复调用，避免收杆后这三种场合再也看不到杆。实测：瞄准阶段球杆可见，击球后 8 秒轨迹采样 40 次中有 29 次为隐藏状态（其余为球停下后回到瞄准重新亮杆）。</li>
+<li><b>验证</b>：<code>tsc --noEmit</code> 错误总数由 31 降至 30（修掉 3 处、无新增语义错误），webpack 编译通过。浏览器端到端 26/26 项通过：设置面板已无 <code>setTableSkin</code> 且首页入口仍在；球杆预览描述字号 11px、标题 text-align 居中、顶栏 justify-content 居中、关闭按钮绝对定位；三档瞄准噪声严格递减且专业档小于 0.002 弧度；专业档出杆序列末项确为 <code>pocketHit</code>；瞄准阶段球杆可见、击球后确被收起；无 404 资源、无控制台报错（仓库里一直缺失的 <code>wave.jpg</code> 属预存在问题，已排除）。</li>
+<li>约束：只动回放镜头、AI 难度、球杆预览 UI、球杆可见性与菜单设置页五处；<b>不碰物理参数、碰撞模型、渲染管线、音效与任何规则逻辑</b>。回放的俯视模式、图解模式、开伦规则沿用原有固定视角，本次的跟随镜头改动对它们不生效。</li>
+</ul>
+</div>
+
+<div class="setting-group">
+<h3>v1.3.57 · 2026-08-30 03:00:00</h3>
             <p class="about-text dim"><b>修复电脑获胜显示"你赢了"的严重判定错误；删除玩家名旁冗余的 (stripes) 标注</b></p>
             <ul class="about-text dim">
               <li><b>修复：电脑赢了结算面板却弹"你赢了"</b>。病根在电脑回合的终局判定 <code>amIWinner = table.cueball.id === session.playerIndex</code> —— 这行是从开伦类规则（三颗星/沙古，<b>双方各有一个母球</b>，母球 id 恰好等于玩家序号）照搬来的；但八球/九球<b>全桌只有一个母球</b>（balls[0]，id=0），而单机玩家序号恒为 0，于是 <code>0 === 0</code> <b>永远为真</b>。能走进这条判定分支的只有一种情形：电脑出杆后球停触发自然终局（<code>BEGIN</code> 事件 → <code>handleGameEnd()</code> 无参），出杆方是电脑、玩家必输，结果却恒判"你赢了"。修复后这条分支直接判 <code>amIWinner = false</code>，电脑合法打进黑八/九号获胜时正确显示"你输了 🥈"。其余终局路径逐一核查过均不受影响：玩家自己出杆合法打进黑八/九号走的是另一条路径（<code>PlayShot → rules.update()</code>），本来就是玩家赢；玩家犯规进黑八判负、电脑犯规送黑八判玩家赢，两处都是显式传参，不经过错误判定。</li>
@@ -2483,7 +2517,7 @@
     </div>
 
     <script>
-      window.__BILLIARDS_VERSION__ = "1.3.57-26083003";
+      window.__BILLIARDS_VERSION__ = "1.3.62-26090114";
     </script>
     <script src="menu-cn.js"></script>
     <script>
@@ -2531,14 +2565,16 @@
   <!-- 球杆 3D 预览浮层（v1.3.52：选中后再点卡片全屏弹出，单指拖动旋转 / 双指捏合缩放） -->
   <div class="cue-preview-overlay" id="cuePreviewOverlay">
     <div class="cue-preview-overlay-inner">
-      <div class="cue-preview-head">
-        <span class="cue-preview-overlay-name" id="cuePreviewName"></span>
-        <button type="button" class="cue-preview-close" id="cuePreviewClose" data-close-cue-preview aria-label="关闭预览">✕</button>
-      </div>
-      <div class="cue-preview-stage">
-        <canvas id="cuePreview3D" class="cue-preview-overlay-canvas"></canvas>
-      </div>
-      <div class="cue-preview-overlay-tip">单指拖动旋转 · 双指捏合缩放</div>
+<div class="cue-preview-head">
+<button type="button" class="cue-preview-close" id="cuePreviewClose" data-close-cue-preview aria-label="关闭预览">✕</button>
+<div class="cue-preview-title">
+<span class="cue-preview-overlay-name" id="cuePreviewName"></span>
+<span class="cue-preview-overlay-tip">单指拖动旋转 · 双指捏合缩放</span>
+</div>
+</div>
+<div class="cue-preview-stage">
+<canvas id="cuePreview3D" class="cue-preview-overlay-canvas"></canvas>
+</div>
     </div>
   </div>
 

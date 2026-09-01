@@ -10,8 +10,8 @@ import {
 import { TableGeometry } from "./tablegeometry"
 import { PocketGeometry } from "./pocketgeometry"
 import { R } from "../model/physics/constants"
-import { Settings } from "../utils/settings"
-import { getTableSkin } from "../utils/settings"
+import { Settings, getTableSkin } from "../utils/settings"
+import { getClothTexture } from "./tableskinfactory"
 
 export class TableMesh {
   logger = (_) => {}
@@ -26,6 +26,17 @@ export class TableMesh {
     const light = new PointLight(0xf0f0e8, 22)
     light.position.set(0, 0, R * 50)
     group.add(light)
+    // v1.3.61：回放 / 图解桌同步当前桌布主题 —— 此前台呢/库边永远是模型
+    // 默认的蓝紫色，与玩家选的主题完全脱节；台呢顺带挂上程序化绒面贴图，
+    // 结束「回放里是另一张素桌」的割裂感。
+    const ts = getTableSkin(Settings.get().tableSkin)
+    this.cloth.color.set(ts.clothColor)
+    const clothTex = getClothTexture(ts.id)
+    if (clothTex) {
+      this.cloth.map = clothTex
+      this.cloth.needsUpdate = true
+    }
+    this.cushion.color.set(ts.cushionColor)
     this.addCushions(group, hasPockets)
 
     if (hasPockets) {

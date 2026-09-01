@@ -52,7 +52,10 @@ export class EightBall implements Rules {
   readonly asset = "models/p8.min.gltf"
 
   tableGeometry(): void {
-    TableConfig.apply(this.rulename, TableConfig.tableSizeFromUrl())
+    TableConfig.apply(
+      this.rulename,
+      TableConfig.tableSizeFromUrl(this.rulename)
+    )
   }
 
   table(): Table {
@@ -299,7 +302,7 @@ export class EightBall implements Rules {
     this.currentBreak += pots.length
     session.addMyScore(pots.length)
 
-    this.container.sound.playSuccess(table.inPockets())
+    // v1.3.59：删除进球后的 success 特效提示音（与落袋音叠加显得多余吵闹）
 
     const p1typeForEvent =
       session.playerIndex === 0 ? session.p1type : flipType(session.p1type)

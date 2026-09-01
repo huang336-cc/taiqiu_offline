@@ -163,11 +163,15 @@ export class Snooker implements Rules {
   }
 
   tableGeometry(): void {
-    TableConfig.apply(this.rulename, TableConfig.tableSizeFromUrl())
+    TableConfig.apply(
+      this.rulename,
+      TableConfig.tableSizeFromUrl(this.rulename)
+    )
   }
 
   scaleTableModel(scene: any): void {
-    const stretch = tableModelStretchBySize[TableConfig.tableSizeFromUrl()]
+    const stretch =
+      tableModelStretchBySize[TableConfig.tableSizeFromUrl(this.rulename)]
     if (!stretch) return
 
     scaleTableModel(scene, stretch.x, stretch.y)
@@ -264,7 +268,7 @@ export class Snooker implements Rules {
 
   private continueBreak(): Controller {
     const table = this.container.table
-    this.container.sound.playSuccess(table.inPockets())
+    // v1.3.59：删除进球后的 success 特效提示音（与落袋音叠加显得多余吵闹）
     if (Outcome.isClearTable(table)) {
       return this.handleGameEnd(true)
     }

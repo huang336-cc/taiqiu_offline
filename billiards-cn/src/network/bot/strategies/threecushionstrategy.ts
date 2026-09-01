@@ -4,6 +4,7 @@ import { Vector3 } from "three"
 import { AimCalculator } from "../aimcalculator"
 import { BotShotContext, BotStrategy } from "../botstrategy"
 import { Cushion } from "../../../model/physics/cushion"
+import { DifficultyProfile, DIFFICULTY, jitterPower } from "../difficulty"
 
 type ShotCandidate = {
   overlap: number
@@ -17,9 +18,15 @@ type ShotCategory = "LongShortLongNatural" | "FallbackRandom"
 export class ThreeStrategy implements BotStrategy {
   readonly name = "ThreeStrategy"
   private readonly power: number
+  /** v1.3.58：难度档位（瞄准噪声 / 力度抖动） */
+  private readonly profile: DifficultyProfile
 
-  constructor(power: number = AimCalculator.MAX_SHOT_POWER) {
+  constructor(
+    power: number = AimCalculator.MAX_SHOT_POWER,
+    profile: DifficultyProfile = DIFFICULTY.ClawBreak
+  ) {
     this.power = power
+    this.profile = profile
   }
 
   aim(context: BotShotContext, calculator: AimCalculator): GameEvent[] {
@@ -137,13 +144,14 @@ export class ThreeStrategy implements BotStrategy {
     const isClockwise = AimCalculator.isClockwiseSpin(best.tangent, normal)
     const sideSpin = isClockwise ? 0.3 : -0.3
 
-    const shot = calculator.generateShot(
-      context.table,
-      0,
-      this.power,
-      best.ghostPos,
-      new Vector3(sideSpin, 0, 0)
-    )
+// v1.3.58：注入本档的瞄准噪声与力度抖动（此前 noise 实参写死为 0）
+const shot = calculator.generateShot(
+context.table,
+this.profile.aimNoise,
+jitterPower(this.power, this.profile.powerJitter),
+best.ghostPos,
+new Vector3(sideSpin, 0, 0)
+)
 
     return [AimEvent.fromJson(shot.tablejson.aim), shot]
   }

@@ -164,7 +164,7 @@ export class Sagu extends ThreeCushion {
 
   override update(outcomes: Outcome[]): Controller {
     if (this.isSuccessfulShot(outcomes)) {
-      this.container.sound.playSuccess(outcomes.length / 3)
+      // v1.3.59：删除进球后的 success 特效提示音（与落袋音叠加显得多余吵闹）
       this.container.sendEvent(new WatchEvent(this.container.table.serialise()))
       const scored = this.getAmountScored(outcomes)
       this.currentBreak += scored

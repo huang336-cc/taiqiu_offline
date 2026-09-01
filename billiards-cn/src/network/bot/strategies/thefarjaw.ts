@@ -8,16 +8,23 @@ import { BotShotContext, BotStrategy } from "../botstrategy"
 import { TableGeometry } from "../../../view/tablegeometry"
 
 import { ThreeStrategy } from "./threecushionstrategy"
+import { DifficultyProfile, DIFFICULTY, jitterPower } from "../difficulty"
 
 export class TheFarJaw implements BotStrategy {
   readonly name = "TheFarJaw"
+  /** v1.3.58：难度档位，默认激进档 */
+  protected readonly profile: DifficultyProfile
+
+  constructor(profile: DifficultyProfile = DIFFICULTY.TheFarJaw) {
+    this.profile = profile
+  }
 
   aim(context: BotShotContext, calculator: AimCalculator): GameEvent[] {
     if (!TableGeometry.hasPockets) {
-      return new ThreeStrategy(AimCalculator.MAX_SHOT_POWER).aim(
-        context,
-        calculator
-      )
+      return new ThreeStrategy(
+        AimCalculator.MAX_SHOT_POWER,
+        this.profile
+      ).aim(context, calculator)
     }
 
     const targetBall = this.pickTargetBall(context)
@@ -50,17 +57,21 @@ export class TheFarJaw implements BotStrategy {
       [farKnuckle]
     )
 
+    // v1.3.58：noise 与力度抖动由难度档决定
     const pocketHitEvent = calculator.generateShot(
       context.table,
-      0,
-      AimCalculator.DEFAULT_SHOT_POWER,
+      this.profile.aimNoise,
+      jitterPower(
+        AimCalculator.DEFAULT_SHOT_POWER,
+        this.profile.powerJitter
+      ),
       aimPoint,
       new Vector3(0, 0, 0)
     )
     const farKnuckleHitEvent = calculator.generateShot(
       context.table,
-      0,
-      AimCalculator.MAX_SHOT_POWER,
+      this.profile.aimNoise,
+      jitterPower(AimCalculator.MAX_SHOT_POWER, this.profile.powerJitter),
       farKnuckleAimPoint,
       new Vector3(0, -0.3, 0)
     )

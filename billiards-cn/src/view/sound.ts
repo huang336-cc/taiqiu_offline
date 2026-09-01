@@ -101,7 +101,11 @@ const LIB: { [cat: string]: Variant[] } = {
     { file: "sfx/pot_heavy_5.ogg", tier: 2 }, // 4157Hz
     { file: "sfx/pot_heavy_1.ogg", tier: 2 }, // 4390Hz
   ],
-  success: [{ file: "sfx/success.ogg", tier: 1 }],
+  // v1.3.59：删除进球后的「成功提示音」（success）。
+  // 用户反馈这声音在每次合法进球后都响，与落袋音叠在一起显得多余吵闹。
+  // LIB 里去掉这一条后，loadAll() 不会再去加载 sfx/success.ogg，
+  // playSuccess() 取不到 buffer 会直接 return —— 功能上等于彻底关闭。
+  // 本次把 playSuccess() 方法本身和 6 处调用点一并删除，不留死代码。
 }
 
 /**
@@ -109,10 +113,22 @@ const LIB: { [cat: string]: Variant[] } = {
  * 沿用 v1.3.20 的实测标定：球速实际量级约 0~5.4（maxPower=160R≈5.24）。
  * 落袋时球已减速，区间更小，故参考值另取。
  */
+/**
+ * v1.3.59：Cushion 的参考速度由 6 下调到 3.2。
+ *
+ * 原值 6 是按「最大出杆速度」取的（maxPower = 160R ≈ 5.24），但那不是撞库时的
+ * 典型速度 —— 球撞库前多半已经过一次碰撞或一段滚动，实测常见区间约 0.5~3。
+ * 用 6 做分母，典型撞库只落在 kk 的 0.08~0.5，音量被压在 0.36~0.65 这一窄带，
+ * 再叠上 ±8% 增益抖动，轻撞和重撞听起来几乎没有区别（用户反馈「未按力度调整」）。
+ * 改 3.2 后典型速度能铺满归一化区间，力度差异才听得出来。
+ *
+ * v1.3.59：Pot 的参考速度保持 3.2 不变 —— 落袋速度区间本来就比撞库小，
+ * 且分档用的是 TIER_SPEED 绝对阈值，不受此处影响。
+ */
 const REF_SPEED: { [cat: string]: number } = {
   Hit: 5.2,
   Collision: 5,
-  Cushion: 6,
+  Cushion: 3.2,
   Pot: 3.2,
 }
 
@@ -425,13 +441,32 @@ export class Sound {
       this.lastAnyPotAt = now
       const kk = this.k(speed, "Pot")
       const buf = this.pick("pot", this.tierOf("Pot", speed))
-      if (buf) this.play3D(buf, x, y, 0.5 + kk * 0.5)
+      // v1.3.59：下限由 0.5 抬到 0.65（+30%）。落袋是最需要被听见的正反馈，
+      // 而慢球滚进袋口时 kk 只有 0.2 左右，旧公式给到 0.6 常被环境音盖掉；
+      // 上限仍为 1.0，不会削顶。
+      if (buf) this.play3D(buf, x, y, 0.65 + kk * 0.35)
     }
     if (outcome.type === "Cushion") {
       const kk = this.k(speed, "Cushion")
       const buf = this.pick("cushion", 1)
-      // cushion 只有 2 条且同源于同一次撞击，用加大抖动弥补变体不足
-      if (buf) this.play3D(buf, x, y, 0.3 + kk * 0.7, 1, true, RATE_JITTER_SPARSE)
+      // v1.3.59：撞库声现在真的随力度变化。
+      // - 音量区间由 [0.30, 1.00] 拉宽到 [0.18, 1.00]：轻撞明显更轻，
+      //   不再被 0.3 的底噪垫成「怎么撞都一个响」；
+      // - 播放速率由恒定的 1 改为 0.88 + kk * 0.24：重撞更脆、轻撞更闷。
+      //   真实台球里撞库音色的亮度本来就随力度变化，之前完全没做，
+      //   光靠音量差在只有 2 条同源素材的情况下很难分辨。
+      //   抖动是乘在 rate 上的（±7.5%），与这里的力度调制叠加，不冲突。
+      if (buf) {
+        this.play3D(
+          buf,
+          x,
+          y,
+          0.18 + kk * 0.82,
+          0.88 + kk * 0.24,
+          true,
+          RATE_JITTER_SPARSE
+        )
+      }
     }
     if (outcome.type === "Hit") {
       const kk = this.k(speed, "Hit")
@@ -464,13 +499,6 @@ export class Sound {
     }
   }
 
-  /**
-   * 成功提示音：三音上行琶音（1068→1250→1432Hz）。
-   * pitch 由调用方传入（连击数相关），用轻微变调表现「连得越多越上扬」。
-   */
-  playSuccess(pitch = 0) {
-    const buf = this.buffers.get("sfx/success.ogg")
-    if (!buf) return
-    this.play3D(buf, 0, 0, 0.32, 1 + pitch * 0.06, false)
-  }
+  // v1.3.59：playSuccess()（进球后的成功提示音）已连同 LIB 里的 success 条目
+  // 与全部 6 处调用点一并删除。用户反馈这声音与落袋音叠加显得多余吵闹。
 }

@@ -63,7 +63,10 @@ export class NineBall implements Rules {
   readonly asset = "models/p8.min.gltf"
 
   tableGeometry(): void {
-    TableConfig.apply(this.rulename, TableConfig.tableSizeFromUrl())
+    TableConfig.apply(
+      this.rulename,
+      TableConfig.tableSizeFromUrl(this.rulename)
+    )
   }
 
   table(): Table {
@@ -135,7 +138,7 @@ export class NineBall implements Rules {
     this.currentBreak += pots
     Session.getInstance().addMyScore(pots)
 
-    this.container.sound.playSuccess(table.inPockets())
+    // v1.3.59：删除进球后的 success 特效提示音（与落袋音叠加显得多余吵闹）
     // v1.3.57 注：走到这里的必然是玩家自己出的杆（电脑出杆不经 rules.update，
     // 见 boteventhandler.handleGameEnd 的注释）。落袋游戏只有一个母球，
     // table.cueball === balls[playerIndex] 在 playerIndex=0 时恒真，

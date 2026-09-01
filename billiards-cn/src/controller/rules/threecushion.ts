@@ -53,11 +53,14 @@ export class ThreeCushion implements Rules {
   }
 
   tableGeometry(): void {
-    TableConfig.apply(this.rulename, TableConfig.tableSizeFromUrl())
+    TableConfig.apply(
+      this.rulename,
+      TableConfig.tableSizeFromUrl(this.rulename)
+    )
   }
 
   scaleTableModel(scene): void {
-    const sizeScale = TableConfig.tableSizeFromUrl() / 10
+    const sizeScale = TableConfig.tableSizeFromUrl(this.rulename) / 10
     if (sizeScale !== 1) {
       const adjust = 0.022
       scene.scale.x *= sizeScale * (1 + adjust)
@@ -82,7 +85,7 @@ export class ThreeCushion implements Rules {
 
   update(outcomes: Outcome[]): Controller {
     if (Outcome.isThreeCushionPoint(this.cueball, outcomes)) {
-      this.container.sound.playSuccess(outcomes.length / 3)
+      // v1.3.59：删除进球后的 success 特效提示音（与落袋音叠加显得多余吵闹）
       this.container.sendEvent(new WatchEvent(this.container.table.serialise()))
       const scored = this.getAmountScored(outcomes)
       this.currentBreak += scored

@@ -80,6 +80,8 @@ export class Spectate extends ControllerBase {
     this.container.table.cue.aim = event
     this.container.table.cueball = this.container.table.balls[event.i]
     this.container.table.cueball.pos.copy(event.pos)
+    // v1.3.58：对手出杆后球杆会被收起，收到新的瞄准事件时重新亮出来
+    this.container.table.cue.aimMode()
     this.container.table.cue.updateAimInput()
     return this
   }

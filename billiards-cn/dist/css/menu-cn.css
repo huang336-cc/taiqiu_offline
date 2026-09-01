@@ -361,27 +361,42 @@ html.in-app .app {
   touch-action: none;
   background: #0a1020; /* WebGL alpha:true 时兜底暗蓝，防止 WebView 合成出白 */
 }
-/* 顶栏：主题名 + 关闭按钮 */
+/* 顶栏：主题名居中、操作描述置于其下，关闭按钮绝对定位到右上角。
+   v1.3.58：关闭按钮不再参与 flex 流，避免把标题挤到偏左；
+   左右各留 52px 让位，保证标题在整条顶栏里真正居中。 */
 .cue-preview-head {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+position: relative;
+flex: 0 0 auto;
+display: flex;
+align-items: center;
+justify-content: center;
+min-height: 44px;
+padding: 0 52px;
+}
+.cue-preview-title {
+display: flex;
+flex-direction: column;
+align-items: center;
+gap: 3px;
+min-width: 0;
+max-width: 100%;
 }
 .cue-preview-close {
-  flex: 0 0 auto;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  border: 1px solid rgba(255, 215, 122, 0.3);
-  border-radius: 22px;
-  background: rgba(20, 26, 40, 0.85);
-  color: var(--gold);
-  font-size: 18px;
-  line-height: 1;
-  font-family: inherit;
-  cursor: pointer;
+position: absolute;
+top: 0;
+right: 0;
+flex: 0 0 auto;
+width: 44px;
+height: 44px;
+padding: 0;
+border: 1px solid rgba(255, 215, 122, 0.3);
+border-radius: 22px;
+background: rgba(20, 26, 40, 0.85);
+color: var(--gold);
+font-size: 18px;
+line-height: 1;
+font-family: inherit;
+cursor: pointer;
 }
 .cue-preview-close:active {
   transform: scale(0.94);
@@ -395,24 +410,25 @@ html.in-app .app {
   border-radius: 10px;
   background: #0a0e14;
 }
-/* v1.3.52：由绝对定位改为 head/tip 行内的普通流式元素 */
+/* v1.3.52：由绝对定位改为 head/tip 行内的普通流式元素
+   v1.3.58：随 .cue-preview-title 纵向排布，标题居中、描述缩小紧随其下 */
 .cue-preview-overlay-name {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--gold);
-  letter-spacing: 1px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+max-width: 100%;
+font-size: 17px;
+font-weight: 700;
+color: var(--gold);
+letter-spacing: 1px;
+text-align: center;
+overflow: hidden;
+text-overflow: ellipsis;
+white-space: nowrap;
 }
 .cue-preview-overlay-tip {
-  flex: 0 0 auto;
-  text-align: center;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
-  letter-spacing: 1px;
+font-size: 11px;
+line-height: 1.25;
+text-align: center;
+color: rgba(255, 255, 255, 0.45);
+letter-spacing: 0.5px;
 }
 .skin-card {
   -webkit-user-select: none;

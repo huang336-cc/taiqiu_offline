@@ -6,6 +6,7 @@ import { GameEvent } from "./gameevent"
 import { LinkFormatter } from "../view/link-formatter"
 import { ReplayEncoder } from "../utils/replay-encoder"
 import { Session } from "../network/client/session"
+import { TableConfig } from "../view/tableconfig"
 import { RecordEntry } from "./recordentry"
 
 export class Recorder {
@@ -252,8 +253,14 @@ export class Recorder {
     return shots
   }
 
+  /**
+   * v1.3.59：改用 TableConfig 读取，带上当前玩法名。
+   *
+   * 此前这里独立于 TableConfig 自己解析 URL、写死默认 10。斯诺克默认尺寸改成
+   * 12 之后，若此处仍返回 10，回放状态里记录的 tableSize 会与实际建表尺寸不符，
+   * 载入回放时会用错误的尺寸重建台面。
+   */
   private getTableSize(): number {
-    const urlParams = new URLSearchParams(globalThis.location?.search ?? "")
-    return parseFloat(urlParams.get("tableSize") || "10")
+    return TableConfig.tableSizeFromUrl(this.container?.rules?.rulename)
   }
 }

@@ -45,8 +45,15 @@
         snooker: {
           title: "斯诺克规则",
           body:
-            '<div class="guide-block"><h3>斯诺克</h3><p>先打红球（1 分），进袋后再打一颗彩球，交替进行。彩球分值：黄 2、绿 3、棕 4、蓝 5、粉 6、黑 7。红球阶段彩球进袋后需重新摆回原位；红球清完后，按分值从低到高依次清彩球，总分高者获胜。</p></div>' +
-            '<div class="guide-block"><h3>犯规</h3><ul class="guide-list"><li>母球落袋</li><li>空杆（未击中任何球）</li><li>首个击中的球不符合当前阶段（红球阶段碰彩球，或彩球阶段碰红球）</li><li>击球后无任何球碰库且无球落袋</li></ul><p class="about-text dim">犯规后对手获得自由球，可任意摆放母球。</p></div>',
+            '<div class="guide-block"><h3>球与台</h3><p>标准 12 英尺斯诺克台（3569×1778 mm）。台面共有 22 颗球：<b>15 颗红球</b>（每颗 1 分）+ <b>6 颗彩球</b>：黄（2）、绿（3）、棕（4）、蓝（5）、粉（6）、黑（7）。开球前红球摆成三角形紧贴粉球所在点位，彩球摆在各自的置球点：黄、绿、棕在开球线（baulk line）一侧由右向左排列，蓝球摆在台面正中心，粉球在两腰袋之间的中线点，黑球在远离开球区那一端的底库点。</p></div>' +
+            '<div class="guide-block"><h3>开球（Break）</h3><p>开局母球从开球半区（D 区内）任意位置出杆，目标是先把红球三角架至少一颗合法入袋或至少四颗球（含母球）碰撞台边。母球必须先碰到一颗红球——否则直接判违例。<b>开球不入任何红球</b>也合法，但下一杆对手拥有「推杆」选项：声明「推杆」后该手只需把母球碰到任意球即可得分。</p></div>' +
+            '<div class="guide-block"><h3>阶段与交替</h3><p>得分后保持连续击球（continue break）：<b>红球阶段</b>选手必须先击一颗红球入袋，然后才能击一颗彩球入袋；红球留在袋内不取出，<b>彩球进袋后必须从置球点复原</b>。当台面最后一颗红球入袋后即进入<b>清彩阶段</b>（black-ball stage），按固定顺序依次击打黄、绿、棕、蓝、粉、黑。</p></div>' +
+            '<div class="guide-block"><h3>计分与满分杆</h3><p>红球 1 分一颗；彩球按颜色（黄 2/绿 3/棕 4/蓝 5/粉 6/黑 7）。理论最高单杆是「<b>147</b>」——开球后红球阶段连续 15 次红 + 黑（每红 + 黑 = 8 分），15×8 + 清彩黄→绿→棕→蓝→粉→黑（2+3+4+5+6+7=27）= 147。常规单杆清台（15 红 + 单杆清彩）通常落在 67~84 之间。</p></div>' +
+            '<div class="guide-block"><h3>置球点（Re-spot）</h3><p>彩球进袋后必须摆回自己的置球点；若置球点被占，则摆到<b>最近可用的</b>（先靠近的）点位；若整个点位全都不可用，该彩球<b>留在袋内不摆回</b>，但在彩球阶段还要再复位出袋。红球全部入袋后，所有彩球按规则复位后即进入清彩；最后只剩黑球在袋口时击不进黑球即判负。</p></div>' +
+            '<div class="guide-block"><h3>自由球（Free Ball）</h3><p>对手犯规后，下一杆选手可<b>声明「自由球」</b>：把任意一颗非红球当红球对待（先合法碰它即等同先碰红球），但得分仍按该球的分值。这一规则专门用于「对手犯规后母球被锁死」，让母球绕道碰到那一颗「当红球」就能解死局。</p></div>' +
+            '<div class="guide-block"><h3>犯规（Foul）</h3><ul class="guide-list"><li>母球落袋（<b>白球摔袋</b>）</li><li>空杆（未击中任何球）</li><li>首碰目标错误：红球阶段碰了非红球，或彩球阶段碰了非目标彩球</li><li>击球后无任何球碰库且无球落袋（除非开球）</li><li>用身体、衣物或杆以外的物品触球</li><li>连击、双脚离地、出杆时杆头仍贴母球</li></ul><p class="about-text dim">犯规判罚：对手获得 <b>「最高分值彩球」的分数</b> 作为直接得分（黄 2 ~ 黑 7，所以<b>最低 4 分</b>，最高 7 分），并执行下一杆。若对手仍能直接碰红球即得 1 分。犯规后母球位置由下一杆选手决定，可保留原位或重摆。</p></div>' +
+            '<div class="guide-block"><h3>清彩顺序</h3><p>红球清空后，剩下的彩球按以下顺序入袋：<b>黄 2 → 绿 3 → 棕 4 → 蓝 5 → 粉 6 → 黑 7</b>。中途任一颗失误（未先碰目标球）即犯规加换手；黑球是最后一颗——黑球落袋的那一刻，<b>分数高者获胜</b>。</p></div>' +
+            '<div class="guide-block"><h3>胜负</h3><p>判定胜负的瞬间有以下三种：① 一方认输（concede）；② 任意球自然落袋导致「台面已清」（包括彩球阶段清台但还剩未打的彩球）；③ <b>「C&middot;B&middot;W」自然终局</b>——出杆者在执行最后一次击球时犯规（含母球摔袋、首碰错误、未碰库），比赛立即结束，分数高者胜。本离线版采用<u>比分判定 + 自然终局</u>相结合，进程控制台可随时查看当前双方分数。</p></div>',
         },
         threecushion: {
           title: "三库开伦规则",
@@ -90,8 +97,15 @@
         snooker: {
           title: "Snooker Rules",
           body:
-            '<div class="guide-block"><h3>Snooker</h3><p>Pot a red (1 pt), then a colour, alternating. Colour values: yellow 2, green 3, brown 4, blue 5, pink 6, black 7. Reds stay down; colours are re-spotted until reds are gone, then cleared low to high. Highest total wins.</p></div>' +
-            '<div class="guide-block"><h3>Fouls</h3><ul class="guide-list"><li>Cue ball pocketed</li><li>No ball hit</li><li>First ball struck is wrong for the current phase (red in colour phase, or colour in red phase)</li><li>After the shot no ball hits a rail and none is pocketed</li></ul><p class="about-text dim">After a foul the opponent gets ball-in-hand and may place the cue ball anywhere.</p></div>',
+            '<div class="guide-block"><h3>Balls &amp; Table</h3><p>A standard 12 ft snooker bed (3569×1778 mm) holds <b>22 balls</b>: 15 reds (1 pt each) + 6 colours — yellow 2, green 3, brown 4, blue 5, pink 6, black 7. At the start, the reds are racked in a triangle against the pink spot; the colours sit on their spots — yellow / green / brown on the baulk line (right-to-left), blue at the table centre, pink between the side pockets, black at the foot spot.</p></div>' +
+            '<div class="guide-block"><h3>The Break</h3><p>The cue ball is played from anywhere inside the D. The first shot must strike a red or be ruled a foul. A break that pockets at least one red, or drives at least four balls (cue included) to a cushion, is <b>legal</b>. If no red is potted the opponent may call <b>“push”</b> and only needs to touch a ball legally on their turn.</p></div>' +
+            '<div class="guide-block"><h3>Phases</h3><p>After a successful pot you stay at the table (continue break). In the <b>red phase</b> you must pot a red first, then a colour — alternating. Reds stay potted; colours are <b>re-spotted</b> on their spots. When the last red is potted, the match enters the <b>colour phase</b>: colours are cleared in fixed order yellow → green → brown → blue → pink → black.</p></div>' +
+            '<div class="guide-block"><h3>Scoring &amp; the 147</h3><p>Reds 1 each; colours by their colour (yellow 2, green 3, brown 4, blue 5, pink 6, black 7). The theoretical maximum break is <b>147</b> = 15 × (red 1 + black 7) + colours 2+3+4+5+6+7 (= 120 + 27). Most clearing breaks land between 67 and 84.</p></div>' +
+            '<div class="guide-block"><h3>Re-spotting</h3><p>Colours return to their own spot. If that spot is occupied, place the colour on the highest available spot along the same line. If none is free, the colour <b>stays potted</b> until the colour phase, when every colour is reset before the run-down. The black stays where it lies until its turn.</p></div>' +
+            '<div class="guide-block"><h3>Free Ball</h3><p>After a foul the incoming player may <b>declare a free ball</b>: any non-red ball in contact is treated as a red for that shot. The contact itself scores the value of that colour (no extra point for the actual free ball). Mostly used to escape snookers when the cue ball is locked away from every red.</p></div>' +
+            '<div class="guide-block"><h3>Fouls</h3><ul class="guide-list"><li>Cue ball pocketed</li><li>No ball struck</li><li>First contact wrong for the phase (colour in red phase, or wrong colour / red in colour phase)</li><li>After the shot no ball hits a rail and none is potted (except on the break)</li><li>Touching a ball with body, clothing or anything other than the cue tip</li><li>Double hit, both feet off the floor, or tip still in contact when cueing</li></ul><p class="about-text dim">Penalty: opponent scores the value of the highest colour (yellow 2 → black 7, so <b>at least 4</b> and at most 7) and takes the next visit. The offending player’s cue ball remains where it lies unless a free ball is involved.</p></div>' +
+            '<div class="guide-block"><h3>Colour Sequence</h3><p>Once the last red is potted, colours are cleared in this order: <b>yellow 2 → green 3 → brown 4 → blue 5 → pink 6 → black 7</b>. Any miss / wrong contact in this phase is a foul and loses the break. Black is the final ball — whoever legally pots the black on the right ball and at the right time wins.</p></div>' +
+            '<div class="guide-block"><h3>End of Frame</h3><p>A frame ends on one of three events: ① a player concedes, ② a natural clearance finishes the table (all reds + all colours cleared), or ③ a <b>“C&amp;B&amp;W”</b> type natural end — the striker commits a foul on what would otherwise be the last shot of the match (miss / scratch / wrong contact / no rail after no pot). The higher-score player wins. This offline build uses score-led natural-end; the in-game HUD always shows both totals.</p></div>',
         },
         threecushion: {
           title: "3-Cushion Rules",
@@ -285,6 +299,9 @@
     "朱红鎏金": "Crimson Gold",
     "全息银": "Holographic Silver",
     "粉色糖果": "Pink Candy",
+    // v1.3.61 新增桌布 EN 名
+    "翡翠鎏金": "Emerald Gilded",
+    "紫夜流光": "Violet Nightglow",
 
     // 操作介绍 / 关于 区块：被 <b> 等标签拆开后的单段片段
     "旋转视角": "Rotate view",
@@ -735,18 +752,28 @@
 
     syncSettingsUI()
 
-    $("setQuality").addEventListener("change", function () {
-      settings.lod = parseInt(this.value, 10)
-      saveSettings(settings)
-      $("qualityHint").textContent = QH(settings.lod)
-    })
+    // v1.3.60：画质档位 / 语言两组设置已从设置面板移除（见 menu.html），
+    // 对应的 DOM 也不复存在。这里必须判空后再绑定，否则 null.addEventListener
+    // 会抛 TypeError，把 initSettingsPanel 整段打断 —— 后面的音效 / 音量 /
+    // 瞄准线等控件全都绑不上，设置面板等于废掉。
+    var qSel = $("setQuality")
+    if (qSel) {
+      qSel.addEventListener("change", function () {
+        settings.lod = parseInt(this.value, 10)
+        saveSettings(settings)
+        if ($("qualityHint")) $("qualityHint").textContent = QH(settings.lod)
+      })
+    }
 
-    $("btnAutoQuality").addEventListener("click", function () {
-      settings.lod = detectLod()
-      saveSettings(settings)
-      syncSettingsUI()
-      buzz(15)
-    })
+    var autoQ = $("btnAutoQuality")
+    if (autoQ) {
+      autoQ.addEventListener("click", function () {
+        settings.lod = detectLod()
+        saveSettings(settings)
+        syncSettingsUI()
+        buzz(15)
+      })
+    }
 
     $("setSound").addEventListener("change", function (e) {
       settings.sound = e.target.checked
@@ -780,21 +807,9 @@
       saveSettings(settings)
     })
 
-    $("setTableSkin").addEventListener("change", function (e) {
-      settings.tableSkin = e.target.value
-      saveSettings(settings)
-      refreshCustomRows()
-    })
-
-    $("setCueTheme").addEventListener("change", function (e) {
-      settings.cueTheme = e.target.value
-      saveSettings(settings)
-    })
-
-    $("setScene").addEventListener("change", function (e) {
-      settings.scene = e.target.value
-      saveSettings(settings)
-    })
+// v1.3.59：移除 setCueTheme / setScene 的监听 —— 「外观与场景」整组已从游戏设置
+// 移除（台球桌外观 v1.3.58 已删），三项外观设置统一在首页「外观定制」里改。
+// 若保留此段，$("setCueTheme") 为 null 会在初始化时直接抛错导致菜单白屏。
 
     $("setTurnTimer").addEventListener("change", function (e) {
       settings.turnTimer = parseInt(e.target.value, 10) || 0
@@ -813,8 +828,10 @@
   }
 
   function syncSettingsUI() {
-    $("setQuality").value = String(settings.lod)
-    $("qualityHint").textContent = QH(settings.lod)
+    // v1.3.60：画质档位控件已随「画面」整组移除，判空后再写（同 initSettingsPanel）
+    var qSel = $("setQuality")
+    if (qSel) qSel.value = String(settings.lod)
+    if ($("qualityHint")) $("qualityHint").textContent = QH(settings.lod)
     $("setSound").checked = !!settings.sound
     $("setVolume").value = String(Math.round(settings.volume * 100))
     $("volumeVal").textContent = Math.round(settings.volume * 100) + "%"
@@ -822,10 +839,9 @@
     $("setAimLine").checked = settings.aimLine !== false
     $("setTLine").value = String(settings.targetLineLength || 3)
     $("setTLineVal").textContent = TL(settings.targetLineLength || 3) || "中"
-    $("setKeepViews").checked = settings.keepAllViews !== false
-    $("setTableSkin").value = settings.tableSkin || "classic"
-    $("setCueTheme").value = settings.cueTheme || "auto"
-    $("setScene").value = settings.scene || "snow"
+$("setKeepViews").checked = settings.keepAllViews !== false
+// v1.3.59：$("setCueTheme") / $("setScene") 已随「外观与场景」整组从游戏设置移除，
+// 此处同步删除赋值。这两行原本没有 null 保护，只删 HTML 不删 JS 会启动即抛错白屏。
     $("setTurnTimer").value = String(settings.turnTimer || 0)
   }
 
@@ -1499,12 +1515,7 @@
     if ($("qualityHint")) $("qualityHint").textContent = QH(settings.lod)
     if ($("setTLineVal")) $("setTLineVal").textContent = TL(settings.targetLineLength || 3)
     refreshCustomRows()
-    var seg = $("langSeg")
-    if (seg) {
-      Array.prototype.forEach.call(seg.querySelectorAll(".seg-btn"), function (b) {
-        b.classList.toggle("active", b.getAttribute("data-lang") === l)
-      })
-    }
+    // v1.3.60：语言分段控件已随「语言」整组从设置面板移除，此处不再回写选中态
     if (currentRuleForLang) showModeRules(currentRuleForLang)
     // 通知父页面（游戏内覆盖层）语言已变更
     try {
@@ -1559,17 +1570,7 @@
       showScreen("settings")
     })
 
-    // v1.3.19：语言切换分段控件
-    var langSeg = $("langSeg")
-    if (langSeg) {
-      Array.prototype.forEach.call(langSeg.querySelectorAll(".seg-btn"), function (b) {
-        b.classList.toggle("active", b.getAttribute("data-lang") === curLang())
-        b.addEventListener("click", function () {
-          applyLang(b.getAttribute("data-lang"))
-          buzz(10)
-        })
-      })
-    }
+    // v1.3.60：语言分段控件已从设置面板移除（DOM 一并删除），绑定代码同步移除。
 
     var licenseBtn = $("btnLicense")
     if (licenseBtn) {
@@ -1977,8 +1978,7 @@
           c.getAttribute("data-cuetheme") === (settings.cueTheme || "auto")
         )
       })
-      var sel = $("setCueTheme")
-      if (sel) sel.value = settings.cueTheme || "auto"
+      // v1.3.59：游戏设置里的 #setCueTheme 已移除，无需再回写
       refreshCustomRows()
     }
     // v1.3.52：触发方式由「长按 380ms」改为「点两下」——第一下选中主题，
@@ -2025,8 +2025,7 @@
           c.getAttribute("data-scene") === (settings.scene || "snow")
         )
       })
-      var sel = $("setScene")
-      if (sel) sel.value = settings.scene || "snow"
+      // v1.3.59：游戏设置里的 #setScene 已移除，无需再回写
       refreshCustomRows()
     }
     Array.prototype.forEach.call(cards, function (c) {

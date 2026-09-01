@@ -183,12 +183,16 @@ export interface TableSkinDef {
     | "crimsonGold"
     | "holo"
     | "candy"
+    | "emeraldGold"
+    | "violet"
   /** 台呢渐变两端色 */
   clothColor: number
   clothColor2: number
   /** 台呢纹理类型（程序化图案） */
   clothTexture:
     | "none"
+    | "velvet"
+    | "gild"
     | "glass"
     | "lava"
     | "neonstrip"
@@ -214,7 +218,7 @@ export const TABLE_SKINS: TableSkinDef[] = [
     // 库边用台呢的更深绿作为过渡，使台呢/库边/木框三者成一套协调的「原木绿台」主题。
     clothColor: 0x1f6b34,
     clothColor2: 0x124a22,
-    clothTexture: "none",
+    clothTexture: "velvet",
     cushionColor: 0x0e3a1a,
     frameColor: 0x6a4a1a,
     frameGlow: 0,
@@ -227,7 +231,7 @@ export const TABLE_SKINS: TableSkinDef[] = [
     kind: "emerald",
     clothColor: 0x2a7a3a,
     clothColor2: 0x1a3a1a,
-    clothTexture: "none",
+    clothTexture: "velvet",
     cushionColor: 0x15501f,
     frameColor: 0x0d3316,
     frameGlow: 0,
@@ -240,7 +244,7 @@ export const TABLE_SKINS: TableSkinDef[] = [
     kind: "crimson",
     clothColor: 0x8a2a2a,
     clothColor2: 0x4a0a0a,
-    clothTexture: "none",
+    clothTexture: "velvet",
     cushionColor: 0x5a1414,
     frameColor: 0x3a0c0c,
     frameGlow: 0,
@@ -253,7 +257,7 @@ export const TABLE_SKINS: TableSkinDef[] = [
     kind: "sapphire",
     clothColor: 0x1a3a8a,
     clothColor2: 0x0a1a4a,
-    clothTexture: "none",
+    clothTexture: "velvet",
     cushionColor: 0x0a2458,
     frameColor: 0x081028,
     frameGlow: 0,
@@ -267,7 +271,7 @@ export const TABLE_SKINS: TableSkinDef[] = [
     // 金辉主题：台呢提亮为更纯的暖金（与深棕木框形成金棕对比），库边取台呢与框之间的过渡金。
     clothColor: 0xb8902f,
     clothColor2: 0x6a4a14,
-    clothTexture: "none",
+    clothTexture: "velvet",
     cushionColor: 0x8a6620,
     frameColor: 0x3a2408,
     frameGlow: 0,
@@ -352,6 +356,37 @@ export const TABLE_SKINS: TableSkinDef[] = [
     frameGlow: 0xff7ab0,
     edgeGlow: 0xffd0e8,
     swatch: "linear-gradient(135deg,#ffe6f0 0%,#ff7ab0 100%)",
+  },
+  {
+    // v1.3.61 新增：翡翠鎏金 —— 墨绿呢面 + 金色菱格网纹 + 鎏金框与金边，
+    // 与 crimsonGold（朱红底金云纹）同属「金饰」系，但底色是经典绿台，
+    // 喜欢传统绿台又想要华丽感的用户选它。
+    id: "emeraldGold",
+    name: "翡翠鎏金",
+    kind: "emeraldGold",
+    clothColor: 0x0e5c30,
+    clothColor2: 0x063318,
+    clothTexture: "gild",
+    cushionColor: 0x0a4423,
+    frameColor: 0x6a4a10,
+    frameGlow: 0xd9a23a,
+    edgeGlow: 0xf0c060,
+    swatch: "linear-gradient(135deg,#0e5c30 0%,#d9a23a 100%)",
+  },
+  {
+    // v1.3.61 新增：紫夜流光 —— 深紫呢面 + 洋红/青霓虹灯带 + 紫金框，
+    // 与 neon（霓虹蓝紫）同系但更暗、更浓郁，灯光感更强。
+    id: "violet",
+    name: "紫夜流光",
+    kind: "violet",
+    clothColor: 0x1c0a3e,
+    clothColor2: 0x35146b,
+    clothTexture: "neonstrip",
+    cushionColor: 0x241046,
+    frameColor: 0x1a0c34,
+    frameGlow: 0xc44dff,
+    edgeGlow: 0xff5ad0,
+    swatch: "linear-gradient(135deg,#1c0a3e 0%,#c44dff 100%)",
   },
 ]
 

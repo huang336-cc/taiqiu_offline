@@ -20,6 +20,10 @@ import { Snooker } from "../../controller/rules/snooker"
 import { SnookerUtils } from "../../controller/rules/snookerutils"
 import { isFirstShot } from "../../utils/utils"
 import { BotShotContext, BotStrategy } from "./botstrategy"
+import {
+  DifficultyProfile,
+  difficultyFor,
+} from "./difficulty"
 import { ClawBreak } from "./strategies/clawbreak"
 import { TheFarJaw } from "./strategies/thefarjaw"
 import { t, foulReason as translateFoul } from "../../utils/i18n"
@@ -30,7 +34,8 @@ class BotContainer {
   recorder
   notify() {}
   sendEvent() {}
-  sound = { playSuccess() {} }
+  // v1.3.59：playSuccess 空壳一并删除 —— Sound 类已无此方法
+  sound = {}
   isSinglePlayer = false
 
   constructor(container: Container) {
@@ -49,6 +54,8 @@ export class BotEventHandler {
   protected enqueueMessage: (message: string) => void
   private readonly calculator: AimCalculator
   private readonly strategy: BotStrategy
+  /** v1.3.58：本局电脑的难度档位参数（瞄准噪声 / 力度抖动 / 各项能力开关） */
+  private readonly profile: DifficultyProfile
   protected readonly botRules: Rules
   private shouldStartTurnOnNextControl = false
   private queuedOwnStartAim = false
@@ -63,15 +70,20 @@ export class BotEventHandler {
     this.container = container
     this.publishSequenceToPlayer = publishSequenceToPlayer
     this.enqueueMessage = enqueueMessage
-    this.calculator = new AimCalculator()
-    const botName =
-      new URLSearchParams(globalThis.location.search).get("bot") ?? "ClawBreak"
-    this.strategy =
-      botName === "TheFarJaw"
-        ? new TheFarJaw()
-        : botName === "Professional"
-          ? new Professional()
-          : new ClawBreak()
+// v1.3.58：难度不再只是一个 bot 名字字符串 —— 先取本档参数表，
+// 再用它构造瞄准计算器与策略，三档才有真实的强弱差异（见 difficulty.ts）。
+// 旧代码写死 `new AimCalculator()`（noiseScale 恒为 1）且策略不带任何参数，
+// 于是三档出杆策略几乎一致，只剩「打袋口 / 满力打袋角」的区别。
+const botName =
+new URLSearchParams(globalThis.location.search).get("bot") ?? "ClawBreak"
+this.profile = difficultyFor(botName)
+this.calculator = new AimCalculator()
+this.strategy =
+botName === "TheFarJaw"
+? new TheFarJaw(this.profile)
+: botName === "Professional"
+? new Professional(this.profile)
+: new ClawBreak(this.profile)
     this.botRules = RuleFactory.create(
       container.rules.rulename,
       new BotContainer(container)

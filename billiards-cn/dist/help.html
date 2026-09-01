@@ -54,25 +54,12 @@
 
     <!-- 设置 -->
     <div class="pane" id="pane-settings">
-      <div class="block">
-        <h3>语言</h3>
-        <div class="row">
-          <label>界面语言</label>
-          <div class="seg" id="langSeg" role="tablist">
-            <button class="seg-btn" data-lang="zh">中文</button>
-            <button class="seg-btn" data-lang="en">English</button>
-          </div>
-        </div>
-      </div>
-      <div class="block">
-        <h3>画面</h3>
-        <div class="row">
-          <label for="q">画质档位</label>
-          <select id="q"></select>
-        </div>
-        <p class="hint" id="qh"></p>
-        <p class="hint warn">画质调整后，返回主菜单重新开局即可完全生效。</p>
-      </div>
+      <!-- v1.3.60：「语言」「画面」分组从游戏内设置覆盖层删除。
+           语言切换/画质档位在电脑端首页「设置」面板里有完整入口；
+           这两块若保留，只有手机 APP / 移动浏览器才进入此覆盖层，
+           对该用户群是「无意义克隆」。仅保留声音 + 操作（球杆延长线、
+           进球预测线、辅助线长度、视角切换）四组核心选项。 -->
+
       <div class="block">
         <h3>声音</h3>
         <div class="row">

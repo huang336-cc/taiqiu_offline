@@ -39,11 +39,12 @@ export function getClothTexture(tableSkinId: string): Texture | null {
   return tex
 }
 
-/** 取桌框贴图（含发光边纹理），无发光时返回 null（直接上色即可） */
+/** 取桌框贴图（木纹或发光边纹理）。
+ * v1.3.61：原先无发光主题直接返回 null（桌框就是一块纯色，GLTF 的 wood
+ * 材质同样无贴图），现在统一返回程序化木纹 / 发光边纹理。 */
 export function getFrameTexture(tableSkinId: string): Texture | null {
   if (frameCache.has(tableSkinId)) return frameCache.get(tableSkinId)!
   const def = getTableSkin(tableSkinId)
-  if (def.frameGlow === 0 && def.edgeGlow === 0) return null
   const tex = buildFrame(def)
   tex.wrapS = tex.wrapT = RepeatWrapping
   tex.colorSpace = SRGBColorSpace
@@ -69,26 +70,129 @@ function hex(n: number): string {
   return "#" + (n >>> 0).toString(16).padStart(6, "0").slice(-6)
 }
 
-/** 基础台呢渐变（含细微噪点，避免纯色死板） */
+/**
+ * 基础台呢底纹（v1.3.61 重做）。
+ *
+ * 旧版是「线性渐变 + 4000 个噪点」：渐变沿对角线铺设，而台呢贴图是
+ * RepeatWrapping 平铺的，接缝处颜色突变；噪点在 512² 画布上每 6~7px 才一个，
+ * 放大到桌面上更像溅上去的脏点而不是绒毛。
+ *
+ * 新版改为**周期函数逐像素生成**：
+ * - 几组不同频率 / 方向的正弦波叠加出大尺度明暗斑（灯光不均、绒毛倒伏）
+ *   与小尺度编织起伏，函数本身以画布为周期 → 平铺严格无缝；
+ * - 噪点密度提高 3.5 倍、尺寸压到 1px、透明度随机 —— 1px 噪点无结构性，
+ *   相邻平铺单元统计特性相同，接缝不可辨。
+ */
 function baseClothGradient(
   ctx: CanvasRenderingContext2D,
   c1: number,
   c2: number
 ): void {
-  const g = ctx.createLinearGradient(0, 0, W, H)
-  g.addColorStop(0, hex(c1))
-  g.addColorStop(1, hex(c2))
-  ctx.fillStyle = g
-  ctx.fillRect(0, 0, W, H)
-  // 细微噪点（台呢绒面质感）
-  ctx.globalAlpha = 0.05
-  for (let i = 0; i < 4000; i++) {
-    const x = Math.random() * W
-    const y = Math.random() * H
+  const r1 = (c1 >> 16) & 255
+  const g1 = (c1 >> 8) & 255
+  const b1 = c1 & 255
+  const r2 = (c2 >> 16) & 255
+  const g2 = (c2 >> 8) & 255
+  const b2 = c2 & 255
+  const TAU = Math.PI * 2
+  const img = ctx.createImageData(W, H)
+  const d = img.data
+  for (let y = 0; y < H; y++) {
+    const v = y / H
+    for (let x = 0; x < W; x++) {
+      const u = x / W
+      const n =
+        0.5 +
+        0.13 * Math.sin(TAU * (u + v * 2) + 0.7) +
+        0.1 * Math.sin(TAU * (u * 2 - v) + 2.1) +
+        0.05 * Math.sin(TAU * (u * 9 + v * 7)) +
+        0.04 * Math.sin(TAU * (u * 6 - v * 11) + 1.3)
+      const t = n < 0 ? 0 : n > 1 ? 1 : n
+      const i = (y * W + x) * 4
+      d[i] = r1 + (r2 - r1) * t
+      d[i + 1] = g1 + (g2 - g1) * t
+      d[i + 2] = b1 + (b2 - b1) * t
+      d[i + 3] = 255
+    }
+  }
+  ctx.putImageData(img, 0, 0)
+  // 绒毛细噪点
+  for (let i = 0; i < 14000; i++) {
+    ctx.globalAlpha = 0.02 + Math.random() * 0.05
     ctx.fillStyle = Math.random() > 0.5 ? "#ffffff" : "#000000"
-    ctx.fillRect(x, y, 1.2, 1.2)
+    ctx.fillRect(Math.random() * W, Math.random() * H, 1, 1)
   }
   ctx.globalAlpha = 1
+}
+
+/**
+ * v1.3.61：菱格压花暗纹（velvet，经典 5 款用）。
+ *
+ * 经典主题原先 clothTexture 为 "none"：p8 / snooker 模型的台呢材质本身
+ * 没有任何贴图，只剩一块纯色 —— 这就是「台球桌太素」的主因。
+ * velvet 在绒面底纹上叠加两组正交斜线构成的菱格暗纹（透明度 0.05），
+ * 远看仍是一块干净的呢面，近看有织物压花的细节。
+ * 斜线族 x±y = k·step 的周期 step 整除画布宽高 → 平铺无缝。
+ */
+function buildVelvet(
+  cv: HTMLCanvasElement,
+  ctx: CanvasRenderingContext2D,
+  def: ReturnType<typeof getTableSkin>
+): Texture {
+  baseClothGradient(ctx, def.clothColor, def.clothColor2)
+  ctx.save()
+  ctx.globalAlpha = 0.05
+  ctx.strokeStyle = "#ffffff"
+  ctx.lineWidth = 2
+  const step = 64
+  for (let i = -H; i < W + H; i += step) {
+    ctx.beginPath()
+    ctx.moveTo(i, 0)
+    ctx.lineTo(i + H, H)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(i, 0)
+    ctx.lineTo(i - H, H)
+    ctx.stroke()
+  }
+  ctx.restore()
+  return toTexture(cv)
+}
+
+/**
+ * v1.3.61：金色菱格网纹（gild，翡翠鎏金用）。
+ * 与 velvet 同构的斜线族，但线更亮、交点处点缀金铆钉，华丽度拉满。
+ */
+function buildGild(
+  cv: HTMLCanvasElement,
+  ctx: CanvasRenderingContext2D,
+  def: ReturnType<typeof getTableSkin>
+): Texture {
+  baseClothGradient(ctx, def.clothColor, def.clothColor2)
+  ctx.save()
+  ctx.strokeStyle = "rgba(217,162,58,0.5)"
+  ctx.lineWidth = 2.5
+  const step = 96
+  for (let i = -H; i < W + H; i += step) {
+    ctx.beginPath()
+    ctx.moveTo(i, 0)
+    ctx.lineTo(i + H, H)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(i, 0)
+    ctx.lineTo(i - H, H)
+    ctx.stroke()
+  }
+  ctx.restore()
+  ctx.fillStyle = "rgba(240,200,96,0.75)"
+  for (let gy = 0; gy < H; gy += step) {
+    for (let gx = 0; gx < W; gx += step) {
+      ctx.beginPath()
+      ctx.arc(gx, gy, 3, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+  return toTexture(cv)
 }
 
 // ============ 台呢纹理 ============
@@ -110,6 +214,10 @@ function buildCloth(
       return buildHolo(cv, ctx, def)
     case "candy":
       return buildCandy(cv, ctx, def)
+    case "velvet":
+      return buildVelvet(cv, ctx, def)
+    case "gild":
+      return buildGild(cv, ctx, def)
     default:
       baseClothGradient(ctx, def.clothColor, def.clothColor2)
       return toTexture(cv)
@@ -330,6 +438,46 @@ function buildFrame(
   // 底色
   ctx.fillStyle = hex(def.frameColor)
   ctx.fillRect(0, 0, cv.width, cv.height)
+  // v1.3.61：木纹拉丝（无发光主题）。GLTF 的 wood 材质没有贴图，纯色框
+  // 看起来像一块塑料。横向拉丝：每条纹理线是「正弦扰动 + 深/浅交替」，
+  // 正弦取整数周期 → 水平方向平铺无缝；线不越过画布上下边界 → 垂直方向
+  // 在 UV 0..1 采样内也完整。发光主题跳过木纹（发光框是金属/烤漆质感）。
+  if (!def.frameGlow) {
+    const TAU = Math.PI * 2
+    for (let i = 0; i < 46; i++) {
+      const y0 = 5 + Math.random() * (cv.height - 10)
+      const amp = 0.8 + Math.random() * 2.2
+      const freq = 1 + (i % 3)
+      const phase = Math.random() * TAU
+      const alpha = 0.05 + Math.random() * 0.09
+      ctx.strokeStyle =
+        i % 2
+          ? `rgba(0,0,0,${alpha.toFixed(3)})`
+          : `rgba(255,255,255,${(alpha * 0.7).toFixed(3)})`
+      ctx.lineWidth = 0.8 + Math.random() * 1.4
+      ctx.beginPath()
+      for (let x = 0; x <= cv.width; x += 8) {
+        const y = y0 + Math.sin((x / cv.width) * TAU * freq + phase) * amp
+        if (x === 0) ctx.moveTo(x, y)
+        else ctx.lineTo(x, y)
+      }
+      ctx.stroke()
+    }
+    // 节疤：2 个柔和的径向暗斑（年轮密集处）
+    for (let i = 0; i < 2; i++) {
+      const kx = 30 + Math.random() * (cv.width - 60)
+      const ky = 12 + Math.random() * (cv.height - 24)
+      const kr = 8 + Math.random() * 10
+      const knot = ctx.createRadialGradient(kx, ky, 1, kx, ky, kr)
+      knot.addColorStop(0, "rgba(0,0,0,0.22)")
+      knot.addColorStop(0.7, "rgba(0,0,0,0.08)")
+      knot.addColorStop(1, "rgba(0,0,0,0)")
+      ctx.fillStyle = knot
+      ctx.beginPath()
+      ctx.arc(kx, ky, kr, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
   // 上下边发光条（沿桌框边缘）
   if (def.frameGlow) {
     ctx.fillStyle = hex(def.frameGlow)

@@ -1,6 +1,8 @@
 import {
   Mesh,
   MeshBasicMaterial,
+  MeshPhysicalMaterial,
+  Color,
   TextureLoader,
   Texture,
   CanvasTexture,
@@ -20,7 +22,7 @@ import { TableMesh } from "./tablemesh"
 import { TableGeometry } from "./tablegeometry"
 import { Settings, getSkin, getEnvScene, getTableSkin } from "../utils/settings"
 import { getSceneTexture } from "./scenetexturefactory"
-import { buildSceneEnvironment } from "./sceneenvironment"
+import { buildSceneEnvironment, GROUND_Z } from "./sceneenvironment"
 import { getClothTexture, getFrameTexture } from "./tableskinfactory"
 
 function hex(n: number): string {
@@ -114,8 +116,14 @@ export class Assets {
     this.sound = new Sound(true)
     // Request D-v2：用代码自建带 6 面分组的 BoxGeometry 房间作环境（原
     // background.gltf 是普通 BufferGeometry，无材质分组，无法把照片单独贴到
-    // 地面/墙面）。房间尺寸与位姿沿用原立方体（80×40×30，z 偏移 16），
-    // 台球桌置于房间中央，得到「台球桌放在真实场景里的 3D 效果」。
+    // 地面/墙面）。房间尺寸沿用原立方体（80×40×30），台球桌置于房间中央，
+    // 得到「台球桌放在真实场景里的 3D 效果」。
+    //
+    // v1.3.62 修复：z 偏移原为 16 → 盒子占 z[1, 31]，而球桌在 z≈0、
+    // 俯视相机在 z=5.363（盒内）。于是房间地板（z=1）悬在球桌正上方 1.2m，
+    // 俯视模式下把球桌整个盖死（实测台呢占比 0%，满屏沙色）。
+    // 改为让地板落在 GROUND_Z（球桌底沿 -0.203）：z 偏移 = GROUND_Z + 半高 15。
+    // 实测俯视台呢 0% → 76.5%，aim 视角台呢占比 39.7% → 39.6%（无影响）。
     const room = new Mesh(
       new BoxGeometry(1, 1, 1),
       new MeshBasicMaterial({
@@ -126,7 +134,7 @@ export class Assets {
       })
     )
     room.scale.set(80, 40, 30)
-    room.position.set(0, 0, 16)
+    room.position.set(0, 0, GROUND_Z + 15)
     this.background = room
     this.applySceneToBackground(this.pendingScene ?? Settings.get().scene)
     this.pendingScene = null
@@ -355,13 +363,19 @@ export class Assets {
       const materials = Array.isArray(child.material)
         ? child.material
         : [child.material]
-      for (const mat of materials) {
+      for (let mat of materials) {
         const name = mat.name?.toLowerCase() ?? ""
         if (name.includes("clothshade")) {
           mat.color.set(cfg.clothshadeColor)
           mat.needsUpdate = true
         } else if (name.includes("cloth")) {
           if (fixUVs) this.fixClothUVs(child)
+          // v1.3.61：台呢升级为带 sheen 的物理材质（见 upgradeClothMaterial），
+          // 再上色 + 挂程序化绒面贴图。替换出的新实例要写回 child.material，
+          // 否则渲染时用的还是旧材质。
+          const upgraded = this.upgradeClothMaterial(mat, cfg.clothColor)
+          if (upgraded !== mat) this.replaceMaterial(child, mat, upgraded)
+          mat = upgraded
           mat.color.set(cfg.clothColor)
           if (cfg.clothTexture) {
             mat.map = cfg.clothTexture
@@ -433,6 +447,60 @@ export class Assets {
    * 改用 paintTable 给桌框/库边上色 + emissive 即可达到边框发光效果，
    * 此处仅删去该 mesh，不再绘制额外几何体。
    */
+  /**
+   * v1.3.61：把 GLTF 加载的台呢材质（MeshStandardMaterial）升级为
+   * MeshPhysicalMaterial 并开启 sheen（织物光泽）。
+   *
+   * 台呢「素」的根源除了没有贴图，还有材质本身：Standard 材质只有漫反射 +
+   * 镜面反射两件套，台呢这种织物的主要视觉特征 —— 掠射角泛白（绒毛把光
+   * 散射回观察方向，即 backscatter）—— 它根本渲染不出来，桌面因此像一块
+   * 哑光塑料。sheen 正是 three.js 为织物准备的通道。
+   *
+   * 细节：
+   * - 缓存按「原材质实例」索引：同一 GLTF 材质常被多个 mesh 共享，避免重复
+   *   创建与重复 dispose；实时换肤再进来时原材质还是那一个，直接命中缓存。
+   * - 新实例必须继承原材质的 name（"cloth"）—— paintTable 靠名字路由分支，
+     丢了名字第二次换肤就匹配不到了。
+   * - sheenColor 取台呢色向白色偏移 35%：真实台呢的绒毛泛光比本色亮。
+   */
+  private clothMatCache = new Map<unknown, MeshPhysicalMaterial>()
+  private upgradeClothMaterial(mat: any, clothColor: number): any {
+    if (mat && typeof mat.sheen === "number") {
+      // 已是物理材质（实时换肤再次进来）：sheenColor 同步为新主题色，
+      // 否则绒毛泛光还停留在第一次进入时的主题色上。
+      ;(mat as MeshPhysicalMaterial).sheenColor
+        .set(clothColor)
+        .lerp(new Color(0xffffff), 0.35)
+      return mat
+    }
+    let phys = this.clothMatCache.get(mat)
+    if (phys) return phys
+    phys = new MeshPhysicalMaterial({
+      map: mat?.map ?? null,
+      color: mat?.color ? mat.color.clone() : new Color(clothColor),
+      roughness: 0.95,
+      metalness: 0,
+      sheen: 0.55,
+      sheenRoughness: 0.5,
+      sheenColor: new Color(clothColor).lerp(new Color(0xffffff), 0.35),
+    })
+    phys.name = mat?.name ?? ""
+    this.clothMatCache.set(mat, phys)
+    if (mat && typeof mat.dispose === "function") mat.dispose()
+    return phys
+  }
+
+  /** 把 mesh 材质（单实例或数组）中的 oldM 实例替换为 newM */
+  private replaceMaterial(child: any, oldM: unknown, newM: unknown): void {
+    if (Array.isArray(child.material)) {
+      if (child.material.includes(oldM)) {
+        child.material = child.material.map((m) => (m === oldM ? newM : m))
+      }
+    } else if (child.material === oldM) {
+      child.material = newM
+    }
+  }
+
   private fixClothUVs(mesh): void {
     const geometry = mesh.geometry as BufferGeometry
     if (!geometry) return

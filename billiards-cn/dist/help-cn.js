@@ -286,22 +286,11 @@
     })
   })
 
-  // 画质下拉
-  var q = $("q")
-  function renderQualityOptions() {
-    q.innerHTML = ""
-    for (var i = 0; i < 6; i++) {
-      var o = document.createElement("option")
-      o.value = String(i)
-      o.textContent = QL(i)
-      q.appendChild(o)
-    }
-  }
-  renderQualityOptions()
+  // v1.3.60：「画质档位」select 已从 settings pane DOM 中删除。
+  // 这里的 renderQualityOptions / q / qh 全套跟着删除，避免保留死代码。
+  // 玩家调画质仍可走电脑端首页「设置」面板（Home Settings）-> 画质档位。
 
   function sync() {
-    q.value = String(st.lod)
-    $("qh").textContent = QH(st.lod) || ""
     $("snd").checked = !!st.sound
     $("vol").value = String(Math.round(st.volume * 100))
     $("volv").textContent = Math.round(st.volume * 100) + "%"
@@ -314,11 +303,6 @@
   }
   sync()
 
-  q.addEventListener("change", function () {
-    st.lod = parseInt(q.value, 10)
-    $("qh").textContent = QH(st.lod) || ""
-    save(st)
-  })
   $("snd").addEventListener("change", function (e) {
     st.sound = e.target.checked
     save(st)
@@ -350,14 +334,11 @@
   // v1.3.19：语言切换
   function applyLang(l) {
     setLang(l)
-    renderQualityOptions()
+    // v1.3.60：语言下拉段已从 settings pane DOM 移除，无 renderQualityOptions
+    // 调用，也没有 langSeg 按钮可切换。这里保留 setLang + localize + postMessage，
+    // 因为语言切换仍由电脑端首页「设置」面板触发，事件经由 window.parent.postMessage
+    // 同步（与 v1.3.19 起一致）。
     localize(document, l)
-    var seg = $("langSeg")
-    if (seg) {
-      Array.prototype.forEach.call(seg.querySelectorAll(".seg-btn"), function (b) {
-        b.classList.toggle("active", b.getAttribute("data-lang") === l)
-      })
-    }
     // 通知父页面（游戏）语言已变更
     try {
       if (window.parent && window.parent !== window) {
@@ -367,13 +348,7 @@
   }
 
   localize(document, curLang())
-  var langSeg = $("langSeg")
-  if (langSeg) {
-    Array.prototype.forEach.call(langSeg.querySelectorAll(".seg-btn"), function (b) {
-      b.classList.toggle("active", b.getAttribute("data-lang") === curLang())
-      b.addEventListener("click", function () {
-        applyLang(b.getAttribute("data-lang"))
-      })
-    })
-  }
+  // v1.3.60：游戏内设置覆盖层不再有语言分段按钮，不再绑定 langSeg click。
+  // 电脑端首页的「设置」面板仍保留 [中文]/[English] 切换入口，那里同步
+  // localStorage 后经由 storage 事件 + postMessage 把语言推到所有 iframe。
 })()

@@ -475,7 +475,11 @@ export class View {
       this.assets.recolorScene(sceneId)
       if (this.assets.background) this.assets.background.visible = true
     }
-    this.scene.background = null
+    // 不再 scene.background = null —— 这会让 canvas 透出 body 背景色，
+    // 表现为桌面外一片漆黑。改为设一个与 wallA 一致的纯色背景，雪山的
+    // skyDome 会渲染在它之上。
+    const defEarly = getEnvScene(sceneId)
+    this.scene.background = new Color(defEarly.wallA)
 
     const def = getEnvScene(sceneId)
 
@@ -488,11 +492,19 @@ export class View {
         this.ambient.color.setHex(0xdfeaff)
         this.ambient.intensity = 0.32
       }
-      // 放大远裁剪面以容纳蓝天穹顶(半径 130)与远景雪山
+      // 放大远裁剪面以容纳蓝天穹顶（半径 145）与远景雪山（外缘 120）
       this.camera.camera.far = View.SNOW_FAR
       this.camera.camera.updateProjectionMatrix()
-      // 大气透视：远处雪山淡入天空色（v1.1.6 推远 near，避免近景雾糊）
-      this.scene.fog = new Fog(0xdceaf5, 90, 145)
+      /**
+       * 大气透视：v1.3.62d 从 (30, 250) 推到 (70, 320)。
+       *
+       * 原参数下近景山脊（r=26~62）就被雾化 0~13%，远山（62~120）更是
+       * 21%~41% —— 雾把山体的明暗差按 (1-fogFactor) 线性压缩，
+       * 实测山体亮度中位数被抬到 196、p90 只有 215，全挤在亮部发灰。
+       * 推远后：近景山脊完全不雾化，远山最多 20%，既保住对比度
+       * 又保留「远山淡入天色」的纵深感。
+       */
+      this.scene.fog = new Fog(0xd3e9f7, 70, 320)
       // 雪景：用真实太阳光阴影，隐藏程序化接触阴影，避免双重阴影
       this.setBallsFakeShadow(false)
       // v1.1.6：开启 ACES 色调映射防过曝（雪面高光不再裁到纯白）

@@ -13,6 +13,7 @@ import { strongeAdapter } from "../model/physics/stronge"
 import JSONCrush from "jsoncrush"
 import { Assets } from "../view/assets"
 import { SnookerConfig } from "../utils/snookerconfig"
+import { TableConfig } from "../view/tableconfig"
 import { ThreeCushionConfig } from "../utils/threecushionconfig"
 import { Session } from "../network/client/session"
 import { MessageRelay } from "../network/client/messagerelay"
@@ -197,9 +198,17 @@ export class BrowserContainer {
       try {
         const state = this.parse(this.replay)
         const stateTableSize = state.tableSize
+        // v1.3.59：比较基准不再是写死的 10，而是当前玩法的默认尺寸。
+        // 斯诺克默认改 12 之后，若这里仍按 10 判断，一个 tableSize=12 的
+        // 斯诺克回放会被当成「非默认」而反复重定向；反过来一个 tableSize=10 的
+        // 旧斯诺克回放则不会被补上参数，载入时会用 12 的默认值重建台面而错位。
+        const ruleType =
+          state.rulename ??
+          new URLSearchParams(globalThis.location.search).get("rule") ??
+          undefined
         if (
           stateTableSize !== undefined &&
-          stateTableSize !== 10 &&
+          stateTableSize !== TableConfig.defaultTableSize(ruleType) &&
           !new URLSearchParams(globalThis.location.search).has("tableSize")
         ) {
           const url = new URL(globalThis.location.href)
@@ -232,8 +241,13 @@ export class BrowserContainer {
     this.messageRelay.subscribe(this.tableId, (e) => {
       this.netEvent(e)
     })
-    const botLabel =
-      this.botName === "TheFarJaw" ? "电脑 · 激进" : "电脑 · 稳健"
+// v1.3.58：旧写法只判了 TheFarJaw，选「专业」时开局提示会错显成「电脑 · 稳健」。
+const botLabel =
+this.botName === "TheFarJaw"
+? "电脑 · 激进"
+: this.botName === "Professional"
+? "电脑 · 专业"
+: "电脑 · 稳健"
     this.container.notify({
       type: "Info",
       title: ruleName(this.ruletype),

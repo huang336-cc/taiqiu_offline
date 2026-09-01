@@ -22,6 +22,7 @@ import { Comment } from "../view/comment"
 import { Hud } from "../view/hud"
 import { NotificationEvent } from "../events/notificationevent"
 import { LobbyIndicator } from "../view/lobbyindicator"
+import { TableConfig } from "../view/tableconfig"
 import { MessageRelay } from "../network/client/messagerelay"
 import { ScoreReporter } from "../network/client/scorereporter"
 import {
@@ -184,10 +185,10 @@ try {
     }
     // 让球杆能访问 View（用于判断相机模式，控制辅助线显示 / 实时换肤）
     this.table.cue.view = this.view
-    const tableSize = parseFloat(
-      new URLSearchParams(globalThis.location?.search ?? "").get("tableSize") ||
-        "10"
-    )
+    // v1.3.59：改用 TableConfig 读取并带上玩法名。此前写死默认 10，
+    // 斯诺克默认改成 12 之后粒子平面的尺寸会跟不上（内部按 88R × 44R 硬编码），
+    // 台面变大而粒子层没跟着变大就会露出边缘。
+    const tableSize = TableConfig.tableSizeFromUrl(this.rules?.rulename)
     this.particles = new ParticleSystem({ tableSize })
     this.hud = new Hud()
     this.notification = new Notification()
