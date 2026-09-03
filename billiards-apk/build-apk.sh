@@ -118,12 +118,28 @@ aapt2 link -o base.apk \
 # ---------- 4. 编译 Java 并转 dex ----------
 echo "[4/6] javac + d8"
 
-# 编译期 stub：本机 android-34.jar 缺 RenderProcessGoneDetail 类定义，
-# 但设备运行时（Android 16）框架自带。这里临时造一个只占位的 .jar 供 javac 解析符号，
-# 它不传给 d8，因此不会进最终 dex，运行时由设备框架的真实类接管，零冲突。
-if [ ! -f renderstub.jar ]; then
-  ( cd renderstub && jar cf ../renderstub.jar android ) 2>/dev/null \
-    || jar cf renderstub.jar -C renderstub android
+# 编译期 stub：本机 android-34.jar 是老版 SDK（仅 43 个 webkit 类），缺
+# RenderProcessGoneDetail 与 JavascriptInterface 定义，但这里必须提供等价定义
+# 供 javac 解析符号。它们不传给 d8、不进最终 dex，运行时由设备框架的真实类接管，零冲突。
+#
+# 关键：每次构建都【强制重建】renderstub.jar，并把 stub 源码编译成 .class 一起打入。
+# 原因（v1.3.71 的坑）：
+#   ① 旧写法用 `if [ ! -f renderstub.jar ]` 守卫——jar 已存在就跳过重建，
+#     导致后面改了 stub 源码却从不进 jar；
+#   ② JavascriptInterface 的 @Retention 必须是 RUNTIME。若写成 CLASS，javac 会生成
+#     RuntimeInvisibleAnnotations，d8 不写进 dex 的 annotation_directory_item，
+#     ART 侧 addJavascriptInterface() 反射读不到，window.__lan 上一个方法都不暴露
+#     （页面 typeof bridge.lanInfo !== "function" → 弹窗「App 版本过低」）。
+# 现在：javac 先编译 stub 源码（.class），连同 .java 一起打进 jar，再供主编译解析。
+rm -f renderstub.jar
+mkdir -p obj/stubout
+javac -source 1.8 -target 1.8 -nowarn -d obj/stubout renderstub/android/webkit/*.java
+if [ -d obj/stubout/android ]; then
+  jar cf renderstub.jar -C obj/stubout android
+  jar uf renderstub.jar -C renderstub android
+else
+  echo "stub 编译失败：obj/stubout/android 不存在"
+  exit 1
 fi
 mkdir -p obj/dex            # d8 要求输出目录必须已存在
 javac -source 1.8 -target 1.8 -nowarn \
@@ -194,10 +210,12 @@ echo "=== 签名校验 ==="
 apksigner verify --print-certs "$OUT_APK" | head -5
 
 echo
-echo "=== 权限检查（应为零权限，不声明任何敏感权限）==="
-if aapt2 dump badging "$OUT_APK" | grep -qE "^uses-permission"; then
-  echo "  错误：存在非预期权限声明 ✗"
+echo "=== 权限检查（v1.3.65 起允许 INTERNET：局域网对战专用，其余一律禁止）==="
+if aapt2 dump badging "$OUT_APK" | grep -E "^uses-permission" | grep -vqE "android.permission.INTERNET"; then
+  echo "  错误：存在 INTERNET 之外的权限声明 ✗"
   fail=1
+elif aapt2 dump badging "$OUT_APK" | grep -qE "^uses-permission"; then
+  echo "  仅 INTERNET ✓（局域网对战）"
 else
   echo "  零权限 ✓"
 fi

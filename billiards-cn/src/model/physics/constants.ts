@@ -1,5 +1,18 @@
-export let mu = 0.0055 // Han rolling friction
+// v1.3.65：台呢手感校准。
+//
+// 原来 mu=0.0055（无袋）/0.0066（有袋，见 tablegeometry.ts）对应的**等效滚动
+// 阻力系数**只有 μr = mu/√2 ≈ 0.0047，而真实台呢的滚动阻力系数约 0.01 ——
+// 只有真实值的一半，于是球的慢滚距离约为真实台呢的两倍：实测 1.5 m/s 的轻推
+// 会滚 13 米（约 4.5 个台长）、耗时 24 秒，尾段蠕动明显不符合台呢物理。
+//
+// 滚动减速度 a = (1/√2)·mu·g（见 physics.ts rollingFull），故 mu 与滚动距离
+// 成反比。目标 μr ≈ 0.0100 → mu = 0.0100 × √2 ≈ 0.0141（有袋）；无袋玩法
+// 沿用原来的比例关系（0.0055 : 0.0066），取 0.0118。
+export let mu = 0.0118 // Han rolling friction
 export let muS = 0.126 // Han sliding friction
+// 保持 0.045 不变：Mz ∝ mu·rho，mu 已翻倍，竖轴自旋衰减率随之由 4.52 提到
+// 9.66 rad/s²（30 rad/s 的侧旋约 3.1 秒衰减完）—— 与「台呢阻力翻倍」物理自洽。
+// 球停住后还要干等侧旋衰减完的问题，改由 ball.ts 的显式停球阈值解决。
 export let rho = 0.045 // Han spindown rate
 
 export let m = 0.23

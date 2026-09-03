@@ -136,6 +136,33 @@ function build(sceneId: string): CanvasTexture {
       ctx.strokeRect(8, 8, W - 16, H - 16)
       ctx.globalAlpha = 1
       break
+    case "ufc":
+      // v1.3.65 兜底贴图（几何环境正常时用不到）：暗场馆 + 八角笼线稿
+      ctx.globalAlpha = 0.55
+      ctx.strokeStyle = "#4a505a"
+      ctx.lineWidth = 4
+      {
+        const cx = W / 2
+        const cy = H / 2
+        const r = Math.min(W, H) * 0.33
+        ctx.beginPath()
+        for (let k = 0; k <= 8; k++) {
+          const a = k * (Math.PI / 4)
+          const x = cx + Math.cos(a) * r
+          const y = cy + Math.sin(a) * r
+          if (k === 0) ctx.moveTo(x, y)
+          else ctx.lineTo(x, y)
+        }
+        ctx.stroke()
+      }
+      ctx.globalAlpha = 0.12
+      ctx.strokeStyle = "#585e68"
+      ctx.lineWidth = 2
+      for (let x = 0; x <= W; x += 26) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke()
+      }
+      ctx.globalAlpha = 1
+      break
     case "room":
     default:
       // 室内：极淡的水平接缝

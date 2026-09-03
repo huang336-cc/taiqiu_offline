@@ -14,9 +14,10 @@ import {
   DirectionalLight,
   HemisphereLight,
   Fog,
-  Vector3,
   ACESFilmicToneMapping,
+  NoToneMapping,
   ToneMapping,
+  Object3D,
 } from "three"
 import { Camera } from "./camera"
 import { Drawing } from "./drawing"
@@ -28,8 +29,7 @@ import { renderer, ensureWebRenderer } from "../utils/webgl"
 import { Assets } from "./assets"
 import { Snooker } from "../controller/rules/snooker"
 import { Settings, getEnvScene } from "../utils/settings"
-import { R } from "../model/physics/constants"
-import { SNOW_SKY_RADIUS } from "./sceneenvironment"
+import { getEnvSpec, INDOOR_CEIL_Z } from "./sceneenvironment"
 import { TableGeometry } from "./tablegeometry"
 
 export class View {
@@ -56,16 +56,26 @@ export class View {
   private sun?: DirectionalLight
   /** Req 3：天空天光（半球光，天空蓝/地面雪白） */
   private hemi?: HemisphereLight
-  /** 雪景放大的相机远裁剪面（需容纳蓝天穹顶与远景雪山） */
-  private static readonly SNOW_FAR = SNOW_SKY_RADIUS + 20
   /**
-   * 雪景进入前的色调映射模式（用于退出时还原）。
-   * 全局默认 NoToneMapping，雪景开启 ACESFilmicToneMapping 防过曝。
+   * 各场景的色调映射（v1.3.63：表驱动，每次显式赋值）。
+   *
+   * 旧实现是「进雪景存下旧值 → 出雪景还原」。但 renderer 惰性重建后
+   * （renderCamera 里的 ensureWebRenderer）会以当前场景再次调 applyScene，
+   * 此时 prevToneMapping 被记成 ACES，退出雪景后 ACES 就永久残留了。
+   * 表驱动与调用时序无关。未列出的场景一律 NoToneMapping
+   * （全局默认，见 utils/webgl.ts）。
    */
-  private prevToneMapping: ToneMapping | null = null
-  private prevToneMappingExposure: number = 1
+  private static readonly SCENE_TONE: Record<
+    string,
+    { mapping: ToneMapping; exposure: number }
+  > = {
+    // 雪景：ACES 防雪面高光裁到纯白
+    snow: { mapping: ACESFilmicToneMapping, exposure: 0.95 },
+  }
   /** 当前 3D 场景环境（足球场/篮球场/雪山）；null 表示用立方体房间 */
   sceneEnv: Group | null = null
+  /** 室内场景的顶棚分组（无室内环境时为 null），按相机高度逐帧显隐 */
+  private ceiling: Object3D | null = null
   /** item 6：库边木块上的奥特曼 LOGO 圆盘（一次性创建，复用） */
   private cushionLogos: Group | null = null
 
@@ -157,6 +167,10 @@ export class View {
 
   update(elapsed, aim: AimEvent) {
     this.camera.update(elapsed, aim)
+    // 相机升到层高之上（俯视档）就藏起顶棚，否则顶棚会挡在相机与球桌之间。
+    // 相机在层高之下时顶棚在头顶，本来也不入画，所以这个开关没有任何副作用。
+    const cg = this.ceiling
+    if (cg) cg.visible = this.camera.camera.position.z < INDOOR_CEIL_Z - 0.05
   }
 
   sizeChanged() {
@@ -470,6 +484,11 @@ export class View {
     if (env) {
       this.scene.add(env)
       this.sceneEnv = env
+      // 室内顶棚：俯视相机会升到层高之上，不藏起来就直接把房间看穿。
+      // 按名字抓一次引用，之后每帧只需改一个 visible。
+      this.ceiling = env.getObjectByName("CeilingGroup") ?? null
+      if (this.ceiling) this.ceiling.visible =
+        this.camera.camera.position.z < INDOOR_CEIL_Z - 0.05
       if (this.assets.background) this.assets.background.visible = false
     } else {
       this.assets.recolorScene(sceneId)
@@ -478,61 +497,43 @@ export class View {
     // 不再 scene.background = null —— 这会让 canvas 透出 body 背景色，
     // 表现为桌面外一片漆黑。改为设一个与 wallA 一致的纯色背景，雪山的
     // skyDome 会渲染在它之上。
-    const defEarly = getEnvScene(sceneId)
-    this.scene.background = new Color(defEarly.wallA)
-
     const def = getEnvScene(sceneId)
+    this.scene.background = new Color(def.wallA)
 
-    if (sceneId === "snow") {
-      // Req 2/3/4：雪山启用户外光照 + 阴影 + 大气透视 + 远景远裁剪面
-      if (this.sun) this.sun.visible = true
-      if (this.hemi) this.hemi.visible = true
-      if (this.ambient) {
-        // 降低环境光填充，让太阳光主导，阴影更自然
-        this.ambient.color.setHex(0xdfeaff)
-        this.ambient.intensity = 0.32
-      }
-      // 放大远裁剪面以容纳蓝天穹顶（半径 145）与远景雪山（外缘 120）
-      this.camera.camera.far = View.SNOW_FAR
-      this.camera.camera.updateProjectionMatrix()
-      /**
-       * 大气透视：v1.3.62d 从 (30, 250) 推到 (70, 320)。
-       *
-       * 原参数下近景山脊（r=26~62）就被雾化 0~13%，远山（62~120）更是
-       * 21%~41% —— 雾把山体的明暗差按 (1-fogFactor) 线性压缩，
-       * 实测山体亮度中位数被抬到 196、p90 只有 215，全挤在亮部发灰。
-       * 推远后：近景山脊完全不雾化，远山最多 20%，既保住对比度
-       * 又保留「远山淡入天色」的纵深感。
-       */
-      this.scene.fog = new Fog(0xd3e9f7, 70, 320)
-      // 雪景：用真实太阳光阴影，隐藏程序化接触阴影，避免双重阴影
-      this.setBallsFakeShadow(false)
-      // v1.1.6：开启 ACES 色调映射防过曝（雪面高光不再裁到纯白）
-      if (this.renderer) {
-        this.prevToneMapping = this.renderer.toneMapping
-        this.prevToneMappingExposure = this.renderer.toneMappingExposure
-        this.renderer.toneMapping = ACESFilmicToneMapping
-        this.renderer.toneMappingExposure = 0.95
-      }
-    } else {
-      // 其他场景：关闭户外光照与阴影，恢复原始近裁剪/远裁剪与无雾
-      if (this.sun) this.sun.visible = false
-      if (this.hemi) this.hemi.visible = false
-      this.scene.fog = null
-      this.camera.camera.far = R * 1000
-      this.camera.camera.updateProjectionMatrix()
-      if (this.ambient) {
-        this.ambient.color.setHex(def.amb)
-        this.ambient.intensity = def.ambI
-      }
-      // 非雪景：使用程序化接触阴影
-      this.setBallsFakeShadow(true)
-      // 退出雪景时还原色调映射
-      if (this.renderer && this.prevToneMapping !== null) {
-        this.renderer.toneMapping = this.prevToneMapping
-        this.renderer.toneMappingExposure = this.prevToneMappingExposure
-        this.prevToneMapping = null
-      }
+    /**
+     * v1.3.63：光照 / 雾 / 远裁剪面改由 ENV_SPECS 表驱动。
+     *
+     * 原先是 `if (sceneId === "snow")` 一个分支 —— 7 个新场景各来一遍
+     * 就得复制 7 份，且 far 与天穹半径的自洽性只能靠注释约定。
+     * 数值与 v1.3.62 完全一致（雪山 golden 验证通过）。
+     */
+    const spec = getEnvSpec(sceneId)
+
+    if (this.sun) this.sun.visible = spec.outdoor
+    if (this.hemi) this.hemi.visible = spec.outdoor
+
+    // 远裁剪面：必须能容纳天穹（天穹半径 + 相机最大偏心 22.2）
+    this.camera.camera.far = spec.far
+    this.camera.camera.updateProjectionMatrix()
+
+    this.scene.fog = spec.fog
+      ? new Fog(spec.fog.color, spec.fog.near, spec.fog.far)
+      : null
+
+    if (this.ambient) {
+      const amb = spec.amb ?? { color: def.amb, intensity: def.ambI }
+      this.ambient.color.setHex(amb.color)
+      this.ambient.intensity = amb.intensity
+    }
+
+    // 真实太阳阴影与程序化接触阴影互斥（避免双重阴影）
+    this.setBallsFakeShadow(!spec.realShadow)
+
+    // 色调映射：表驱动显式赋值（v1.3.63，见 View.SCENE_TONE）
+    if (this.renderer) {
+      const tone = View.SCENE_TONE[sceneId]
+      this.renderer.toneMapping = tone ? tone.mapping : NoToneMapping
+      this.renderer.toneMappingExposure = tone ? tone.exposure : 1
     }
 
     // 非黑兜底色

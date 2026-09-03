@@ -1,8 +1,19 @@
 import { id } from "../utils/dom"
+import { resetSeries } from "../utils/series"
 
 export interface NotificationHighBreak {
   score: number
   url: string
+}
+
+export interface NotificationDetail {
+  label?: string
+  value: string
+  /**
+   * v1.3.68：补充指引。取不到本机 IP 等"有原因但用户不知怎么办"的场景，
+   * 用它告诉用户下一步操作（如「请到 设置 → Wi-Fi → 当前网络 查看 IP 地址」）。
+   */
+  hint?: string
 }
 
 export interface NotificationData {
@@ -15,6 +26,13 @@ export interface NotificationData {
   duration?: number
   icon?: string
   extraClass?: string
+  // v1.3.67：长驻提示。开启后不设 timeout、不响应触碰关闭，可被同 key 的
+  // 后续 notify 覆盖；可被外部 dismiss(key) 主动关闭。
+  sticky?: boolean
+  /** 身份标识，用于 dismiss(key) 与覆盖判定（仅 sticky 时有意义） */
+  key?: string
+  /** 长驻提示里的「主信息块」（如本机 IP、目标主机）。会渲染成金边 + 复制按钮 */
+  detail?: NotificationDetail
 }
 
 export type NotificationActionHandlers = Record<string, () => void>
@@ -28,6 +46,12 @@ export class Notification {
   private touchDismiss = false
   /** 触碰关闭锁定期截止时间（ms），期间忽略触碰以免把触发提示的那一下也关掉 */
   private touchLockUntil = 0
+  /**
+   * v1.3.67：当前 sticky 提示的身份 key。仅当一则提示 sticky=true 时设置；
+   * dismiss(key) 仅在 key 匹配时清掉它，clear() 默认无 key 等价于 dismiss()，
+   // 可被外部强制清空（stickyKey=null）后强制关闭。
+   */
+  stickyKey: string | null = null
 
   constructor() {
     this.overlay = id("notificationOverlay") as HTMLDivElement | null
@@ -74,10 +98,22 @@ export class Notification {
       }
       // 带操作按钮 / 上传按钮的提示（认输、结算、破纪录）不要触碰即关，
       // 否则会挡住用户点击按钮。
-      this.touchDismiss = !this.hasActionButtons(data)
+      // v1.3.67：sticky 提示也禁用触碰关闭（需要长驻到外部 dismiss）。
+      this.touchDismiss =
+        !data.sticky && !this.hasActionButtons(data)
     }
 
-    this.display(content, typeClass, duration)
+    // v1.3.67：粘性守卫 —— 如果当前有 sticky 提示在屏，且这次不是同 key 的
+    // sticky 覆盖也不是新的 sticky（普通提示想显示），则直接把旧的 sticky 关掉
+    // 让路（避免瞬时提示被吞）。同 key 的 sticky 走覆盖路径仍允许更新内容。
+    if (
+      this.stickyKey &&
+      !(typeof data === "object" && data.sticky === true)
+    ) {
+      this.clear()
+    }
+
+    this.display(content, typeClass, duration, data)
   }
 
   private renderStringContent(message: string): string {
@@ -97,6 +133,7 @@ export class Notification {
     }
     const icon = this.getIcon(data)
     const footerContentHtml = this.renderFooter(data)
+    const detailHtml = this.renderDetail(data)
 
     const content = `
       <div class="notification-banner">
@@ -114,12 +151,54 @@ export class Notification {
             </div>
           </div>
           ${data.matchScore ? `<div class="notification-match-score">${data.matchScore}</div>` : ""}
+          ${detailHtml}
         </div>
         ${footerContentHtml}
       </div>
     `
 
     return { content, typeClass }
+  }
+
+  /**
+   * v1.3.67：渲染 sticky 提示里的 detail 子块（如本机 IP + 复制按钮）。
+   * 仅在 data.detail 存在时输出。value 转义避免被当 HTML 解析。
+   */
+  private renderDetail(data: NotificationData): string {
+    if (!data.detail || !data.detail.value) return ""
+    const label = data.detail.label
+      ? `<div class="notification-detail-label">${this.escapeHtml(data.detail.label)}</div>`
+      : ""
+    const value = this.escapeHtml(data.detail.value)
+    const hint = data.detail.hint
+      ? `<div class="notification-detail-hint">${this.escapeHtml(data.detail.hint)}</div>`
+      : ""
+    // v1.3.68：只有 value 是"可复制的机器数据"（如 IP 地址）时才给复制按钮；
+    // 「未连接 Wi-Fi」这类诊断文案复制了没用，反而误导。判定规则：纯 IP/主机名
+    // 字符（数字、点、冒号、字母、连字符）且长度在 4~64 之间。
+    const copyable = /^[0-9a-zA-Z.:_-]{4,64}$/.test(data.detail.value)
+    const copyBtn = copyable
+      ? `<button data-notification-action="copy-ip" class="notification-copy-btn" type="button">复制</button>`
+      : ""
+    return `
+      <div class="notification-detail">
+        ${label}
+        <div class="notification-detail-row">
+          <span class="notification-detail-value">${value}</span>
+          ${copyBtn}
+        </div>
+        ${hint}
+      </div>
+    `
+  }
+
+  private escapeHtml(s: string): string {
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;")
   }
 
   private renderFooter(data: NotificationData): string {
@@ -194,7 +273,12 @@ export class Notification {
     }
   }
 
-  private display(content: string, typeClass: string, duration: number) {
+  private display(
+    content: string,
+    typeClass: string,
+    duration: number,
+    data?: NotificationData | string
+  ) {
     if (!this.element) return
     this.element.innerHTML = content
     this.element.className = "" // Clear previous classes
@@ -208,6 +292,11 @@ export class Notification {
 
     if (this.timeoutId) {
       globalThis.clearTimeout(this.timeoutId)
+    }
+
+    // v1.3.67：记录 sticky key，供外部 dismiss(key) 关闭
+    if (typeof data === "object" && data?.sticky) {
+      this.stickyKey = data.key ?? "__sticky"
     }
 
     if (duration > 0) {
@@ -256,6 +345,9 @@ export class Notification {
         break
       case "menu":
       case "lobby":
+        // v1.3.65：退回主菜单即结束这轮系列赛，清掉「你 X : Y 电脑」的累计。
+        // 不清的话，下次进同一玩法会接着上次的比分算，语义不对。
+        resetSeries()
         globalThis.location.href = "menu.html"
         break
       case "rematch":
@@ -263,6 +355,20 @@ export class Notification {
           globalThis.location.href = url
         }
         break
+      // v1.3.67：sticky 弹窗内的复制按钮 —— 把 detail.value 写入剪贴板。
+      case "copy-ip": {
+        const v =
+          this.element?.querySelector(".notification-detail-value")
+            ?.textContent ?? ""
+        if (v) {
+          try {
+            navigator.clipboard?.writeText(v).catch(() => {})
+          } catch {
+            // 剪贴板权限被拒，忽略
+          }
+        }
+        break
+      }
     }
   }
 
@@ -281,6 +387,20 @@ export class Notification {
       globalThis.clearTimeout(this.timeoutId)
       this.timeoutId = null
     }
+    // v1.3.67：清掉 sticky 身份，避免影响后续提示判定
+    this.stickyKey = null
+  }
+
+  /**
+   * v1.3.67：按 key 选择性关闭当前 sticky 提示。
+   * - 无 key：仅当当前有 sticky 时关闭（保持开局时 init.handleBegin 的"开局关窗"语义）。
+   * - 有 key：仅在 stickyKey 匹配时关闭（避免误关后续犯规/结算提示）。
+   * - 不匹配：no-op，原样保留当前显示。
+   */
+  dismiss(key?: string): void {
+    if (!this.stickyKey) return
+    if (key !== undefined && key !== this.stickyKey) return
+    this.clear()
   }
 
   /** 提示框当前是否处于显示状态 */

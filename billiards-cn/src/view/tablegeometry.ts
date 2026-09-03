@@ -30,7 +30,9 @@ export class TableGeometry {
       TableGeometry.tableX = R * 43 * sizeScale
       TableGeometry.tableY = R * 21 * sizeScale
       TableGeometry.hasPockets = true
-      setmu(0.0066)
+      // v1.3.65：0.0066 → 0.0141。等效滚动阻力系数 μr = mu/√2 由 0.0047 提到
+      // ≈0.0100（真实台呢量级），慢滚距离减半。详见 constants.ts 顶部注释。
+      setmu(0.0141)
     }
     TableGeometry.X = TableGeometry.tableX + R
     TableGeometry.Y = TableGeometry.tableY + R

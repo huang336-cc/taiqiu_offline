@@ -316,3 +316,28 @@ body.replay-mode .sc-time svg {
   width: 8px;
   height: 8px;
 }
+/* ==========================================================================
+   v1.3.66：系列赛总比分行 + 局域网房间信息条
+   ========================================================================== */
+
+/* 系列赛总比分：比分栏内、玩家列下方的细金边一行 */
+.sc-series {
+  margin: 0 2px;
+  padding: 2px 8px;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--sc-gold-2, #e7b14b);
+  background: linear-gradient(180deg, var(--sc-wood-1, #6b4a22), var(--sc-wood-2, #4a3014));
+  border: 1px solid var(--sc-gold, #c89534);
+  border-radius: 8px;
+  box-shadow: var(--sc-shadow, 0 8px 24px rgba(0, 0, 0, 0.45));
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.sc-series[hidden] {
+  display: none;
+}
+
+/* v1.3.67：移除顶部 .lan-room-info 信息条 —— sticky 弹窗已承担同样职责。 */

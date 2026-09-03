@@ -111,6 +111,10 @@ export class Session {
       const bot = urlParams.get("bot")
       Session.instance.opponentName = bot ?? "ClawBreak"
       Session.instance.setOpponentClientId("bot")
+      // v1.3.65：人机模式下把会话单例暴露给 window，供自动化对局测试
+      // （botcheck）读取 p1type 等对局状态；正常玩法不触碰该引用，无副作用。
+      ;(globalThis as unknown as Record<string, unknown>).__billiardsSession =
+        Session.instance
     }
   }
 

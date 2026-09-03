@@ -79,20 +79,22 @@
   --notification-ease-elastic: cubic-bezier(0.175, 0.885, 0.32, 1.275);
 
   /* --- Semantic Tokens (Default) --- */
-  --notification-bg: var(--notification-clr-primary);
-  --notification-bg-gradient: linear-gradient(
-    135deg,
-    var(--notification-clr-primary) 0%,
-    var(--notification-clr-secondary) 100%
-  );
-  --notification-border-clr: var(--notification-white-40);
-  --notification-text-clr-main: var(--notification-white);
-  --notification-text-clr-sub: var(--notification-white-90);
-  --notification-text-clr-inv: var(--notification-black);
-  --notification-score-bg: var(--notification-black-15);
-  --notification-score-border: var(--notification-white-10);
-  --notification-score-label-clr: var(--notification-white-60);
-  --notification-score-value-clr: var(--notification-white);
+  /* v1.3.70：默认 Info 类型（建房弹窗、犯规提示、认输确认等）的配色改
+     为木纹金棕渐变（与游戏底栏触发按钮同色系），不再用蓝青冷色。
+     木纹色阶：上 #6b4a22 / 下 #4a3014 + 2px 金边 #c89534 + 内白高光。
+     视觉上与游戏场景完全融合，不出现"突然冒出来一个蓝底白字通知"的割裂感。 */
+  --notification-bg: #5a3a1c;
+  --notification-bg-gradient: linear-gradient(180deg, #6b4a22 0%, #4a3014 100%);
+  --notification-border-clr: #c89534;
+  /* v1.3.70：木纹底上的文字用亮奶白（与底栏按钮图标同色 #fff5d8），
+     比纯白略暖更耐看，且对比度足够。 */
+  --notification-text-clr-main: #fff5d8;
+  --notification-text-clr-sub: #ffe5b0;
+  --notification-text-clr-inv: #3a2a08;
+  --notification-score-bg: rgba(0, 0, 0, 0.25);
+  --notification-score-border: rgba(255, 215, 0, 0.25);
+  --notification-score-label-clr: #ffd87a;
+  --notification-score-value-clr: #fff5d8;
 }
 
 /* ==========================================================================
@@ -151,7 +153,9 @@
    3. Base Components
    ========================================================================== */
 
-/* 3.1 Banner */
+/* 3.1 Banner
+   v1.3.70：内白高光 + 外深阴影，与底栏触发按钮（.seg-trigger）box-shadow 同款。
+   边框 2px 金棕 #c89534，圆角 12px。视觉上像"浮起来的金棕玻璃卡"。 */
 .notification-banner {
   position: relative;
   display: flex;
@@ -163,8 +167,10 @@
   overflow: hidden;
   border-radius: var(--notification-radius-m);
   background: var(--notification-bg-gradient);
-  border: 1px solid var(--notification-border-clr);
-  box-shadow: var(--notification-shadow-md);
+  border: 2px solid var(--notification-border-clr);
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.18),
+    0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
 /* 3.3 Content Structure */
@@ -189,6 +195,8 @@
   align-items: center;
   justify-content: center;
   font-size: 1.6rem; /* Slightly smaller icon */
+  /* v1.3.70：图标 emoji 直接显示，不染色（木纹金棕底上反而比蓝青渐变更协调） */
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
 }
 
 .notification-text-group {
@@ -411,4 +419,82 @@
 #notification.is-loser .notification-actions .button {
   background: var(--notification-black-15);
   border-color: var(--notification-black-30);
+}
+
+/* v1.3.67：sticky 提示里的主信息（如本机 IP + 复制按钮）。
+   v1.3.70：风格与游戏底栏触发按钮统一（木纹金棕玻璃），不再用蓝青渐变。
+   视觉上像「底栏浮上来的常驻信息」，与游戏场景融为一体。 */
+.notification-detail {
+  width: 100%;
+  margin-top: var(--notification-space-2, 8px);
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 2px solid #c89534;
+  background: linear-gradient(180deg, #6b4a22 0%, #4a3014 100%);
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.18),
+    0 2px 6px rgba(0, 0, 0, 0.4);
+  text-align: left;
+}
+
+.notification-detail-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffd87a;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+  opacity: 0.92;
+}
+
+.notification-detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.notification-detail-value {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 17px;
+  font-weight: 700;
+  color: #fff5d8;
+  letter-spacing: 0.5px;
+  word-break: break-all;
+  flex: 1 1 auto;
+}
+
+.notification-copy-btn {
+  flex: 0 0 auto;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #3a2a08;
+  background: linear-gradient(180deg, #ffe680, #ffc233);
+  border: 1px solid #b8860b;
+  border-radius: 14px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.45),
+    0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.notification-copy-btn:active {
+  transform: translateY(1px);
+  filter: brightness(0.95);
+}
+
+/* v1.3.68：detail 下方的补充指引（取不到 IP 时的排查步骤）。
+   v1.3.70：配色与 detail 一致（木纹金棕调），不再用纯金。 */
+.notification-detail-hint {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px dashed rgba(255, 215, 0, 0.3);
+  font-size: 12px;
+  line-height: 1.5;
+  color: #f5e6b8;
+  opacity: 0.85;
+  white-space: pre-wrap;
+  word-break: break-word;
 }

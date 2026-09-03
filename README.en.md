@@ -4,9 +4,9 @@
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Platform](https://img.shields.io/badge/platform-Android%205.0%2B-brightgreen.svg)](#download)
-[![Permissions](https://img.shields.io/badge/Permissions-0-success.svg)](#privacy)
+[![Permissions](https://img.shields.io/badge/Permissions-INTERNET%20only%20(LAN%20play)-brightgreen.svg)](#privacy)
 
-A fully Chinese, fully offline, ad-free Android billiards game. Built on three.js with a realistic physics engine and a built-in local AI opponent. **Requests no system permissions at all.**
+A fully Chinese, ad-free Android billiards game. Built on a realistic three.js physics engine with a built-in local AI opponent; single-player is fully offline. From v1.3.65, optional **LAN multiplayer** (same Wi-Fi / local network direct connection) is available, requesting exactly one `INTERNET` permission with no external network traffic.
 
 <p align="center">
   <img src="docs/screenshots/menu-home.jpg" alt="Main Menu" width="48%" />
@@ -43,8 +43,8 @@ Installation instructions and FAQs can be found in [`docs/安装与使用说明.
 
 | | |
 |---|---|
-| **Fully Offline** | No networking, no account, no ads, no in-app purchases, no telemetry |
-| **Zero Permissions** | `AndroidManifest.xml` declares no `uses-permission`; verify yourself with `aapt2 dump badging` |
+| **Offline / LAN Play** | Offline single-player by default, optional LAN multiplayer; no external network requests, no account, no ads, no in-app purchases, no telemetry |
+| **Minimal Permissions** | `AndroidManifest.xml` declares only one `INTERNET` (LAN-play only, purely local TCP, no external requests), and no storage/location/phone/camera permissions; verify yourself with `aapt2 dump badging` |
 | **All Chinese** | Menus, gameplay, settings, foul prompts, and results text fully localized |
 | **Realistic Physics** | Inherits the original project's ball collision, spin (English), cushion rebound, and friction models |
 | **Local AI** | Two difficulty levels (Steady / Aggressive), all computed locally |
@@ -75,26 +75,28 @@ win/loss results, and snooker ball names are all localized; added a centralized 
 
 **Removed Networking** — Removed the WebSocket multiplayer lobby and message relay (including the `@tailuge/messaging` dependency),
 score uploads, telemetry, crash reporting, Google Fonts external links, share links, position export, and the online analysis panel.
+From v1.3.65, **LAN multiplayer** was re-added (see "Android Wrapper" below), limited to the same local network / direct connection with no external traffic.
 
 **Mobile Adaptation** — Added a six-tier LOD graphics system (render resolution / anti-aliasing / ball geometry precision),
 automatic device performance detection, notched-screen safe-area adaptation, landscape layout optimization, and vibration feedback on pots and collisions.
 
 **New Features** — Chinese main menu, built-in operation guide page, built-in game settings panel (synced in real time between menu and in-game),
-and an in-app open-source license & credits page.
+an in-app open-source license & credits page, and LAN multiplayer.
 
-**Android Wrapper** — Native Android WebView shell that requests no system permissions.
+**Android Wrapper** — Native Android WebView shell that declares exactly one `INTERNET` permission (LAN-play only: listens on a TCP port in-process and connects to the opponent's phone purely locally, never contacting any external server; online features remain disabled).
 
 ---
 
 ## Privacy
 
-This app collects no data because it **has no ability** to collect any:
+This app does not send any data to external servers and collects no information:
 
-- No `INTERNET` permission is declared, so the process cannot make any network requests
+- The `INTERNET` permission is used **only for LAN multiplayer**: it listens on a TCP port in-process and connects to the opponent's phone purely locally, sending no external requests; no connection is established unless LAN play is active
 - No storage, location, phone, camera, or any other permissions are declared
 - All resources (three.js, models, sounds) are packaged inside the APK with zero external links at runtime
+- No account, no telemetry, no ad SDK
 
-You can enable airplane mode right after installation and keep playing.
+Single-player involves no network traffic at all and works even with airplane mode enabled (LAN play requires both phones on the same Wi-Fi / local network).
 
 ---
 
@@ -108,7 +110,7 @@ billiards-cn/          Game engine
   LICENSE              Full GPL-3.0 license text
 
 billiards-apk/         Android wrapper
-  AndroidManifest.xml  App manifest (zero permissions)
+  AndroidManifest.xml  App manifest (INTERNET only, for LAN play)
   src/                 MainActivity.java
   res/                 Icons and string resources
   build-apk.sh         One-click build script
@@ -144,11 +146,11 @@ cd billiards-apk
 ```
 
 The script runs `aapt2 compile` → `aapt2 link` → `javac` → `d8` → `zipalign` → `apksigner` in sequence,
-then automatically verifies the signature and prints the permission list (which should be empty). If no `release.keystore` exists in the directory, the script auto-generates a self-signed debug key.
+then automatically verifies the signature and prints the permission list (should be `INTERNET` only, or empty). If no `release.keystore` exists in the directory, the script auto-generates a self-signed debug key.
 
 > **Build Pitfall**: `aapt2 link` must explicitly pass `--min-sdk-version 21 --target-sdk-version 34`.
 > Otherwise aapt2 silently appends `WRITE_EXTERNAL_STORAGE`, `READ_PHONE_STATE`,
-> and `READ_EXTERNAL_STORAGE` under legacy compatibility rules, breaking the zero-permission promise.
+> and `READ_EXTERNAL_STORAGE` under legacy compatibility rules, breaking the minimal-permission promise.
 
 ---
 

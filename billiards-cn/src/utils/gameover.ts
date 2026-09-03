@@ -9,6 +9,9 @@
 export const gameOverButtons = {
   lobby: `<button type="button" class="notification-btn" data-notification-action="menu">返回主菜单</button>`,
   newGame: `<button type="button" class="notification-btn" data-notification-action="reload">再来一局</button>`,
+  /** v1.3.65：人机对战时的「再来一局」——这局打完系列赛比分已累加，
+   *  点它就是「继续与电脑对战下一局」，文案对应改掉。 */
+  continueSeries: `<button type="button" class="notification-btn" data-notification-action="reload">继续对战</button>`,
   replay: `<button type="button" class="notification-btn" data-notification-action="replay">回放本局</button>`,
   /** v1.2.4：游戏结束后保存本局回放（编码下载 + 写入本地「我的回放」） */
   saveReplay: `<button type="button" class="notification-btn" data-notification-action="saveReplay">保存回放</button>`,
@@ -20,7 +23,12 @@ export const gameOverButtons = {
     return ""
   },
 
-  forMode(): string {
-    return this.newGame + " " + this.viewReplay + " " + this.saveReplay + " " + this.lobby
+  /**
+   * 结算面板按钮组。
+   * @param botMode 人机对战。为 true 时首个按钮用「继续对战」而非「再来一局」。
+   */
+  forMode(botMode = false): string {
+    const next = botMode ? this.continueSeries : this.newGame
+    return next + " " + this.viewReplay + " " + this.saveReplay + " " + this.lobby
   },
 }

@@ -11,7 +11,10 @@ import { ThreeStrategy } from "./threecushionstrategy"
 import { DifficultyProfile, DIFFICULTY, jitterPower } from "../difficulty"
 
 export class TheFarJaw implements BotStrategy {
-  readonly name = "TheFarJaw"
+  // 显式标注 string（而非让 TS 推断成字面量类型 "TheFarJaw"），
+  // 否则子类 Professional 的 name = "Professional" 会因字面量类型
+  // 不兼容而报 TS2416。
+  readonly name: string = "TheFarJaw"
   /** v1.3.58：难度档位，默认激进档 */
   protected readonly profile: DifficultyProfile
 

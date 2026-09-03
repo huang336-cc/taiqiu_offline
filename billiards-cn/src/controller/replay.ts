@@ -144,12 +144,6 @@ export class Replay extends ControllerBase {
    * 需要俯瞰全局时再切到「俯视」。
    */
   private camTopDown = false
-/**
-* v1.3.58：本杆是否已经出杆。
-* 出杆前 = 正在摆位/瞄准，相机应停在 frameCameraForShot 定好的机位上；
-* 出杆后 = 球在滚，相机默认锁定，只在确有必要时微调。
-*/
-private shotInFlight = false
   /** v1.2.26：视角切换按钮（跟随/俯视）引用与点击处理 */
   private camBtn: HTMLButtonElement | null = null
   private onCamClick = () => {
@@ -314,7 +308,6 @@ this.frameCameraForShot(this.container.table.cue.aim)
   // v1.3.58：本杆击球前先把相机摆到位（见 frameCameraForShot）。
   // 旧逻辑用 suggestMode 切到 spectatorView 就不管了，镜头只能靠每帧 lerp
   // 慢慢飞向目标机位，出杆瞬间往往还没到位。
-  this.shotInFlight = false
   this.frameCameraForShot(aim)
   clearTimeout(this.timer)
     this.timer = setTimeout(() => {
@@ -716,8 +709,7 @@ this.frameCameraForShot(this.container.table.cue.aim)
     this.currentShotIndex = idx
     this.restoreShotStart(meta)
     this.container.table.hit()
-    // v1.3.59：seek 重跑等同于一记真实出杆，标记在飞以便允许镜头微调
-    this.shotInFlight = true
+    // v1.3.59：seek 重跑等同于一记真实出杆（确定性重跑物理到目标时刻）
     const step = this.container.step
     let guard = 0
     while (
@@ -828,36 +820,17 @@ if (this.camTopDown) {
   cam.topViewAtCenter(center, radius)
   return
 }
-// 跟随模式：三点框定之外再掺入白球轨迹的稀释采样点。纯三点框定会把机位锁在
-// 击球瞬间那一小片区域，白球的后续走位一撞库就出画——这正是「看不到白球轨迹」
-// 的另一半原因。掺入轨迹后机位会稍微拉远、略偏，但整条走位留在画面内。
-cam.setReplayFrame(focus.concat(this.diluteTrack(mine?.cueTrack, 4)))
-cam.forceMove(aim)
+// v1.3.66：回退到 v1.3.58 之前的跟随相机——每杆用「白球→被击球→袋口」三点框定，
+// 相机每帧以 0.12 系数平滑飞向该机位；出杆后不做「锁机位」、也不「追袋口」。
+// 旧版的 forceMove(aim)（fraction=1 瞬间摆位）与 cueTrack 稀释、进球后微调
+// 会令镜头每杆跳切、并随进球乱飞，观感不如这种稳定的平滑跟随。
+cam.setReplayFrame(focus)
 }
 
 /**
- * v1.3.60：把白球轨迹稀释成至多 n 个点（等距取样，首尾必留）。
- * 直接把几百个采样点丢给 setReplayFrame 会让机位被轨迹的密集段拖偏，
- * 稀释后只保留「白球大致跑向哪」的信息。
+ * v1.3.66：diluteTrack（v1.3.60 的白球轨迹稀释）已随「跟随镜头回退每帧三点框定」
+ * 一并移除——跟随模式不再掺入轨迹采样点，故该方法无调用方。
  */
-private diluteTrack(
-  track: [number, number, number][] | undefined,
-  n: number
-): Vector3[] {
-  if (!track || track.length === 0 || n <= 0) {
-    return []
-  }
-  if (track.length <= n) {
-    return track.map((t) => new Vector3(t[0], t[1], t[2]))
-  }
-  const out: Vector3[] = []
-  for (let i = 0; i < n; i++) {
-    const idx = Math.round((i * (track.length - 1)) / (n - 1))
-    const t = track[idx]
-    out.push(new Vector3(t[0], t[1], t[2]))
-  }
-  return out
-}
 
 /**
  * v1.3.60：俯视模式的取景范围。
@@ -903,83 +876,11 @@ private topDownBounds(
 }
 
 /**
-* v1.3.58：回放每帧的相机跟随策略。
-*
-* 基本原则是「出杆后锁定机位」—— 本杆击球前已经把相机摆到位（见
-* frameCameraForShot），出杆后不再重新框定，避免镜头在球滚动期间乱飞。
-*
-* 只有在「后续进球很可能看不清」时才允许适度微调：
-*  - 本杆同时/连续进了多个球（pots >= 2），一个机位很难同时框住多个落点；
-*  - 本杆进球链条很长、节奏缓慢，先前框定的袋口已经不在视野里。
-* 微调只动「绕注视中心的角度 + 相机高度 + 注视点平移」三项，各自限幅、
-* 以 2% 的系数平滑逼近（见 Camera.stepReplayNudge），不会出现镜头跳切。
+* v1.3.66：跟随镜头改回「每帧三点框定平滑」（见 frameCameraForShot /
+* camera.replayFrameView）。此前的 updateReplayCamera（进球后追袋口微调）
+* 与其两个辅助方法已随这次回退一并移除——它们对应的 v1.3.58「锁机位 +
+* 追袋口」逻辑不再使用，留着只会误导后续维护。
 */
-private updateReplayCamera() {
-if (this.diagram || this.container.rules.rulename === "threecushion") return
-if (this.camTopDown) return
-const cam = this.container.view.camera
-const meta = this.shotMeta[this.currentShotIndex]
-if (!this.shotInFlight || !meta) {
-cam.setReplayNudge(null)
-return
-}
-if (!meta.pots || meta.pots.length === 0) {
-cam.setReplayNudge(null)
-return
-}
-if (!this.allowReplayNudge(meta)) {
-cam.setReplayNudge(null)
-return
-}
-cam.setReplayNudge(this.currentPotWatchPoint(meta))
-}
-
-/**
-* v1.3.58：本杆是否允许相机微调。
-* 只有「多球同进」或「进球链条长 / 节奏缓慢」两种情形才放开，
-* 普通单球进球一律锁定机位，避免无谓的镜头移动。
-*/
-private allowReplayNudge(meta: ShotMeta): boolean {
-// 一杆多球：机位很难一次框住所有落点
-if (meta.pots.length >= 2) return true
-// 链条长：本杆物理时长超过 2.6 秒，后续进球大概率跑出初始框定范围
-if (meta.duration > 2600) return true
-// 节奏慢：距首个进球已过去很久、后面还有进球没播完
-const t = this.container.table.time
-const first = meta.pots[0].t
-const last = meta.pots[meta.pots.length - 1].t
-if (t > first + 1200 && t < last + 400) return true
-return false
-}
-
-/**
-* v1.3.58：当前应该盯住的进球位置 —— 取时间窗口内最近的一次进球。
-* 进球前盯球本身（跟着球进袋），进球后盯袋口（球已消失，看落袋位置）。
-*/
-private currentPotWatchPoint(meta: ShotMeta): Vector3 | null {
-const t = this.container.table.time
-const table = this.container.table
-// 提前 700ms 开始跟、进球后再跟 500ms，保证「接近袋口 → 落袋」全程在画面内
-const LEAD = 700
-const TRAIL = 500
-let best: PotInfo | null = null
-let bestD = Infinity
-for (const pot of meta.pots) {
-if (t < pot.t - LEAD || t > pot.t + TRAIL) continue
-const d = Math.abs(t - pot.t)
-if (d < bestD) {
-bestD = d
-best = pot
-}
-}
-if (!best) return null
-const pocket = PocketGeometry.pocketCenters[best.pocketIdx]
-if (t < best.t) {
-const ball = table.balls[best.ballId]
-return ball && ball.onTable() ? ball.pos : pocket ?? null
-}
-return pocket ?? null
-}
 
   /** v1.2.11 #F11：渲染全局进球吸附点（所有已记录杆的 pots 平移到全局位置） */
   private renderSnaps() {
@@ -1105,9 +1006,8 @@ return pocket ?? null
     this.container.replayTimeScaleHook = () => this.replayTimeScale()
 this.container.replayFrameHook = () => {
 this.tickSeekUI()
-// v1.3.58：接上回放跟随镜头。此前 updateReplayCamera() 没有任何调用者，
-// 整条「跟随进球」的链路是死的，回放只能停留在进入时的固定机位。
-this.updateReplayCamera()
+// v1.3.66：跟随镜头改回每帧三点框定平滑（见 frameCameraForShot / camera.replayFrameView），
+// 不再调用 updateReplayCamera 做「进球后追袋口」微调，避免镜头随进球乱飞。
 }
     // 显示「退出回放」按钮并绑定（回放全程常驻，结束后供用户离开）
     const exit = document.getElementById("replayExitBtn") as HTMLButtonElement | null
@@ -1206,16 +1106,15 @@ this.updateReplayCamera()
     // v1.2.27：起步不直接写 timeScale（advance 每帧由 replayTimeScaleHook 决定，
     // 该钩子返回用户选择的全局倍速）。保留此赋值仅为兼容旧逻辑，会被每帧覆盖。
 this.container.timeScale = 1
-// v1.3.58：标记出杆，updateReplayCamera 从此开始判断是否允许微调
-this.shotInFlight = true
+// v1.3.66：回放同样走 handleHit → hit() 出杆（镜头跟随改回每帧三点框定平滑，
+// 不再做逐杆锁定 / 追袋口微调）
 this.hit()
 return this
 }
 
 override handleStationary(_) {
 // v1.2.6 #232：球已静止，等待下一次击球。
-// v1.3.58：本杆结束，撤掉微调目标，机位回到锁定状态等待下一杆重新定位
-this.shotInFlight = false
+// v1.3.66：清掉可能存在的微调目标（跟随改回每帧三点框定平滑，正常情况下本就是 null）
 this.container.view.camera.setReplayNudge(null)
 this.container.timeScale = 1
     const outcome = this.container.table.outcome

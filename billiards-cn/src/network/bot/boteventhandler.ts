@@ -59,6 +59,12 @@ export class BotEventHandler {
   protected readonly botRules: Rules
   private shouldStartTurnOnNextControl = false
   private queuedOwnStartAim = false
+  /** v1.3.65：bot 侧「本杆是否开球杆」快照。必须在出杆前（handleStartAim /
+   * handlePlaceBall）用 isFirstShot 抓取——那一刻 recorder 还没有本杆的 AIM
+   * 记录，判断准确；球停后（handleStationary）recorder 已含本杆 AIM，
+   * isFirstShot 恒为 false，不能直接用。开球杆进球不分花色（球桌保持开放），
+   * 与玩家侧 eightball.ts 的 firstShotPlayed 守卫对称。 */
+  private thisShotIsBreak = false
 
   constructor(
     logs: Logger,
@@ -553,6 +559,13 @@ botName === "TheFarJaw"
     if (session.p1type !== 0 || this.container.rules.rulename !== "eightball") {
       return
     }
+    // v1.3.65：开球杆进球不分配花色，球桌保持开放——与玩家侧
+    // eightball.ts 的 firstShotPlayed 守卫对称。否则电脑开球蹭进一颗
+    // 全色就被立刻定组，剩下全是难打的球型，进而逼出「场上还有目标球
+    // 却直接打黑八」的怪行为（用户报告的专业档 AI 缺陷之一）。
+    if (this.thisShotIsBreak) {
+      return
+    }
     const pottedBalls = Outcome.pots(outcome)
     const hasSolid = pottedBalls.some(
       (b) => (b.label ?? 0) >= 1 && (b.label ?? 0) <= 7
@@ -569,6 +582,8 @@ botName === "TheFarJaw"
 
   private handleStartAim(): void {
     this.startTurnIfNeeded()
+    // v1.3.65：出杆前快照「本杆是否开球杆」，供 assignEightBallType 守卫使用。
+    this.thisShotIsBreak = isFirstShot(this.container.recorder)
     this.logs.show()
     this.container.table.cue.aim.elevation = 0
     this.publishSequenceToPlayer(this.aim())
@@ -576,6 +591,9 @@ botName === "TheFarJaw"
 
   private handlePlaceBall(event: PlaceBallEvent): void {
     this.startTurnIfNeeded()
+    // v1.3.65：与 handleStartAim 一致——这里也会直接出杆（ball in hand），
+    // 出杆前同样要快照「本杆是否开球杆」。
+    this.thisShotIsBreak = isFirstShot(this.container.recorder)
     const table = this.container.table
 
     if (event.respot) {

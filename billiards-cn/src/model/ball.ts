@@ -34,6 +34,22 @@ export class Ball {
 
   static readonly transition = 0.05
 
+  /**
+   * v1.3.65：滚动状态下「线速度低于此值即判定静止」的显式阈值（m/s）。
+   *
+   * 原逻辑只有一条判据 —— `passesZero()` 里「本步速度增量 ≥ 当前速度」，
+   * 且滚动时还额外要求 `|rvel.z| <= |Δw.z|`（见下）。带侧旋的球在线速度早已
+   * 归零后，仍要等侧旋一路衰减完才肯判静止（实测约 5 秒），每杆结算被白白
+   * 拖后，观感就是「球停了但系统还不出下一杆」。
+   *
+   * 取 1 cm/s：以滚动减速度 0.0977 m/s² 计，从 0.01 m/s 减到 0 只需 0.1 秒、
+   * 位移 0.5 mm，肉眼完全不可见，可以安全截断。
+   *
+   * 只在 Rolling 分支生效 —— Sliding 状态下「线速度小但角速度大」是合法的
+   * 物理状态（高杆/低杆起手瞬间），不能一刀切。
+   */
+  static readonly haltSpeed = 0.01
+
   constructor(pos, color?, label?: number, appearance?: BallAppearance) {
     this.pos = pos.clone()
     this.label = label
@@ -81,6 +97,12 @@ export class Ball {
     if (this.inMotion()) {
       if (this.isRolling()) {
         this.state = State.Rolling
+        // v1.3.65：线速度已低到肉眼不可见时直接停球，不再等侧旋衰减完
+        // （阈值取 1 cm/s，理由见 Ball.haltSpeed 注释）。
+        if (this.vel.length() < Ball.haltSpeed) {
+          this.setStationary()
+          return
+        }
         forceRoll(this.vel, this.rvel)
         this.addDelta(t, rollingFull(this.rvel, this.vel, t))
       } else {

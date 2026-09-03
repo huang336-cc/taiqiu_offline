@@ -2,6 +2,7 @@ import { id } from "../utils/dom"
 import type { Table } from "../model/table"
 import type { Ball } from "../model/ball"
 import { Session } from "../network/client/session"
+import { getSeries } from "../utils/series"
 
 export class Hud {
   p1Element: HTMLElement | null
@@ -15,6 +16,12 @@ export class Hud {
   private readonly p2LabelEl: HTMLElement | null
   private readonly p1BallsEl: HTMLElement | null
   private readonly p2BallsEl: HTMLElement | null
+  /** 系列赛总比分行（仅人机对战显示）：「系列赛 你 X : Y 电脑」 */
+  private readonly scSeriesEl: HTMLElement | null
+  /** 是否人机对战（决定系列赛总比分行是否显示） */
+  private readonly isSeriesMode: boolean
+  /** 当前玩法名（rulename），用于读取系列赛累计 */
+  private readonly ruleName: string
   /** 顶部「break」分（老 HUD 兼容），新 v2 比分栏不展示 */
   breakScoreElement: HTMLElement | null
   timeTextElement: HTMLElement | null
@@ -46,6 +53,20 @@ export class Hud {
     this.p2LabelEl = id("scP2Label")
     this.p1BallsEl = id("p1Balls")
     this.p2BallsEl = id("p2Balls")
+
+    // v1.3.66：系列赛总比分行。仅在人机对战（系列赛）模式下显示，
+    // 每局开局即展示「你 0 : 0 电脑」，随结算累加。
+    this.scSeriesEl = id("scSeries")
+    this.isSeriesMode = Session.isBotMode()
+    try {
+      this.ruleName =
+        new URLSearchParams(location.search).get("ruletype") ?? ""
+    } catch {
+      this.ruleName = ""
+    }
+    if (this.scSeriesEl && this.isSeriesMode) {
+      this.refreshSeries()
+    }
 
     this.middleElement = id("hudMiddle")
 
@@ -163,6 +184,26 @@ export class Hud {
     // 确保电脑难度稳定显示，不依赖构造时序。
     if (_p1Name && this.p1LabelEl) this.p1LabelEl.textContent = _p1Name
     if (_p2Name && this.p2LabelEl) this.p2LabelEl.textContent = _p2Name
+    // v1.3.66：每局得分刷新时同步系列赛总比分（人机对战下）
+    this.refreshSeries()
+  }
+
+  /**
+   * v1.3.66：刷新系列赛总比分显示。
+   * 仅人机对战（series 模式）显示「系列赛 你 X : Y 电脑」；
+   * 比分栏的 p2 名字由 opponentName 决定（含难度如「电脑(专业)」）。
+   * 当前这一局尚未结算，故显示的是此前各局累计——本局结束后下一局会自动 +1。
+   */
+  private refreshSeries(): void {
+    if (!this.scSeriesEl) return
+    if (!this.isSeriesMode) {
+      this.scSeriesEl.hidden = true
+      return
+    }
+    const s = getSeries(this.ruleName)
+    const label = Session.getInstance().opponentName ?? "电脑"
+    this.scSeriesEl.textContent = `系列赛　你 ${s.you} : ${s.cpu} ${label}`
+    this.scSeriesEl.hidden = false
   }
 
   /**

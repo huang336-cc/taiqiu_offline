@@ -95,8 +95,11 @@ export class AimCalculator {
     aim.power = power
     aim.offset = spinOffset
 
+    // v1.3.66：原逻辑在「球杆后方被挡」时会把打点强行覆盖成 (0, +offCenterLimit)，
+    // 即 +0.45 高杆/跟杆——这会把 AI 精心算好的「低杆防摔袋」抹掉，反而把母球
+    // 推进袋口。这里只去掉可能导致杆法异常的侧旋(x)，纵向打点(y，低杆防摔袋)照常保留。
     if (cue.intersectsAnything(table, aim)) {
-      aim.offset.set(0, offCenterLimit, 0)
+      aim.offset.x = 0
     }
 
     return new HitEvent(table.serialiseHit())

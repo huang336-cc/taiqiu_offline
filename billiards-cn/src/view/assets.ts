@@ -4,10 +4,7 @@ import {
   MeshPhysicalMaterial,
   Color,
   TextureLoader,
-  Texture,
-  CanvasTexture,
   BoxGeometry,
-  SRGBColorSpace,
   RepeatWrapping,
   Float32BufferAttribute,
   BufferGeometry,
@@ -20,33 +17,9 @@ import { Rules } from "../controller/rules/rules"
 import { Sound } from "./sound"
 import { TableMesh } from "./tablemesh"
 import { TableGeometry } from "./tablegeometry"
-import { Settings, getSkin, getEnvScene, getTableSkin } from "../utils/settings"
-import { getSceneTexture } from "./scenetexturefactory"
+import { Settings, getSkin, getTableSkin } from "../utils/settings"
 import { buildSceneEnvironment, GROUND_Z } from "./sceneenvironment"
 import { getClothTexture, getFrameTexture } from "./tableskinfactory"
-
-function hex(n: number): string {
-  return "#" + (n >>> 0).toString(16).padStart(6, "0").slice(-6)
-}
-
-/** 生成一面竖向渐变墙面贴图（顶 wallA → 底 wallB），用于 3D 房间四周。 */
-function makeWallTexture(def: {
-  wallA: number
-  wallB: number
-}): CanvasTexture {
-  const cv = document.createElement("canvas")
-  cv.width = 16
-  cv.height = 256
-  const ctx = cv.getContext("2d")!
-  const g = ctx.createLinearGradient(0, 0, 0, 256)
-  g.addColorStop(0, hex(def.wallA))
-  g.addColorStop(1, hex(def.wallB))
-  ctx.fillStyle = g
-  ctx.fillRect(0, 0, 16, 256)
-  const tex = new CanvasTexture(cv)
-  tex.colorSpace = SRGBColorSpace
-  return tex
-}
 
 export class Assets {
   /**
@@ -87,15 +60,6 @@ export class Assets {
   rules: Rules
   background: Mesh
   table: Mesh
-  /** 背景未就绪时暂存的场景 id（item 4） */
-  pendingScene: string | null = null
-
-  /**
-   * 实景照片缓存（Request D-v2）：命中 photo 的场景加载真实照片，
-   * 贴到 3D 房间（天空盒）的地面，营造「台球桌放在真实场景里」的 3D 效果；
-   * 其余场景地面用程序化贴图。以 scene id 为键缓存，避免重复请求。
-   */
-  private static photoCache = new Map<string, Texture>()
 
   /**
    * 当前 3D 场景环境（Request D-v3）：足球场/篮球场/雪山场景的真实几何环境。
@@ -103,6 +67,17 @@ export class Assets {
    * 透视错乱（用户反馈 v1.0.14 足球场看起来像无限延伸的纯色平面）。
    */
   sceneEnv: Group | null = null
+
+  /**
+   * 场景环境缓存（v1.3.63）。
+   *
+   * 旧实现每次切场景都重建 Group、并且**只 dispose 材质、从不 dispose
+   * geometry** —— 8 个场景来回切会持续泄漏 GPU vertex buffer。
+   * 改为按 sceneId 缓存（顺带省掉每次上百毫秒的重建），LRU 上限 3：
+   * 8 个场景但同屏只可能有一个，3 足够覆盖「A↔B 反复横跳」的常见路径。
+   */
+  private static envCache = new Map<string, Group>()
+  private static readonly ENV_CACHE_LIMIT = 3
 
   sound: Sound
 
@@ -136,8 +111,6 @@ export class Assets {
     room.scale.set(80, 40, 30)
     room.position.set(0, 0, GROUND_Z + 15)
     this.background = room
-    this.applySceneToBackground(this.pendingScene ?? Settings.get().scene)
-    this.pendingScene = null
     this.done()
     importGltf(this.rules.asset, (m) => {
       this.rules.scaleTableModel?.(m.scene)
@@ -230,39 +203,13 @@ export class Assets {
   }
 
   /**
-   * 取场景实景照片贴图（Request D-v2）：命中 photo 的场景加载真实照片并缓存，
-   * 用于 3D 房间地面的贴图；无照片则返回 null（改用程序化地面贴图）。
+   * v1.3.63：8 个场景全部有了程序化几何环境（房间 / 沙滩 / 森林 / 雪山 /
+   * 足球 / 篮球 / 办公室 / 网咖），立方体房间这条兜底路径已经没人走。这里
+   * 保留空实现，是为了让 view.applyScene 的 else 分支不必改动 —— 万一某个
+   * 场景的 buildSceneEnvironment 返回 null，也只是没有背景，不会崩。
    */
-  static getPhotoTexture(sceneId: string): Texture | null {
-    const def = getEnvScene(sceneId)
-    if (!def.photo) return null
-    const cached = Assets.photoCache.get(sceneId)
-    if (cached) return cached
-    const tex = new TextureLoader().load(
-      def.photo,
-      (t) => {
-        t.colorSpace = SRGBColorSpace
-        t.needsUpdate = true
-      },
-      undefined,
-      () => {
-        /* 照片缺失则回退到程序化贴图，不影响游戏 */
-        Assets.photoCache.delete(sceneId)
-      }
-    )
-    tex.colorSpace = SRGBColorSpace
-    Assets.photoCache.set(sceneId, tex)
-    return tex
-  }
-
-  /**
-   * 应用环境场景（item 4 / Request D-v2）：把 3D 房间（天空盒）内部按 6 面
-   * 分别贴图——地面放实景照片（或程序化贴图），四周墙面用场景色渐变，顶面更暗，
-   * 台球桌置于房间中央，从而得到「台球桌放在真实场景里的 3D 效果」。
-   * 背景为异步加载，未就绪时暂存，待加载完成回调里补应用。
-   */
-  recolorScene(sceneId: string): void {
-    this.applySceneToBackground(sceneId)
+  recolorScene(_sceneId: string): void {
+    /* 立方体房间已退役，无需再按 6 面重新贴图 */
   }
 
   /**
@@ -271,89 +218,61 @@ export class Assets {
    * null（继续走立方体房间路径）。
    */
   getSceneEnvironment(sceneId: string): Group | null {
-    // 释放旧环境：仅 dispose 单次引用的材质，跳过被多 mesh 引用的「共享材质」，
-    // 防止误销毁模块级单例（足球/篮球场景里有此情况，会导致场景切换后渲染断裂）。
-    if (this.sceneEnv) {
-      const refCount = new Map<unknown, number>()
-      this.sceneEnv.traverse((o) => {
-        const m = o as Mesh
-        if (m.isMesh && m.material) {
-          const mats = Array.isArray(m.material) ? m.material : [m.material]
-          for (const mm of mats) {
-            refCount.set(mm, (refCount.get(mm) || 0) + 1)
-          }
-        }
-      })
-      this.sceneEnv.traverse((o) => {
-        const m = o as Mesh
-        if (m.isMesh && m.material) {
-          const mats = Array.isArray(m.material) ? m.material : [m.material]
-          for (const mm of mats) {
-            if (
-              refCount.get(mm) === 1 &&
-              mm &&
-              typeof mm.dispose === "function"
-            ) {
-              mm.dispose()
-            }
-          }
-        }
-      })
-      this.sceneEnv = null
+    const cached = Assets.envCache.get(sceneId)
+    if (cached) {
+      // 命中：移到 Map 末尾（Map 保序 ⇒ 首项即最久未用）
+      Assets.envCache.delete(sceneId)
+      Assets.envCache.set(sceneId, cached)
+      this.sceneEnv = cached
+      return cached
     }
     const env = buildSceneEnvironment(sceneId)
+    if (!env) {
+      this.sceneEnv = null
+      return null
+    }
+    Assets.envCache.set(sceneId, env)
+    this.evictEnvCache()
     this.sceneEnv = env
     return env
   }
 
-  private applySceneToBackground(sceneId: string): void {
-    if (!this.background) {
-      this.pendingScene = sceneId
-      return
-    }
-    const def = getEnvScene(sceneId)
-    const photo = Assets.getPhotoTexture(sceneId)
-
-    // 地面：实景照片（或程序化贴图，其足球/篮球等已带场地线，质感更真）
-    const floorMat = new MeshBasicMaterial({
-      map: photo ?? getSceneTexture(sceneId),
-      side: BackSide,
-      toneMapped: false,
-      fog: false,
-    })
-    // 四周墙面：场景色竖直渐变（不抢戏，让地面照片更突出）
-    const wallMat = new MeshBasicMaterial({
-      map: makeWallTexture(def),
-      side: BackSide,
-      toneMapped: false,
-      fog: false,
-    })
-    // 顶面：更暗的场景色
-    const ceilMat = new MeshBasicMaterial({
-      color: def.wallB,
-      side: BackSide,
-      toneMapped: false,
-      fog: false,
-    })
-
-    // BoxGeometry 的 6 个面材质槽：0:+x 1:-x 2:+y(顶) 3:-y(地) 4:+z 5:-z
-    // 地面(3)与前后墙(4,5)用实景照片（桌面在场景里、身后即真实场景），
-    // 两侧墙(0,1)用场景色渐变，顶面(2)更暗。floorMat 在多个面共享实例。
-    const mats = [wallMat, wallMat, ceilMat, floorMat, floorMat, floorMat]
-
-    this.background.traverse((child) => {
-      if (!child.isMesh) return
-      // 背景是「盒子房间」，玩家从内部往外看。把每个 mesh 的材质替换为
-      // 一个不受光照、雾效与色调映射影响的 MeshBasicMaterial 数组（6 面），
-      // 保证贴图原色显示，从根本上杜绝「贴图存在但渲染全黑」。
-      const oldMats = Array.isArray(child.material)
-        ? child.material
-        : [child.material]
-      child.material = mats
-      for (const om of oldMats) {
-        if (om && typeof om.dispose === "function") om.dispose()
+  /** 淘汰超出上限的最久未用环境，并彻底释放其 GPU 资源 */
+  private evictEnvCache(): void {
+    const cache = Assets.envCache
+    while (cache.size > Assets.ENV_CACHE_LIMIT) {
+      // 跳过当前正在使用的那个（它可能仍挂在 scene 上）
+      let victimKey: string | null = null
+      for (const [k, v] of cache) {
+        if (v !== this.sceneEnv) {
+          victimKey = k
+          break
+        }
       }
+      if (victimKey === null) break
+      const victim = cache.get(victimKey)!
+      cache.delete(victimKey)
+      Assets.disposeEnvGroup(victim)
+    }
+  }
+
+  /**
+   * 彻底释放一个环境 Group 的 GPU 资源。
+   *
+   * 旧实现只 dispose 材质、从不 dispose geometry —— 8 个场景来回切会持续
+   * 泄漏 vertex buffer。这里两者都释放：sceneenvironment.ts 全程只用
+   * 「顶点色 MeshBasicMaterial」，**没有任何贴图**，所以不存在误删共享
+   * 贴图/材质单例的隐患，可以放心全部 dispose。
+   */
+  private static disposeEnvGroup(root: Group): void {
+    root.traverse((child: any) => {
+      if (!child.isMesh && !child.isLine && !child.isPoints) return
+      child.geometry?.dispose?.()
+      const mat = child.material
+      if (Array.isArray(mat)) mat.forEach((m) => m?.dispose?.())
+      else mat?.dispose?.()
     })
+    root.clear()
   }
 
   /** 桌台上色的唯一实现，首次加载与实时换肤共用，避免两份逻辑走偏 */

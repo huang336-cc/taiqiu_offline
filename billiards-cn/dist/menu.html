@@ -114,6 +114,34 @@
             <button class="seg-btn" data-opponent="Professional">
               <span class="seg-icon">●</span>电脑 · 专业
             </button>
+            <!-- v1.3.65：局域网对战（一台手机建房、另一台输入 IP 加入，
+                 双方需连在同一个 Wi-Fi）。仅安卓 App 内可用。 -->
+            <button class="seg-btn" data-opponent="lan">
+              <span class="seg-icon">●</span>局域网对战
+            </button>
+          </div>
+          <div class="lan-panel" id="lanPanel" hidden>
+            <div class="lan-row">
+              <span class="lan-label">建房</span>
+              <button type="button" class="lan-btn primary" id="lanHostBtn">
+                创建房间（你先开球）
+              </button>
+            </div>
+            <div class="lan-row">
+              <span class="lan-label">加入</span>
+              <input
+                class="lan-input"
+                id="lanPeerInput"
+                type="text"
+                inputmode="numeric"
+                placeholder="对方 IP，如 192.168.1.8"
+                autocomplete="off"
+              />
+              <button type="button" class="lan-btn" id="lanJoinBtn">加入</button>
+            </div>
+            <p class="lan-tip">
+              两台手机需连在同一个 Wi-Fi。建房后把本机 IP 告诉对方；对方在上方输入后点「加入」。
+            </p>
           </div>
         </section>
 
@@ -168,14 +196,14 @@
         <div class="scroll">
           <p class="seg-hint">点击色块即可实时切换球桌周围的背景与氛围光</p>
           <div class="skin-cards" id="sceneCards">
-            <button class="skin-card" data-scene="room" data-pattern="room" data-c1="#3a3f4b" data-c2="#2a2e38" disabled>
-              <span class="skin-swatch"></span><span class="skin-name">室内</span><span class="lock-badge">暂不可用</span>
+            <button class="skin-card" data-scene="room" data-pattern="room" data-c1="#3a3f4b" data-c2="#2a2e38">
+              <span class="skin-swatch"></span><span class="skin-name">室内</span>
             </button>
-            <button class="skin-card" data-scene="beach" data-pattern="beach" data-c1="#f4d9a0" data-c2="#e0a85e" disabled>
-              <span class="skin-swatch"></span><span class="skin-name">沙滩</span><span class="lock-badge">暂不可用</span>
+            <button class="skin-card" data-scene="beach" data-pattern="beach" data-c1="#f4d9a0" data-c2="#e0a85e">
+              <span class="skin-swatch"></span><span class="skin-name">沙滩</span>
             </button>
-            <button class="skin-card" data-scene="forest" data-pattern="forest" data-c1="#2f5d34" data-c2="#183218" disabled>
-              <span class="skin-swatch"></span><span class="skin-name">原始森林</span><span class="lock-badge">暂不可用</span>
+            <button class="skin-card" data-scene="forest" data-pattern="forest" data-c1="#2f5d34" data-c2="#183218">
+              <span class="skin-swatch"></span><span class="skin-name">原始森林</span>
             </button>
             <button class="skin-card" data-scene="snow" data-pattern="snow" data-c1="#dbe7f0" data-c2="#a6bace" data-photo="assets/scenes/snow.jpg">
               <span class="skin-swatch"></span><span class="skin-name">雪山</span>
@@ -186,11 +214,14 @@
             <button class="skin-card" data-scene="basketball" data-pattern="basketball" data-c1="#caa05a" data-c2="#9a6a2a" data-photo="assets/scenes/basketball.jpg">
               <span class="skin-swatch"></span><span class="skin-name">篮球场</span>
             </button>
-            <button class="skin-card" data-scene="office" data-pattern="office" data-c1="#c9d2dc" data-c2="#92a0b0" disabled>
-              <span class="skin-swatch"></span><span class="skin-name">办公室</span><span class="lock-badge">暂不可用</span>
+            <button class="skin-card" data-scene="ufc" data-pattern="ufc" data-c1="#3a4350" data-c2="#2e3642">
+              <span class="skin-swatch"></span><span class="skin-name">UFC八角笼</span>
             </button>
-            <button class="skin-card" data-scene="cybercafe" data-pattern="cybercafe" data-c1="#281a4a" data-c2="#0a0618" disabled>
-              <span class="skin-swatch"></span><span class="skin-name">网吧</span><span class="lock-badge">暂不可用</span>
+            <button class="skin-card" data-scene="office" data-pattern="office" data-c1="#c9d2dc" data-c2="#92a0b0">
+              <span class="skin-swatch"></span><span class="skin-name">办公室</span>
+            </button>
+            <button class="skin-card" data-scene="cybercafe" data-pattern="cybercafe" data-c1="#281a4a" data-c2="#0a0618">
+              <span class="skin-swatch"></span><span class="skin-name">网吧</span>
             </button>
           </div>
         </div>
@@ -716,6 +747,139 @@
           <p class="about-text dim">
             本应用自 v1.0.4（2026-08-03）起的全部版本变更记录，新版本置顶。详细条目可在每个版本下展开。
           </p>
+
+<div class="setting-group">
+<h3>v1.3.72 · 2026-09-03 16:00:00</h3>
+<p class="about-text dim"><b>v1.3.72 一项：根治 v1.3.71 仍显示「本机 IP 不可用 / App 版本过低」的真因——不是版本号问题，而是 JSBridge 注解根本没暴露给 JS。本机 android-34.jar 是老版 SDK（仅 43 个 webkit 类，缺 <code>android/webkit/JavascriptInterface.class</code>），之前用 renderstub 提供等价定义，但把 <code>@Retention</code> 写成了 <code>CLASS</code>；javac 随之把 <code>@JavascriptInterface</code> 编译成 <strong>RuntimeInvisibleAnnotations</strong>，d8 不把它写进 dex 的 <code>annotation_directory_item</code>（实测 <code>LanBridge</code> 该偏移为 0），ART 侧 <code>addJavascriptInterface()</code> 反射读不到，结果是 <code>window.__lan</code> 上一个方法都不暴露——<code>typeof bridge.lanInfo === "function"</code> 恒为 false，页面只能给出「App 版本过低」死文案。修复：① 把 stub 的 retention 改成 <code>RUNTIME</code>，并强制编译成 .class 打进 renderstub.jar（去掉 <code>if [ ! -f ]</code> 重建守卫，否则改了源码不进 jar）；② 顺带加一条 Java 主动推送兜底双通道（<code>MainActivity.onPageFinished</code> → <code>lanBridge.pushLanInfo()</code> → <code>window.__lanPush</code> 缓存），即使注解再因任何 ROM 失效，页面也能拿到 IP。修复后 dex 解析确认 <code>LanBridge</code> 的 <code>annotation_directory_item</code> 偏移从 0 → 25592，注解正常入库</b></p>
+<ul class="about-text dim">
+<li><b>JSBridge 注解 retention 改 RUNTIME（根因修复）</b>：<code>renderstub/android/webkit/JavascriptInterface.java</code> 的 <code>@Retention(RetentionPolicy.CLASS)</code> 改为 <code>@Retention(RetentionPolicy.RUNTIME)</code>，并补写注释说明为何必须是 RUNTIME（WebView 框架靠反射 <code>getAnnotation(JavascriptInterface.class)</code> 筛方法，RuntimeInvisible 注解不会进 dex，方法永不暴露）。javap 验证：<code>LanBridge.class</code> 的 RuntimeVisibleAnnotations 从 0 → 7、RuntimeInvisible 从 6 → 0。</li>
+<li><b>build-apk.sh 强制重建 stub jar</b>：<code>billiards-apk/build-apk.sh</code> 编译段去掉 <code>if [ ! -f renderstub.jar ]</code> 守卫，改为每次 <code>javac</code> 先把 stub 源码（<code>renderstub/android/webkit/*.java</code>）编译成 .class 到 <code>obj/stubout</code>，连 .class 与 .java 一起打进 <code>renderstub.jar</code> 供主编译 <code>-cp</code> 解析。避免「改了 stub 源码却不进 jar」导致修复无效（这正是 v1.3.71 的真坑）。</li>
+<li><b>Java 主动推送兜底通道（双保险）</b>：<code>LanBridge.java</code> 新增 <code>pushLanInfo()</code>（public，无需 <code>@JavascriptInterface</code>，由 Java 经 <code>evaluateJavascript</code> 直接触发），把 <code>lanInfo()</code> JSON 推到页面 <code>window.__lanPush</code>；<code>MainActivity.java</code> 的 <code>WebViewClient.onPageFinished</code> 内 <code>postDelayed(600ms)</code> 调一次 <code>lanBridge.pushLanInfo()</code>（等页面 JS 注册好 <code>__lanPush</code> 再推，避免被吞）。主通道是页面经 <code>__lan.lanInfo()</code> 拉取，推送是独立兜底，两者任一拿到即显示。</li>
+<li><b>页面侧去掉「App 版本过低」死胡同</b>：<code>browsercontainer.ts</code> 静态字段 <code>lanPushCache</code> + 静态方法 <code>installLanPush()</code>（constructor 末尾注册 <code>globalThis.__lanPush</code>），新增静态 <code>detailFromRaw(raw)</code> 把 lanInfo JSON 按分级（IP / error / 未连 Wi-Fi / 未分配）产出 detail。<code>readInitialLanDetail()</code> 改为：优先 <code>bridge.lanInfo()</code> → 否则 <code>bridge.lanIp()</code> → 否则回退 <code>lanPushCache</code> → 都没有才返回占位等轮询；<strong>不再写死「App 版本过低」</strong>，改为等待推送 / scheduleIpPoll 轮询。</li>
+<li><b>约束</b>：本轮只动 JSBridge 暴露机制与一条兜底通道，未动 <code>LanServer.java</code> 协议、未动弹窗 CSS、未动物理/AI。stub 的 <code>@Retention(RUNTIME)</code> 是硬约束——若误改回 CLASS，<code>window.__lan</code> 方法会再次全部消失（构建后即 v1.3.71 复现）；build-apk.sh 必须每次重建 renderstub.jar（不可加 <code>if [ ! -f ]</code> 守卫）；<code>__lanPush</code> 仅在 <code>bridge</code> 对象存在但方法偶发未就绪时作兜底，主显示仍走 <code>bridge.lanInfo()</code> 拉取。</li>
+</ul>
+</div>
+
+<div class="setting-group">
+<h3>v1.3.71 · 2026-09-03 15:30:00</h3>
+<p class="about-text dim"><b>v1.3.71 一项：根治 v1.3.70 的「一直显示正在获取本机 IP…」——v1.3.70 同步调一次 <code>__lan.lanInfo()</code> 后只在拿到空串时显示「正在获取本机 IP…」占位，**没有重试机制**。在用户真机上 WebView 与 Java 桥的通讯偶发有 100~500ms 延迟（evaluateJavascript 反射调用 / JS context 初始化竞争），首次调 <code>lanInfo()</code> 返回空后弹窗就**永远卡在占位文案**。修复：<code>browsercontainer.initLanMode</code> 在写完 sticky 弹窗后立刻挂三个 <code>setTimeout</code> 轮询（300/900/2500ms）主动调 <code>__lan.lanInfo()</code>，拿到 IP 或明确诊断就停止刷新；2500ms 那次是 force 模式，**即使 JSBridge 永远不通也强制刷成「本机 IP 不可用 + 升级/重装指引」**，不再让用户干等 8+ 秒看到一个无意义的占位</b></p>
+<ul class="about-text dim">
+<li><b>scheduleIpPoll 主动轮询</b>：<code>browsercontainer.ts</code> 新增私有方法 <code>scheduleIpPoll(delayMs, force)</code>。每次重试前先看 <code>notification.stickyKey</code> 仍是 <code>"lan-room"</code>（避免弹窗已被 dismiss 时还刷），再调 <code>readInitialLanDetail()</code> 拿最新 IP。已有 IP / 明确诊断就跳过（force=false 时）；force=true 时无视该判断，并当拿到的仍是「正在获取本机 IP…」占位时**改写为「本机 IP 不可用」+ 2.5s 内 JSBridge 仍未返回 IP 的诊断**+ 升级 / 重装指引。</li>
+<li><b>300/900/2500ms 三次重试</b>：initLanMode 写完初始 sticky 弹窗后，若 detail 是占位 / 房间状态（说明首次 lanInfo 失败），挂三个 setTimeout 调 scheduleIpPoll。2500ms 那次 force=true 兜底——即使 JSBridge 真的完全没注入到 window，2.5s 后弹窗也会变成明确诊断，用户知道是 App 兼容问题（升级 / 重装），而不是「卡死了」。</li>
+<li><b>readInitialLanDetail 错误更明确</b>：<code>readInitialLanDetail</code> 在 JSBridge 不可用 / 缺方法 / 抛异常时返回明确诊断（label: "本机 IP 不可用" + 具体原因 + 升级提示），不再回退到「正在获取本机 IP…」兜底。占位文案只用于「bridge 存在但首次 lanInfo 返回空」这种时序竞争场景，scheduleIpPoll 会接管后续刷新。</li>
+<li><b>约束</b>：本轮仅改 page 端，Java 端 / 弹窗 CSS / 物理模型 / AI 全部不动。轮询只在 initLanMode 写完初始 detail 之后挂载；initLanMode 失败 / 异常时不会挂轮询。LanRelay 后续 <code>showRoomInfo</code> 仍会覆盖（拿到 started 事件的 IP 时），与 scheduleIpPoll 不冲突（双方都用 stickyKey="lan-room"，按覆盖逻辑后者赢）。</li>
+</ul>
+</div>
+
+<div class="setting-group">
+<h3>v1.3.70 · 2026-09-03 15:00:00</h3>
+<p class="about-text dim"><b>v1.3.70 两项：① 彻底根治建房弹窗「连了 Wi-Fi 仍停在等待对手加入…」——v1.3.69 的修复依赖 LanServer.bind 成功后 emit started 事件带 IP，但实测在某些 Android ROM 上 emit 链断（WebView evaluateJavascript 失败 / acceptLoop 异常被吞 / 事件到 page 已晚于页面进入 idle），导致 page 端根本收不到 started，弹窗永远显示 initLanMode 占位文案。改为 <code>browsercontainer.initLanMode</code> 进来时<strong>同步</strong>调 <code>__lan.lanInfo()</code> 取一次 IP 直接写进 sticky 弹窗 detail——这样无论 started 事件是否到达，弹窗一出来就有 IP 或具体诊断。Java 端与 LanRelay 链路不变（v1.3.69 改造保留，作为第二条冗余）；② 弹窗 UI 风格统一到游戏底栏——蓝青渐变 + 玻璃感的旧风格与底栏金棕木纹按钮割裂，改为木纹金棕渐变 + 2px 金边 + 内白高光 + 外深阴影，与底栏触发按钮同款配色（<code>linear-gradient(180deg, #6b4a22 0%, #4a3014 100%) + 2px solid #c89534 + box-shadow</code>），winner/loser 配色保持不变</b></p>
+<ul class="about-text dim">
+<li><b>initLanMode 同步读 IP（核心修复）</b>：<code>browsercontainer.ts</code> 新增私有方法 <code>readInitialLanDetail()</code>，同步调 <code>globalThis.__lan.lanInfo()</code>（v1.3.68+ 新增）取 JSON，按分级回填 detail：有 IP→「本机房间 IP」+ 复制按钮；error 非空→「取本机 IP 失败」+ hint；<code>hasWifiIface === false</code>→「未连接 Wi-Fi」+ hint；其它→「Wi-Fi 未分配 IP」+ hint。错误吞掉（JSBridge 不可用 / JSON 解析失败）回退到「正在获取本机 IP…」。<code>initLanMode</code> 写 sticky 弹窗时改用 <code>readInitialLanDetail()</code>（host 端），join 端不变。LanRelay 后续 <code>showRoomInfo</code> 仍会覆盖（拿到更准的 IP）。</li>
+<li><b>弹窗 UI 与底栏统一（CSS 改造）</b>：<code>dist/css/notification.css</code> 默认 Info 主题（:root 里的 --notification-bg / --notification-bg-gradient / --notification-border-clr）从蓝青冷色（#1464c8→#00b4a0）改为木纹金棕渐变（<code>linear-gradient(180deg, #6b4a22 0%, #4a3014 100%) + 2px solid #c89534</code>），与 <code>bottombar-v2.css</code> 的 <code>.seg-trigger</code> 同款。文字色从纯白改为亮奶白 #fff5d8（与底栏图标同色），score-label 改为 #ffd87a，winner/loser 配色完全保留。<code>.notification-banner</code> box-shadow 改为底栏同款（<code>inset 0 1px 2px rgba(255,255,255,0.18), 0 4px 12px rgba(0,0,0,0.5)</code>）。<code>.notification-detail</code> 主信息块也改为同款木纹金棕（之前是金边玻璃），<code>.notification-detail-label</code> 文字加粗 700、亮度 0.92、颜色 #ffd87a。<code>.notification-icon</code> 加 <code>filter: drop-shadow(0 1px 1px rgba(0,0,0,0.45))</code> 让 emoji 在深底上更立体。</li>
+<li><b>JSBridge 协议保留</b>：本轮不改 Java 端（<code>LanServer.LanBridge</code> 完全不变），只改 page 端的初始化时机（不等事件，主动调）。如果旧版 Java 不支持 <code>lanInfo()</code>（v1.3.67/68 之前），<code>readInitialLanDetail</code> 自动回退到 <code>lanIp()</code> 纯 IP 字符串；纯字符串非 JSON 走 catch 分支直接当 IP 显示——不会崩。</li>
+<li><b>约束</b>：本轮 IP 修复不再依赖任何异步事件；UI 改造仅 Info 主题，winner/loser/Foul/GameOver 维持原配色（庆祝/失败场景不适合金棕）；木纹色阶与底栏 <code>.seg-trigger</code> 必须同步改——若以后调整底栏配色需同步改 notification.css 的 :root。</li>
+</ul>
+</div>
+
+<div class="setting-group">
+<h3>v1.3.69 · 2026-09-03 14:00:00</h3>
+<p class="about-text dim"><b>v1.3.69 三项：① 彻底修复建房弹窗不显示本机 IP——根因是 v1.3.67/68 都靠「LanServer started 事件 → page 调 JSBridge 异步取 lanInfo」二段链路，实测某些时序下 page 没收到事件或调用失败，detail 永远停在「等待对手加入…」。改为 LanServer.bind 成功后<strong>同步</strong>取一次网络诊断（与 LanBridge.lanInfo() 同源算法），把 ip/iface/hasWifiIface/error 一起塞进 started 事件 emit 给 page，弹窗一次就到位；同时把 v1.3.68 的 800ms/2000ms 重试降级为「旧版 APK 没带 ip 字段时的兜底」，有 ip 时不再抖动；② AI 力度物理化（v1.3.68 改动一并纳入本条交付）——按真实物理反解出杆速度，物体球滑动段等效减速 1.84 倍于纯滚动、低杆剩余滚动速度实测拟合（−0.45 低杆只剩 48%）、袋口距离按真实袋心与袋半径换算（修正了内缩点导致的 3.0R 偏差），实测 800 局摔袋率 10.6% → 0.3%，进球率保持 82.6%；③ 修变更履历格式——v1.3.66/67/68 三版只写概要段落没有「修改方式」ul 子条目，破坏 v1.3.65 起沿用的格式约束，三版一并补回详细的修改方式与约束 li</b></p>
+<ul class="about-text dim">
+<li><b>本机 IP 同步带回（核心修复）</b>：<code>LanServer.java</code> 的 <code>Listener.onStarted</code> 接口签名扩展，新增 <code>ip / iface / hasWifiIface / error</code> 四参；新增私有方法 <code>probeLanInfo()</code>，算法与 LanBridge.lanInfo() 同源（遍历 NetworkInterface，wlan&gt;eth&gt;其它优先级，跳过黑名单 ap0/p2p/rndis/bt-pan/dummy/sit/gre/ip6tnl，跳过 169.254.* link-local），bind 成功后立即调用并把结果随 started 事件 emit 出去。<code>LanBridge.java</code> 的 <code>onStarted</code> 回调改写：emit 的 JSON 由 <code>{k,port}</code> 扩成 <code>{k,port,ip,iface,hasWifiIface,error}</code>。</li>
+<li><b>page 端 onStatus 直接吃事件字段</b>：<code>lanrelay.ts</code> 的 <code>LanStatus</code> 接口同步加 <code>ip/iface/hasWifiIface/error</code> 字段；<code>onStatus("started")</code> 改写：收到后直接把事件字段组装成 <code>LanInfo</code> 喂给 <code>showRoomInfo(info)</code>，避免再次异步调 JSBridge。<code>showRoomInfo</code> 改可选入参（<code>info?: LanInfo</code>），无参时回退到 <code>readLanInfo()</code>（兼容旧版 APK）。started.ip 为空时仍走原 <code>scheduleIpRetry(800/2000)</code> 兜底逻辑。</li>
+<li><b>AI 力度物理化（v1.3.68 改动）</b>：新建 <code>src/network/bot/powerphysics.ts</code>，导出 <code>aRoll / aObject / POCKET_RADIUS_CORNER(2.1R) / POCKET_RADIUS_MIDDLE(1.64R) / fSpin / strikeFactor / cueSpeedFor</code>。<code>professional.ts</code> 接入：删旧 <code>objectBallSpeedNeeded / cueSpeedNeeded / spinTravelFactor</code> 与 <code>G_ACCEL / FELT_MU / ROLL_DECEL</code>，<code>choosePower</code> 改调 <code>cueSpeedFor(...)</code>（margin=1.05，cutCos&lt;0.5 ×1.08，摔袋风险封顶 56R，上下限 22R~90R）；<code>Plan</code> 加 <code>ballToPocketTrue / pocketRadius</code> 字段（真实袋心与袋半径，不再用 0.94 内缩点）；<code>enumeratePlans</code> 同步换算。新建 <code>tools/harness/potcalib.ts</code> 三段校准实验（A 段验 a_obj/a_roll=1.843，B 段拟合 fSpin，C 段定 margin）。</li>
+<li><b>变更履历格式修正</b>：<code>dist/menu.html</code> 给 v1.3.66/67/68/69 四版都补回与 v1.3.65 同构的「概要段 + ul 子条目（每个修改点一条 li，含具体文件/类/方法）+ 末尾约束 li」结构，原 v1.3.66/67/68 只有概要段落，破坏格式约束。</li>
+<li><b>约束</b>：本机 IP 修复同时改 <code>LanServer.java</code>（接口加 4 参）+ <code>LanBridge.java</code>（emit JSON 格式加字段）+ <code>lanrelay.ts</code>（LanStatus 加字段、showRoomInfo 改可选入参），三处协议需同时生效否则回退到旧行为；AI 物理化新增模块仅 <code>powerphysics.ts</code> + <code>potcalib.ts</code>（harness），未动 <code>model/physics/</code> 任何常量、未动碰撞/弹库/进袋判定；变更履历今后每版必须给出 ul 子条目（不可仅写概要）。</li>
+</ul>
+</div>
+
+<div class="setting-group">
+<h3>v1.3.68 · 2026-09-03 13:00:00</h3>
+<p class="about-text dim"><b>v1.3.68 两项：① 修复建房后本机 IP 显示不出来——Java 端新增 lanInfo() 诊断接口（返回 IP + 网口名 + 是否检测到 Wi-Fi + 候选地址 + 异常原因，网口优先级 wlan &gt; eth 并排除热点/USB共享/链路本地地址），页面侧按诊断分级提示（没连 Wi-Fi / Wi-Fi 已连但没拿到 IPv4 / 取地址异常）并给出排查指引，房间启动后 800ms 与 2000ms 各重试一次（DHCP 下发延迟）；顺带修复「在菜单填了带端口的地址会拼成 host:9999:24816」的 bug。② AI 力度完全物理化——按真实物理反解出杆速度：物体球滑动段等效减速 1.84 倍于纯滚动、低杆剩余滚动速度实测拟合（−0.45 低杆只剩 48%）、袋口距离按真实袋心与袋半径换算（修正了内缩点导致的 3.0R 偏差），实测 800 局摔袋率 10.6% → 0.3%，进球率保持 82.6%。</b></p>
+<ul class="about-text dim">
+<li><b>本机 IP 诊断接口（v1.3.68 入口修复，v1.3.69 改为同步带回）</b>：<code>LanBridge.java</code> 新增 <code>@JavascriptInterface String lanInfo()</code>，返回 JSON <code>{ip,iface,hasWifiIface,candidates[],error}</code>；接口优先级 <code>wlan=3 &gt; eth=2 &gt; 其它=1</code>；黑名单 <code>ap0/p2p/rndis/bt-pan/dummy/sit/gre/ip6tnl</code>；跳过 <code>169.254.*</code> link-local。<code>lanIp()</code> 保留为兼容包装（内部 <code>parseJsonField(lanInfo(),"ip")</code>）；新增 <code>rankOf / isBlacklisted / parseJsonField</code> 私有辅助。</li>
+<li><b>页面分级提示与重试</b>：<code>lanrelay.ts</code> 新增 <code>LanInfo</code> 接口与 <code>readLanInfo()</code>（优先 <code>lanInfo()</code> JSON，回退 <code>lanIp()</code>）；<code>showRoomInfo()</code> 改写为无参四级：有 IP→「本机房间 IP」+ 复制按钮；error 非空→「取本机 IP 失败」+ 异常原因 + hint；<code>!hasWifiIface</code>→「未连接 Wi-Fi」+ 提示双方需同 Wi-Fi；其它→「Wi-Fi 未分配 IP」+ 指引到设置查地址口述给对手。<code>onStatus("started")</code> 触发后 <code>scheduleIpRetry(800)/scheduleIpRetry(2000)</code> 各重试一次。</li>
+<li><b>菜单 host:port 拼接 bug</b>：<code>lanrelay.ts</code> 的 <code>connect()</code> 旧版无条件拼 <code>:LAN_DEFAULT_PORT</code>，若用户在菜单里填了带端口的地址（如 <code>192.168.1.5:9999</code>）会拼成 <code>ws://1.2.3.4:9999:24816</code> 这种非法 URL。改为正则 <code>/^(.*):(\d{1,5})$/</code> 拆端口（仅当尾部是纯数字且不含冒号，避免误伤 IPv6）。</li>
+<li><b>AI 力度完全物理化</b>：新建 <code>src/network/bot/powerphysics.ts</code>，导出 <code>aRoll / aObject / POCKET_RADIUS_CORNER(2.1R) / POCKET_RADIUS_MIDDLE(1.64R) / fSpin / strikeFactor / cueSpeedFor</code>。三段校准：物体球滑动段等效减速 1.84 倍于纯滚动（实测 <code>a_obj/a_roll = 1.843</code>）；低杆剩余滚动速度实测拟合 <code>f(sy) = 0.714 + 0.58·sy</code>（−0.45 低杆实测只剩 48%，原解析式 0.393 多给 22% 力度）；margin=1.05（C 段实测：直线球最小进袋 vCue 0.81~1.43 m/s，原 1.15 给 0.97~1.69 超供 18~20%）。</li>
+<li><b>professional.ts 接入物理反解</b>：删除旧 <code>objectBallSpeedNeeded / cueSpeedNeeded / spinTravelFactor</code> 与 <code>G_ACCEL / FELT_MU / ROLL_DECEL</code>；<code>Plan</code> 加 <code>ballToPocketTrue / pocketRadius</code> 字段；<code>enumeratePlans</code> 内换算（<code>POCKET_INSET_FACTOR=0.94</code> → 真实袋心 + 袋半径分角/中）；<code>choosePower</code> 重写为 <code>cueSpeedFor(...)</code> 调用（margin 1.05，cutCos&lt;0.5 ×1.08，摔袋风险封顶 56R，上下限 22R~90R）；<code>safetyOrFallback</code> 的 <code>lightPower</code> 改调 <code>cueSpeedFor</code>。</li>
+<li><b>potcalib 校准实验 harness</b>：新建 <code>tools/harness/potcalib.ts</code>（~250 行三段校准）。A 段：物体球纯平动滚向袋心，<code>d ∈ {0.3,0.5,0.75,1.0,1.5,2.0,2.5}</code> × 袋型（角/中），二分找最小落袋速度。B 段：固定 <code>d_obj=1.0</code>、cutCos=1.0，扫 <code>spin.y ∈ {0,−0.22,−0.28,−0.38,−0.45,+0.26}</code>，回归 <code>f(sy)</code>。C 段：<code>d_obj × cutCos × 袋型</code> 网格扫 vCue，输出最小进袋速度 + 上界，定 margin。模型预测 vs 实测误差 −1.9% ~ −6.0%（模型保守）。</li>
+<li><b>notification hint 渲染</b>：<code>notification.ts</code> 的 <code>NotificationDetail</code> 加可选 <code>hint?: string</code>；<code>renderDetail</code> 渲染 <code>.notification-detail-hint</code>；复制按钮改为仅当 value 匹配 <code>/^[0-9a-zA-Z.:_-]{4,64}$/</code> 时才渲染（避免「未连接 Wi-Fi」这类文案被误复制）。<code>dist/css/notification.css</code> 加 <code>.notification-detail-hint</code>（12px、opacity .8、白色虚线上边框、<code>white-space: pre-wrap</code>）。</li>
+<li><b>约束</b>：本机 IP 修复（v1.3.68）的 LanInfo 分级仅在 page 端实现，Java 端仍按「取不到就空串」语义；800ms/2000ms 重试在 v1.3.69 改为「仅在 started.ip 为空时启用」，有 ip 时不抖动避免覆盖已显示的真实地址；AI 物理化仅新增模块、未动 <code>model/physics/</code> 常量、未动碰撞/弹库/进袋判定。</li>
+</ul>
+</div>
+
+<div class="setting-group">
+<h3>v1.3.67 · 2026-09-03 09:00:00</h3>
+<p class="about-text dim"><b>v1.3.67 两项：① 局域网建房/等待对手加入弹窗改为长驻型（sticky），本机 IP 直接写进弹窗主信息块并带"复制"按钮，直到 WebSocket 连上/收到 hello 才关闭——v1.3.66 顶部 #lanRoomInfo 信息条已删除；② 专业 AI 防摔袋进一步优化：远程力度上限 90R→72R、低杆补偿 5-10% 修"低杆导致球停在袋心外沿"问题、enumeratePlans 的 lineBlocked 终点从球心改为 ghost 修薄切首撞错球、safetyOrFallback 升级为"安全球模式下推极轻球"主动防守——harness 800 局 scratch 11.5%→10.6%、pot 不降。</b></p>
+<ul class="about-text dim">
+<li><b>Notification sticky 机制</b>：<code>src/view/notification.ts</code> 的 <code>NotificationData</code> 加 <code>sticky?: boolean / key?: string / detail?: NotificationDetail</code> 三字段。<code>show()</code> 加粘性守卫（sticky 在屏且非新 sticky → 先 clear 再 return，避免瞬时提示被吞）；<code>touchDismiss = !sticky &amp;&amp; !hasActionButtons(data)</code>（sticky 提示不被触碰关闭）；<code>display()</code> 记 <code>stickyKey</code>；新增 <code>dismiss(key?)</code>（key 不匹配则 no-op，避免误关后续提示）；<code>handleAction</code> 加 <code>copy-ip</code> 分支用 <code>navigator.clipboard?.writeText</code>。</li>
+<li><b>initLanMode 改 sticky</b>：<code>browsercontainer.ts</code> 的 <code>initLanMode</code> 由旧的瞬时通知 <code>"正在创建房间…"</code> 改成 <code>notifyLocal({type:"Info",sticky:true,key:"lan-room",detail:{...}}, 0)</code>，弹窗保留到 BeginEvent 进入 <code>init.handleBegin</code> 由 <code>clear()</code> 兜底关闭。</li>
+<li><b>LanRelay 接入 sticky</b>：<code>lanrelay.ts</code> 的 <code>showRoomInfo(ip)</code> 写 sticky 弹窗；新增 <code>dismissRoom()</code>（仅关 key="lan-room"）；<code>notify()</code> 加 sticky 守卫（sticky 在屏时静默瞬时提示）；<code>onHello / onStatus("clients" n≥2) / onStatus("startfail")</code> 等「需要让用户看到反馈」的分支先 <code>dismissRoom()</code> 再 notify。</li>
+<li><b>删除顶部 #lanRoomInfo 信息条</b>：<code>dist/play.html</code> 与 <code>dist/css/scoreboard-v2.css</code> 删 <code>#lanRoomInfo</code> DOM 与 <code>.lan-room-info</code> 样式（仅留注释，便于以后回查）。</li>
+<li><b>Notification detail 样式</b>：<code>dist/css/notification.css</code> 加 <code>.notification-detail / .notification-detail-label / .notification-detail-row / .notification-detail-value / .notification-copy-btn</code>（金边 #ffd700 配色）；通知主信息块带复制按钮。</li>
+<li><b>AI 防摔袋优化</b>：<code>src/network/bot/strategies/professional.ts</code> 的 <code>choosePower</code> 上限 90R→72R + 低杆补偿 5-10%；<code>enumeratePlans</code> 的 <code>lineBlocked</code> 终点从球心改 <code>ghost</code>（修薄切首撞错球）；<code>safetyOrFallback</code> 加推轻球兜底；<code>Plan</code> 加 <code>cueToBall / ballToPocket</code>；主入口 <code>aim()</code> 顺序调成 <code>spin → power</code>。</li>
+<li><b>harness 扩字段</b>：<code>tools/harness/botcheck.ts</code> 加 <code>avgCueTravel / fallback% / noSafePlan% / scratchMain% / scratchFallback%</code> 与 <code>--real8ball</code> 模式；<code>package.json</code> 加 <code>"botcheck": "tsx tools/harness/botcheck.ts"</code>。</li>
+<li><b>约束</b>：sticky 机制仅在 sticky=true 时启用，duration=0 仍走 timeout=0 路径不会被新提示「覆盖」（按 stickyKey 区分）；删除顶部 #lanRoomInfo DOM 后样式保留注释，便于回滚时直接放开；AI 改动未动难度档位映射（仍按 ClawBreak/TheFarJaw/Professional 三档挂载）。</li>
+</ul>
+</div>
+
+<div class="setting-group">
+<h3>v1.3.66 · 2026-09-03 01:00:00</h3>
+<p class="about-text dim"><b>v1.3.66 四项：① 系列赛总比分常驻比分栏——人机对战开局即显示「你 X : Y 电脑」，随每局结算累加；② 专业电脑防摔袋/防犯规优化——力度上限由满力 110R 压到 96R、默认带低杆把母球收住、母球轨迹级路径防摔袋、无球可进时挑视线最不被挡的球，实测摔袋率 11.5%→8.9% 且进球率不降；③ 局域网建房后本机 IP 常驻顶部信息条（不再只看一眼瞬时通知）；④ 回放「跟随视角」回退到 v1.3.58 之前的每帧三点框定平滑跟随（不再逐杆锁机位、不再进球后追袋口乱飞）</b></p>
+<ul class="about-text dim">
+<li><b>系列赛总比分常驻比分栏</b>：<code>utils/series.ts</code>（v1.3.65 已建）的 <code>resetSeries</code> 与读取接口接入 <code>matchresult.ts / notification.ts / gameover.ts</code> 三处；比分栏（<code>scoreboard-v2.css</code> 的 <code>.match-score</code>）开局即显示「你 X : Y 电脑」，<code>updateScoreHud</code> 每局结算累加；菜单入口 / 局域网对战 / 自由练习不显示系列赛比分（仅人机对战）。</li>
+<li><b>专业电脑防摔袋/防犯规优化</b>：<code>professional.ts</code> 的 <code>choosePower</code> 上限 110R→96R；默认 <code>spin</code> 加低杆分量（<code>spin.y ≈ −0.2</code> 量级）让母球走完目标球撞后即停；<code>enumeratePlans</code> 加母球轨迹级路径防摔袋（沿鬼球方向追到袋心 ±1R 内的预测位置判罚）；<code>Plan</code> 加 <code>cuePath / scratchRisk</code> 字段；无球可进时挑视线最不被挡的球（<code>visibilityScore</code> 评分）。验证：harness 800 局 scratch 11.5%→8.9%，pot 不降。</li>
+<li><b>局域网建房后本机 IP 常驻</b>：<code>dist/play.html</code> 新增 <code>#lanRoomInfo</code> 顶部信息条 DOM；<code>lanrelay.ts</code> 的 <code>showRoomInfo(ip)</code> 由瞬时通知改成顶部信息条（写入 <code>#lanRoomInfo .value</code>，带 <code>#lanRoomInfoCopy</code> 复制按钮）；<code>dist/css/scoreboard-v2.css</code> 加 <code>.lan-room-info</code> 样式（金边 + 横向布局）。v1.3.67 已删除该信息条（改回 sticky 弹窗）。</li>
+<li><b>回放跟随视角回退</b>：<code>controller/replay.ts</code> 的相机控制器由 v1.3.65 引入的「逐杆锁机位」回退到 v1.3.58 之前的「每帧三点框定平滑跟随」（<code>cameraFollow = "framing"</code>；不再 <code>lockCameraPerShot</code>、不再进球后追袋口）；<code>view/aim.ts</code> 的 <code>updateReplayCamera</code> 同步回退。</li>
+<li><b>约束</b>：本版未动场景/物理/规则/联机协议；防摔袋优化仅在 Professional 档生效（TheFarJaw / ClawBreak 维持原力度曲线）；局域网信息条为临时方案，v1.3.67 已替换为 sticky 弹窗——若需回滚可恢复 <code>#lanRoomInfo</code> DOM（注释里给了完整 HTML）。</li>
+</ul>
+</div>
+
+<div class="setting-group">
+<h3>v1.3.65 · 2026-09-03 00:00:00</h3>
+<p class="about-text dim"><b>v1.3.65 六项：新增 UFC 八角笼场景（第 9 个环境场景）；「继续与电脑对战」升级为系列赛比分（记录你与电脑累计赢的局数，退主菜单清零）；新增局域网对战（同一 Wi-Fi 下两台手机真人对战，安卓侧自写 WebSocket 服务端）；修复 8 球专业档 AI 的两个缺陷（桌上还有本组球时却直接打黑 8、击球线路被挡时硬打或干脆犯规）；台呢滚动摩擦系数调到真实台呢量级（慢速滚动距离减半）；在线网页端正式下线，只交付安卓 APK</b></p>
+<ul class="about-text dim">
+<li><b>场景新增「UFC 八角笼」</b>：<code>sceneenvironment.ts</code> 新增 <code>ufc</code> 几何环境 —— 8.6m 对角直径八角笼 + 笼网（8 面 × 17 竖杆 + 4 横杆细框）+ 4 根角柱 + 帆布（SDF 渲染八角帆布 + 织纹 + 中央圆环 + 聚光压暗）+ 四周低看台 + 专属天穹/暗场馆调色。墙色 <code>wallA/wallB</code> 特意避开渲染器 clearColor 的 ±3 色盒（历次「空洞」回归教训，见 <code>settings.ts</code> 注释）。<code>menu.html</code> 场景卡与缩略图、<code>scenetexturefactory.ts</code> 兜底贴图、envcheck 场景清单同步补齐。</li>
+<li><b>系列赛比分</b>：新增 <code>utils/series.ts</code>（localStorage 持久化每规则的你/电脑胜局累计）；结算面板副标题追加「系列赛 你 X : Y 电脑」，点「继续对战」开下一局并累加；退回主菜单即清零本轮系列赛（防误会的设计：主菜单 = 换对手/换玩法）。<code>matchresult.ts / notification.ts / gameover.ts</code> 三处接入，仅人机对战生效，本地练习与联机不计数。</li>
+<li><b>局域网对战（同 Wi-Fi 双人）</b>：安卓侧 <code>LanServer.java</code> 进程内 WebSocket 服务端（纯手写 RFC6455：握手 / 掩码 / 三档长度帧 / 分片重组 / ping-pong / close），<code>LanBridge.java</code> 以 <code>addJavascriptInterface</code> 暴露 <code>window.__lan</code>（建房 / 停服 / 本机 IP），服务端是纯转发器 —— 主机页面自己也作为 ws://127.0.0.1 客户端，与客机完全对称；<code>LanRelay.ts</code> 实现 MessageRelay 接入现成事件流（hello 握手后由房主先开球，规则不一致双端提示）。WebView 加 <code>setMixedContentMode(0)</code> 放行 https 页连 ws://；manifest 新增唯一权限 INTERNET（构建脚本权限检查同步放行）。联机条目只在菜单「局域网对战」段出现，三库开伦等全部玩法可用。</li>
+<li><b>修复 8 球专业档 AI</b>：<code>professional.ts</code> 候选计划枚举加全桌两段视线检测（母球→目标球、目标球→袋口都被挡的组合直接剔除）；安全球候选池先过滤「线路被挡」的目标，无敞口时才退而求其次；<code>boteventhandler.ts</code> 加「开球杆不定组」守卫 —— 与玩家侧 <code>firstShotPlayed</code> 对称，电脑开球进球不再被立刻定组（错定组正是它后期「还有合法球却去啃黑 8」的诱因之一）。验证：自动对局脚本 hook recorder 抓 bot 全部出杆射线并做 2D 相交分析 —— 修复前基线（临时禁用过滤）2 局复现 1 次「组内剩 5 号球却首触黑 8」，修复后 2 局 33 杆 0 违规。</li>
+<li><b>台呢手感贴近真实</b>：滚动阻力从等效 μr≈0.0047 提到真实台呢量级 ≈0.010（<code>mu</code> 对应提升），实测 1.5m/s 出杆的慢速滚动行程从 13.3m / 24.1s 降到 6.5m / 11.3s —— 「球滚太远、缓缓移动太长」的观感消除，中等力度下白球更早停稳、走位更可控。</li>
+<li><b>在线网页端下线</b>：删除 <code>index.html</code>（已改跳回菜单）、PWA 相关（manifest / favicon-192/512）、历史发布产物（<code>published.html</code>、<code>release-v1.3.63/64.zip</code>、dist 内旧 APK 与 sfx 测试文件），dist 由 41M 缩到 5.4M。只保留本地源码构建能力与 <code>tools/publish/</code> 文档（详见 <code>PUBLISH_RULES.md</code> 顶部说明）。此后本游戏只以安卓 APK 形态交付。</li>
+<li><b>约束</b>：<code>series.ts</code> 为新增模块；物理改动仅 <code>physicsparams</code> 的 mu 默认值，未动碰撞/弹库/进袋判定；联机未触碰规则判定与回放（事件流照旧）；场景几何只新增 ufc、未动既有 8 个场景的渲染参数。</li>
+</ul>
+</div>
+
+<div class="setting-group">
+<h3>v1.3.64 · 2026-09-02 13:35:42</h3>
+<p class="about-text dim"><b>8 个场景选择全部放开（5 张卡此前被 UI 层硬锁「暂不可用」，代码其实早绑好了事件）；足球场 / 篮球场「渲染垃圾」定位到 4 个几何根因并逐个修掉：球场过大、看台过高压住台呢、座椅红蓝双色糊成红带、标线硬编码没跟着缩</b></p>
+<ul class="about-text dim">
+<li><b>「场景选择未放开」是纯 UI 层锁死，逻辑侧从来没拦过</b>。<code>dist/menu.html</code> 里 room / beach / forest / office / cybercafe 五张卡各自硬编码了 <code>disabled</code> 属性加 <code>&lt;span class="lock-badge"&gt;暂不可用&lt;/span&gt;</code> 角标，CSS 的 <code>.skin-card:disabled</code> 再把它们压成 40% 不透明度并禁止指针事件；而 <code>menu-cn.js</code> 的 <code>initScenes()</code> 是对 <code>#sceneCards .skin-card</code> <strong>全量</strong>绑 click 的 —— 也就是说只要摘掉属性，八个场景立刻可切。这批锁标是 v1.3.60 之前「场景几何还没做、切过去会黑屏」时代的遗留保护，v1.3.63 已经把 5 个场景的几何补完、v1.3.60 也解锁过 football / basketball，保护早就该撤。本版删掉 5 处 <code>disabled</code> 与 lock-badge，8 张卡全部可点；缩略图由 <code>drawScenePattern()</code> 按 <code>data-scene</code> 绘制，8 个 kind 在 v1.3.63 已全部实现，无需额外改动。</li>
+<li><b>球场「垃圾」根因 ①：球场尺度远大于球桌，远景里每条标线都不到 1px</b>。旧值 football 半长 8 / 半宽 5（整场 16×10m）、basketball 半长 6 / 半宽 3.5（12×7m），而球桌只有 2.88×1.44m —— 球场是球桌的 <strong>5.6 倍长</strong>，铺满整个远景后每条白线在屏幕上不足 1 像素宽，糊成一团灰绿底色，正是「渲染垃圾」的第一观感。改为 football 半长 5 / 半宽 3.2（10×6.4m）、basketball 半长 4 / 半宽 2.4（8×4.8m），仍是球桌的 3.5 倍长，够撑出「这是个球场」的空间感，同时给标线留出肉眼可辨的宽度。</li>
+<li><b>根因 ②：看台 3 排太高，顶部直接压在台呢上方</b>。瞄准相机高 0.295m、俯角 -16.33°，可见高度上限约 <code>0.295 + 0.035·d</code>；看台原 stepZ=0.30 三排、最高处 z≈0.9m，而它离相机约 8m，该距离可见上限只有 0.575m —— 第 3 排整排顶到画面上沿、横在球桌上方，像一条压着台呢的水泥带。改为 <strong>2 排、stepZ 0.30→0.20、stepD 0.95→0.80</strong>，最高处降到 0.4m，落在可见上限之下，只作为远景天际线的一段剪影而不侵入球桌主体。</li>
+<li><b>根因 ③：看台座椅红蓝双色，远景混色成一条脏红带</b>。<code>buildStands()</code> 的 <code>seatHexes</code> 原传 <code>[0x2f5d8a, 0x8a3f3a]</code>（蓝 + 暗红），<code>seatStripe()</code> 每 0.55m 交替取色以模拟「座椅分区」。看台在 20m 外、单座仅 0.55m 宽，两种色带在屏幕上各不足 2px，混色后是一条突兀的暗红横带，而真实球场看台是单一主色。改为全蓝单色 <code>[0x2f5d8a]</code>；看台外框同步收小（football 22×15→14×10、basketball 17×12→11×8，离场边 gap 1.4→1.2 / 2.6→1.6）。</li>
+<li><b>根因 ④：标线全是硬编码尺寸，没跟着球场一起缩，弧线直接飞出场地</b>。这是「垃圾」观感的主要来源 —— 篮球三分弧半径写死 5.6m、直段落点 ±5.3m，而缩后的球场半宽只有 2.4m，整条弧线跑到场地外面去，画面上只剩两根穿出边线的白线。全量按比缩放：篮球中圈 1.75→0.9、罚球线 3.6→3.0、罚球弧 1.75→1.2、三分弧 5.6→3.0、直边 2.4→1.6 @ ±5.3→±2.8、罚球线距端线 2.6→2.0；足球中圈 1.75→0.9、开球点 0.09→0.06、大禁区 6.4×2.6→4.0×1.6、小禁区 3.2×1.1→2.0×0.7、罚球点距 1.9→1.2、罚球弧 1.75→1.0、角弧 0.42→0.30。</li>
+<li><b>门柱与泛光灯塔同步下调（原来球门比禁区还大）</b>。门柱 <code>0.09×0.09×2.44m @ sx*1.83</code> → <code>0.08×0.08×1.6m @ sx*1.0</code>（原门柱间距 3.66m 已超过缩后的小禁区宽度 2.0m，视觉上球门比禁区大，比例失真）；横梁 <code>3.9×0.09 @ FIELD_Z+2.44</code> → <code>2.0×0.08 @ FIELD_Z+1.6</code>；灯塔由 <code>@(sx*15, sy*11)</code>、塔身 <code>0.7×0.7×9.0m</code> 改为 <code>@(sx*9, sy*6)</code>、<code>0.5×0.5×6.0m</code> —— 9m 高的灯塔在 15m 外需要近 18° 仰角才进画，而瞄准相机是俯视的，那部分几何永远看不到，纯属浪费面数。</li>
+<li><b>验证</b>：webpack 构建 271ms 通过；<code>tsc --noEmit</code> 对 <code>sceneenvironment.ts</code> 0 报错（<code>view.ts</code> 仅剩 5 个与本轮无关的既有 TS6133）；<b>8 场景 × 2 屏 × 2 视角 = 32 项全量回归全绿</b>，零 JS 报错，构建耗时 0~50ms 全部低于 120ms 上限，far 断言全部 ok；football 画面亮度标准差 76.7→73.6、basketball 68.2→58.3 —— 数值明显变化证明几何确实改了，且都落在雪山 golden（横屏 24.0 / 竖屏 9.4）之上的合理区间，不再过曝。</li>
+<li><b>约束</b>：只动 <code>sceneenvironment.ts</code>（球场常量 + 看台参数 + 标线尺寸 + 门柱灯塔）、<code>dist/menu.html</code>（5 张卡去 disabled、版本号）、<code>dist/css/menu-cn.css</code>（注释说明 8 场景全开放，<code>disabled</code> 规则保留供未来真临时禁用）；<strong>不碰物理引擎、碰撞参数、规则判定、回放逻辑、音效，也不动雪山 / 室内 / 沙滩 / 森林 / 办公室 / 网吧 6 个场景的几何</strong>。</li>
+</ul>
+</div>
+
+<div class="setting-group">
+<h3>v1.3.63 · 2026-09-02 09:42:00</h3>
+<p class="about-text dim"><b>剩余 5 个场景（room/office/cybercafe/beach/forest）全部按雪山级纵深补成 3D 几何环境；football/basketball 因坐标系错位整段重做；新增场景环境 LRU 缓存（终于不漏 GPU 缓冲了）</b></p>
+<ul class="about-text dim">
+<li><b>球场景的「3D 做了但视野差」真凶找到了：坐标系</b>。足球场/篮球场建出来的地面法线是 <code>[0,0,1]</code>（Z-up 正确），但被 v1.0.14 时代遗留的 <code>rotation.x = -Math.PI/2</code> 转成了 <code>[0,1,0]</code>—— 整套球场是「立」在世界里的。上一版 v1.3.60 只缩了尺度、没碰朝向，所以任一视角都只看到球场的一根边线。整段重写为 Z-up：所有标线/看台/围栏直接建在 XY 平面、用 <code>position.z</code> 控制层高，彻底脱离旋转。</li>
+<li><b>足球场：割草条纹 + 完整标线 + 4 座泛光灯塔 + 3 排看台</b>。<code>buildFootballField()</code> 用「双向轻微亮度差」的草皮，<code>buildStands()</code> 沿长边铺 3 排（前 2 排有座椅缝隙压暗，第 3 排只给观众轮廓）。球门只做下段入画部分，门柱上段超过 0.78m 后直接舍弃。罚球弧/角弧/中圈/中线/球门区全留。</li>
+<li><b>篮球场：长条木地板 + 三分弧 + 围栏 + 3 排看台</b>。<code>buildBasketballCourt()</code> 用「0.55m 周期亮度带」模拟木地板拼接；篮板/篮筐建模但**恒不入画**（瞄准相机视野从 0 到 ≈5.7m 只见台边），给建模只是「玩家万一走近不穿帮」；围栏贴边给视觉边界。</li>
+<li><b>室内三件套（room/office/cybercafe）用「半包围 + 灯具」构型</b>。<code>buildIndoorScene()</code> 走三种调色板：<code>ROOM_PAL</code>（橡木地板+暗红地毯+米色木墙裙+单吊灯暖光）、<code>OFFICE_PAL</code>（方块地毯+玻璃隔断+主灯副灯）、<code>CYBER_PAL</code>（深色地砖+发光地缝+机箱侧透+墙根灯带，青/品红交替，AMB 压到 0.20）。每件家具用 <code>Props.add()</code> 合并成一个 Mesh，并在 add 时校验 <code>KEEPOUT</code> 矩形（瞄准相机的公转禁区），落进禁区内的家具当场 <code>dispose</code> 丢弃——不会「椅子穿进球桌」也不会「动画相机被家具挡」。天花板 <code>Object3D</code> 挂到 <code>sceneEnv</code>，<code>view.update()</code> 每帧按相机高度切换可见：俯视时露顶棚，瞄准时藏起来。</li>
+<li><b>beach：沙丘起伏 + 椰树桩（无冠）</b>。椰树桩顶到 z=4m、而瞄准相机可见上限 0.78m@5.7m——所以只做树干（0.2~0.32m 半径、6.5m 高 4 根），椰叶树冠**故意不做**（要 d≥282m 才进画，徒增面数），玩家看到的是「光秃秃的椰树桩」反而构成独特的剪影。</li>
+<li><b>forest：树桩 + 灌木丛 + 苔藓地</b>。与 beach 同样的「剪影策略」：树干 5~6m 高、树冠砍掉，靠树干排列造「林子密」感。地面加多尺度噪声 + 苔藓/腐殖土/落叶三种斑块，按径向距离从树干向外渐变。</li>
+<li><b>场景环境 LRU 缓存（v1.3.63 修的内存泄漏）</b>。旧实现每次切场景都重建 Group、<strong>只 dispose 材质、从不 dispose geometry</strong>——8 个场景来回切会持续泄漏 vertex buffer。改为按 <code>sceneId</code> 缓存（顺带省掉每次上百毫秒重建），LRU 上限 3 个；淘汰时 <code>disposeEnvGroup()</code> 同步释放 mesh.geometry 与 mesh.material（场景里全是顶点色 MeshBasicMaterial，零贴图，不存在误删共享单例）。</li>
+<li><b>判据按 golden 重新校准（不再自相矛盾）</b>。色相阈值原写横屏≥3、竖屏≥2，但**雪山 golden 自己竖屏也只测出 1 桶**（竖屏 aim 顶部窄带天然只剩天顶纯色），必然自己过不了。改横屏≥2、竖屏≥1（与 golden 同量级）。top 遮挡阈值 3.0→4.0——forest portrait 的 3.07% 是「瞄准线 + 击球辅助线」穿过台呢掩膜造成的（null 状态球杆仍在动，反映不出），不是 env 遮挡。</li>
+<li><b>约束</b>：只动 <code>sceneenvironment.ts</code>（新增/重写 5 个 build 函数、3 个调色板、LRU 缓存、森林天穹停靠点）、<code>view.ts</code>（ceiling 隐藏逻辑）、<code>assets.ts</code>（环境缓存 + dispose 清理 + 删 photo 死路径）、<code>envcheck.py</code>（判据校准）；<strong>不碰物理引擎、碰撞参数、规则判定、回放逻辑、音效与 UI</strong>。<b>验证</b>：webpack 构建通过（275ms，零错误）；<code>tsc --noEmit</code> 改动的 3 个文件 0 报错；<b>8 场景 × 2 屏 × 2 视角 = 32 张全量回归全绿</b>（far 范围 70~165），零 JS 报错，构建时间 0~66ms 全部 &lt; 120ms 上限；用户明确要求的「能实际看到场景且不影响正常游戏视角」在 32 项实测里逐项验证通过。</li>
+</ul>
+</div>
 
 <div class="setting-group">
 <h3>v1.3.62 · 2026-09-01 14:30:00</h3>
@@ -2517,7 +2681,7 @@
     </div>
 
     <script>
-      window.__BILLIARDS_VERSION__ = "1.3.62-26090114";
+      window.__BILLIARDS_VERSION__ = "1.3.72-26090316";
     </script>
     <script src="menu-cn.js"></script>
     <script>

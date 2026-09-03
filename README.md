@@ -4,9 +4,9 @@
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Platform](https://img.shields.io/badge/platform-Android%205.0%2B-brightgreen.svg)](#下载)
-[![Permissions](https://img.shields.io/badge/权限-0%20个-success.svg)](#隐私)
+[![Permissions](https://img.shields.io/badge/权限-仅INTERNET（局域网对战）-brightgreen.svg)](#隐私)
 
-一个全中文、纯离线、无广告的安卓台球游戏。基于 three.js 的真实物理引擎，内置本地 AI 对手，**不申请任何系统权限**。
+一个全中文、无广告的安卓台球游戏。基于 three.js 的真实物理引擎，内置本地 AI 对手，单机完全离线可玩；v1.3.65 起可选**局域网对战**（同 WiFi/局域网直连），仅申请一个 `INTERNET` 权限且不发任何外部网络请求。
 
 <p align="center">
   <img src="docs/screenshots/menu-home.jpg" alt="主菜单" width="48%" />
@@ -43,8 +43,8 @@
 
 | | |
 |---|---|
-| **纯单机** | 无联网、无账号、无广告、无内购、无统计上报 |
-| **零权限** | `AndroidManifest.xml` 未声明任何 `uses-permission`，可用 `aapt2 dump badging` 自行验证 |
+| **纯单机 / 局域网对战** | 默认单机离线，可选局域网对战；全程无外网请求、无账号、无广告、无内购、无统计上报 |
+| **极简权限** | `AndroidManifest.xml` 仅声明一个 `INTERNET`（局域网对战专用，纯本机 TCP，不发外部请求），无存储/位置/电话/相机等任何权限，可用 `aapt2 dump badging` 自行验证 |
 | **全中文** | 菜单、玩法、设置、犯规提示、结算文案全部汉化 |
 | **真实物理** | 继承原项目的球体碰撞、旋转（塞）、库边反弹与摩擦模型 |
 | **本地 AI** | 两档难度对手（稳健 / 激进），全程本地计算 |
@@ -75,26 +75,29 @@
 
 **移除联网功能** — 移除 WebSocket 多人大厅与消息中继（含 `@tailuge/messaging` 依赖）、
 分数上传、遥测统计、崩溃上报、Google Fonts 外链、分享外链、局面图导出、在线分析面板。
+v1.3.65 起重新加入**局域网对战**（见下「安卓封装」），但仅限同一局域网/直连，不发任何外部请求。
 
 **移动端适配** — 新增六档 LOD 画质系统（渲染分辨率 / 抗锯齿 / 球体几何精度）、
 设备性能自动检测、刘海屏安全区域适配、横屏布局优化、进球与碰撞震动反馈。
 
 **新增功能** — 中文主菜单、内置操作介绍页、内置游戏设置面板（菜单与游戏内实时同步）、
-应用内开源许可与致谢页。
+应用内开源许可与致谢页、局域网对战。
 
-**安卓封装** — Android WebView 原生外壳，不申请任何系统权限。
+**安卓封装** — Android WebView 原生外壳，仅声明一个 `INTERNET` 权限（局域网对战专用：
+进程内监听 TCP 端口并连接对方手机，纯本机直连，不向任何外部服务器发起请求；在线功能保持下线）。
 
 ---
 
 ## 隐私
 
-这个应用不收集任何数据，因为它**没有能力**收集：
+这个应用不向任何外部服务器发送数据，也不会收集任何信息：
 
-- 未声明 `INTERNET` 权限，进程无法发起任何网络请求
-- 未声明存储、位置、电话、相机等任何权限
+- `INTERNET` 权限仅用于**局域网对战**：进程内监听 TCP 端口并连接对方手机，纯本机直连、不发任何外网请求；不开启局域对战时不建立任何连接
+- 无存储、位置、电话、相机等任何权限
 - 所有资源（three.js、模型、音效）均打包在 APK 内，运行时零外链
+- 无账号、无统计上报、无广告 SDK
 
-装完后可以直接开飞行模式玩。
+单机游玩全程无网络请求，即便开启飞行模式也完全可玩（局域网对战需双方连在同一 WiFi/局域网）。
 
 ---
 
@@ -108,7 +111,7 @@ billiards-cn/          游戏本体
   LICENSE              GPL-3.0 协议全文
 
 billiards-apk/         安卓封装
-  AndroidManifest.xml  应用清单（零权限）
+  AndroidManifest.xml  应用清单（仅 INTERNET：局域网对战）
   src/                 MainActivity.java
   res/                 图标与字符串资源
   build-apk.sh         一键构建脚本
@@ -144,11 +147,11 @@ cd billiards-apk
 ```
 
 脚本依次执行 `aapt2 compile` → `aapt2 link` → `javac` → `d8` → `zipalign` → `apksigner`，
-最后自动校验签名并打印权限清单（应为空）。若目录下没有 `release.keystore`，脚本会自动生成一个自签名调试密钥。
+最后自动校验签名并打印权限清单（应仅为 `INTERNET` 或空）。若目录下没有 `release.keystore`，脚本会自动生成一个自签名调试密钥。
 
 > **构建陷阱**：`aapt2 link` 必须显式传 `--min-sdk-version 21 --target-sdk-version 34`。
 > 否则 aapt2 会按旧版兼容规则**隐式追加** `WRITE_EXTERNAL_STORAGE`、`READ_PHONE_STATE`、
-> `READ_EXTERNAL_STORAGE` 三个权限，零权限的承诺就破功了。
+> `READ_EXTERNAL_STORAGE` 三个权限，极简权限的承诺就破功了。
 
 ---
 

@@ -142,6 +142,7 @@
     "雪山": "Snow Mountain",
     "足球场": "Soccer",
     "篮球场": "Basketball",
+    "UFC八角笼": "UFC Octagon",
     "办公室": "Office",
     "网吧": "Cybercafe",
     "暂不可用": "Unavailable",
@@ -489,6 +490,8 @@
     turnTimer: 0,
     lastRule: "nineball",
     lastOpponent: "solo",
+    // v1.3.65：局域网对战「加入房间」时上次输入的对方 IP（可带 :端口）
+    lastLanHost: "",
     vsBot: false,
     fpsCap: 0,
     // v1.2.28：辅助线长度默认最长（3）。此前此处写 2（中）与 settings.ts 的 3 不一致，
@@ -688,13 +691,12 @@
     var btns = document.querySelectorAll("#opponentSeg .seg-btn")
     Array.prototype.forEach.call(btns, function (b) {
       var op = b.getAttribute("data-opponent")
-      if (op !== "solo" && isCarom) {
-        b.style.display = "none"
-      } else {
-        b.style.display = ""
-      }
+      // v1.3.65：局域网对战双方都是真人，与袋口无关，三库开伦同样可用；
+      // 只有电脑档位（策略仅针对落袋类玩法）才需要在开伦下隐藏。
+      var hide = isCarom && op !== "solo" && op !== "lan"
+      b.style.display = hide ? "none" : ""
     })
-    if (isCarom && selectedOpponent !== "solo") {
+    if (isCarom && selectedOpponent !== "solo" && selectedOpponent !== "lan") {
       selectOpponent("solo")
     }
   }
@@ -708,6 +710,61 @@
     settings.vsBot = op !== "solo"
     settings.lastOpponent = op
     saveSettings(settings)
+    updateLanPanel()
+  }
+
+  /* ---------------- v1.3.65：局域网对战面板 ----------------
+     选「局域网对战」时展开：建房（本机做服务端、自己先开球）或
+     输入对方 IP 加入。两台手机需连在同一个 Wi-Fi。 */
+
+  function updateLanPanel() {
+    var p = $("lanPanel")
+    if (!p) return
+    p.hidden = selectedOpponent !== "lan"
+    if (!p.hidden) {
+      var inp = $("lanPeerInput")
+      if (inp && !inp.value && settings.lastLanHost) {
+        inp.value = settings.lastLanHost
+      }
+    }
+  }
+
+  function startLan(role) {
+    var params = ["ruletype=" + encodeURIComponent(selectedRule)]
+    if (role === "join") {
+      var raw = ($("lanPeerInput") && $("lanPeerInput").value) || ""
+      var ip = raw.trim()
+      if (!ip) {
+        showToast("请输入对方的 IP 地址")
+        return
+      }
+      settings.lastLanHost = ip
+      saveSettings(settings)
+      params.push("lan=join")
+      params.push("peer=" + encodeURIComponent(ip))
+    } else {
+      params.push("lan=host")
+    }
+    // 联机不弹分步实操新手引导（会挡住双方的等待提示）
+    location.href = "play.html?" + params.join("&")
+  }
+
+  function initLanPanel() {
+    var hb = $("lanHostBtn")
+    if (hb) {
+      hb.addEventListener("click", function () {
+        buzz(10)
+        startLan("host")
+      })
+    }
+    var jb = $("lanJoinBtn")
+    if (jb) {
+      jb.addEventListener("click", function () {
+        buzz(10)
+        startLan("join")
+      })
+    }
+    updateLanPanel()
   }
 
   function initOpponents() {
@@ -1066,6 +1123,31 @@ $("setKeepViews").checked = settings.keepAllViews !== false
         ctx.fill()
         ctx.beginPath()
         ctx.arc(W / 2, 112, 98, 0.2 * Math.PI, 0.8 * Math.PI)
+        ctx.stroke()
+        ctx.globalAlpha = 1
+        break
+      case "ufc":
+        // v1.3.65：UFC 八角笼缩略图 —— 暗场馆里一个八角形笼 + 笼网竖线
+        ctx.globalAlpha = 0.1
+        ctx.strokeStyle = "#585e68"
+        ctx.lineWidth = 2
+        for (var x5 = 10; x5 < W; x5 += 24) {
+          ctx.beginPath()
+          ctx.moveTo(x5, 0)
+          ctx.lineTo(x5, horizonY)
+          ctx.stroke()
+        }
+        ctx.globalAlpha = 0.85
+        ctx.strokeStyle = "#6a7280"
+        ctx.lineWidth = 5
+        ctx.beginPath()
+        for (var k = 0; k <= 8; k++) {
+          var a = k * (Math.PI / 4) + Math.PI / 8
+          var rx = W / 2 + Math.cos(a) * Math.min(W, horizonY) * 0.34
+          var ry = horizonY / 2 + Math.sin(a) * Math.min(W, horizonY) * 0.34
+          if (k === 0) ctx.moveTo(rx, ry)
+          else ctx.lineTo(rx, ry)
+        }
         ctx.stroke()
         ctx.globalAlpha = 1
         break
@@ -1447,6 +1529,11 @@ $("setKeepViews").checked = settings.keepAllViews !== false
   function startGame() {
     var params = []
     params.push("ruletype=" + encodeURIComponent(selectedRule))
+    if (selectedOpponent === "lan") {
+      // v1.3.65：联机时主「开始游戏」按钮等价于建房（面板里的按钮是主入口）
+      startLan("host")
+      return
+    }
     if (selectedOpponent !== "solo") {
       params.push("bot=" + encodeURIComponent(selectedOpponent))
       if (settings.turnTimer && settings.turnTimer > 0) {
@@ -1536,6 +1623,7 @@ $("setKeepViews").checked = settings.keepAllViews !== false
 
     initModes()
     initOpponents()
+    initLanPanel()
     initSettingsPanel()
     initTableAppearances()
     initCueThemes()

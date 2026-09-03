@@ -622,6 +622,7 @@ export interface EnvSceneDef {
     | "cybercafe"
     | "football"
     | "basketball"
+    | "ufc"
   swatch: string
   /**
    * 实景照片背景（Request D）：命中该项时，游戏背景直接用该照片做全屏
@@ -637,6 +638,13 @@ export const ENV_SCENES: EnvSceneDef[] = [
   { id: "snow", name: "雪山", wallA: 0xdbe7f0, wallB: 0xa6bace, amb: 0xeaf2ff, ambI: 0.82, kind: "snow", swatch: "linear-gradient(135deg,#dbe7f0,#a6bace)", photo: "assets/scenes/snow.jpg" },
   { id: "football", name: "足球场", wallA: 0x2f7d32, wallB: 0x183d1a, amb: 0xdff5e0, ambI: 0.7, kind: "football", swatch: "linear-gradient(135deg,#2f7d32,#183d1a)", photo: "assets/scenes/football.jpg" },
   { id: "basketball", name: "篮球场", wallA: 0xcaa05a, wallB: 0x9a6a2a, amb: 0xfff0d8, ambI: 0.72, kind: "basketball", swatch: "linear-gradient(135deg,#caa05a,#9a6a2a)", photo: "assets/scenes/basketball.jpg" },
+  // v1.3.65：UFC 八角笼。暗场馆 + 笼内聚光帆布，ambI 收到 0.6（暗场氛围，
+  // 但不能低于 room 的 0.55 太多，否则球桌本身看着发闷）。
+  // v1.3.65b：wallA/wallB（几何场景下仍作为房间盒子背景墙的贴图渐变，
+  // 在画面顶部露一条窄带）不能选 0x2b3138 一类的"clearColor 近亲"——
+  // 渲染器 clearColor 是 0x292f36=(41,47,54)，envcheck 的无空洞判据是
+  // 逐通道 |px-clear|>3，墙渐变整条必须留在该色盒之外（R≥46/G≥54/B≥66）。
+  { id: "ufc", name: "UFC八角笼", wallA: 0x3a4350, wallB: 0x2e3642, amb: 0xdfe6f0, ambI: 0.6, kind: "ufc", swatch: "linear-gradient(135deg,#3a4350,#2e3642)" },
   { id: "office", name: "办公室", wallA: 0xc9d2dc, wallB: 0x92a0b0, amb: 0xeef2f7, ambI: 0.62, kind: "office", swatch: "linear-gradient(135deg,#c9d2dc,#92a0b0)" },
   { id: "cybercafe", name: "网吧", wallA: 0x281a4a, wallB: 0x0a0618, amb: 0x6a3cff, ambI: 0.52, kind: "cybercafe", swatch: "linear-gradient(135deg,#281a4a,#0a0618)" },
 ]

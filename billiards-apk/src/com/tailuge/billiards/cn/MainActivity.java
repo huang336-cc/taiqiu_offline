@@ -20,6 +20,8 @@ import java.io.InputStream;
 public class MainActivity extends Activity {
 
     private WebView webView;
+    /** v1.3.65：局域网对战 JSBridge（页面侧 window.__lan） */
+    private LanBridge lanBridge;
 
     /**
      * 虚拟域名。
@@ -77,6 +79,16 @@ public class MainActivity extends Activity {
         softSet(s, "setMediaPlaybackRequiresUserGesture", false);
         softSet(s, "setAllowFileAccessFromFileURLs", true);
         softSet(s, "setAllowUniversalAccessFromFileURLs", true);
+
+        // v1.3.65：局域网对战需要 https 页面连 ws://（主机侧 ws://127.0.0.1，
+        // 客机侧 ws://<对方IP>）。默认 mixed content 策略会拦截，这里放行。
+        // MIXED_CONTENT_ALWAYS_ALLOW = 0。
+        softSetInt(s, "setMixedContentMode", 0);
+
+        // v1.3.65：局域网对战 JSBridge —— 页面经 window.__lan 控制进程内
+        // WebSocket 服务端（见 LanBridge / LanServer）。
+        lanBridge = new LanBridge(this);
+        webView.addJavascriptInterface(lanBridge, "__lan");
 
         webView.setWebViewClient(new WebViewClient() {
 
@@ -143,6 +155,19 @@ public class MainActivity extends Activity {
                 softEvaluate(
                     "(function(){try{window.__fitViewport&&window.__fitViewport()}catch(e){}})()"
                 );
+                // v1.3.72：页面加载完成后，主动把本机网络诊断推给页面（兜底双通道）。
+                // 主通道是页面经 window.__lan.lanInfo() 拉取；这里由 Java 主动 evaluateJavascript
+                // 调 window.__lanPush，即使 JSBridge 在某些 ROM 上注入偏晚 / 偶发不暴露，
+                // 页面也能拿到 IP（见 LanBridge.pushLanInfo）。延迟 600ms 等页面 JS 注册好
+                // window.__lanPush 再推，避免推送过早被吞。
+                if (lanBridge != null) {
+                    view.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            try { lanBridge.pushLanInfo(); } catch (Throwable ignored) {}
+                        }
+                    }, 600);
+                }
             }
         });
 
@@ -241,13 +266,27 @@ public class MainActivity extends Activity {
         return null;
     }
 
-    /** 反射调用可能不存在的 WebSettings setter，调不到就静默跳过 */
+    /** 反射调用可能不存在的 WebSettings setter（boolean 版），调不到就静默跳过 */
     private static void softSet(WebSettings s, String method, boolean value) {
         try {
             s.getClass().getMethod(method, boolean.class).invoke(s, Boolean.valueOf(value));
         } catch (Throwable ignored) {
             // 该 API 不存在，忽略
         }
+    }
+
+    /** 反射调用可能不存在的 WebSettings setter（int 版），调不到就静默跳过 */
+    private static void softSetInt(WebSettings s, String method, int value) {
+        try {
+            s.getClass().getMethod(method, int.class).invoke(s, Integer.valueOf(value));
+        } catch (Throwable ignored) {
+            // 该 API 不存在，忽略
+        }
+    }
+
+    /** LanBridge 回调线程 → UI 线程执行 */
+    public void runOnUi(Runnable r) {
+        runOnUiThread(r);
     }
 
     private void applyImmersive() {
@@ -284,7 +323,7 @@ public class MainActivity extends Activity {
     }
 
     /** 反射调用 WebView.evaluateJavascript(String, ValueCallback)，调不到就忽略 */
-    private void softEvaluate(String script) {
+    public void softEvaluate(String script) {
         if (webView == null) {
             return;
         }
@@ -303,6 +342,16 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         applyImmersive();
+    }
+
+    @Override
+    protected void onDestroy() {
+        // v1.3.65：页面/Activity 销毁时停掉局域网服务端，释放端口与线程
+        if (lanBridge != null) {
+            try { lanBridge.stopServer(); } catch (Throwable ignored) {}
+            lanBridge = null;
+        }
+        super.onDestroy();
     }
 
     /**

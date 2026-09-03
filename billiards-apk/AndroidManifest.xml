@@ -1,15 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.tailuge.billiards.cn"
-    android:versionCode="26090162"
-    android:versionName="1.3.62">
+    android:versionCode="26090372"
+    android:versionName="1.3.72">
 
     <!-- 明确声明 SDK 版本，避免 aapt2 按旧版兼容规则隐式追加存储/电话权限 -->
     <!-- targetSdkVersion 提升到 35，适配 Android 15/16 安装器策略 -->
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="35" />
 
-    <!-- 纯单机离线应用，不申请任何权限（零权限） -->
-    <!-- 刻意不声明 INTERNET / ACCESS_NETWORK_STATE / 存储 / 电话 / 震动 -->
+    <!-- v1.3.65：局域网对战（唯一权限）。
+         INTERNET 权限仅用于进程内监听 TCP 端口与连接对方手机（纯局域网），
+         不向任何外部服务器发起请求（在线功能已全部下线）。 -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <uses-feature android:glEsVersion="0x00020000" android:required="true" />
 

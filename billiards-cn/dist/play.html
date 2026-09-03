@@ -1,14 +1,17 @@
 <!doctype html>
 <html lang="zh-CN">
   <head>
-    <!-- v1.3.19：游戏页已更名为 play.html，发布页为 index.html。
-         直接打开 play.html（无任何游戏/回放参数）时跳回发布页 index.html，
+    <!-- v1.3.19：游戏页已更名为 play.html。
+         直接打开 play.html（无任何游戏/回放参数）时跳回主菜单 menu.html，
          而非用默认九球规则自动开局。菜单"开始游戏"会带 ruletype= 等参数、
-         回放会带 state=/replayId= 参数，这些合法入口不受影响。 -->
+         回放会带 state=/replayId= 参数，这些合法入口不受影响。
+         v1.3.65：原先跳的是在线发布页 index.html，本次已按需求删除全部
+         在线网页端产物（index.html / manifest.json / PWA 图标 / 发布包），
+         项目只保留横屏安卓 APK 一条交付路径，故兜底目标改为主菜单。 -->
     <script>
       (function () {
         var q = location.search || "";
-        if (q.replace("?", "").length === 0) location.replace("index.html");
+        if (q.replace("?", "").length === 0) location.replace("menu.html");
       })();
     </script>
     <title>奥特曼的台球 · 离线版</title>
@@ -278,6 +281,9 @@
           <div class="sc-player-balls" id="p2Balls"></div>
         </div>
       </div>
+      <!-- v1.3.66：系列赛总比分行（仅人机对战显示）。开局即展示「你 0 : 0 电脑」，
+           随每局结算累加，方便玩家随时看到整轮系列赛的总比分。 -->
+      <div class="sc-series" id="scSeries" hidden></div>
       <div class="sc-meta" id="scMeta">
         <div class="sc-time" id="scTime">
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -288,6 +294,9 @@
         </div>
       </div>
     </div>
+
+    <!-- v1.3.67：移除 #lanRoomInfo DOM（顶部信息条）。本机 IP 改写在 sticky
+         长驻弹窗内（见 src/view/notification.ts 的 NotificationDetail）。 -->
 
     <!-- v1.2.9 #F5：回放进度条（仅回放模式显示）。可拖动时间点到本杆任意时刻，
          并带「进球前时间点」吸附点（红球亮点），滑动到附近自动吸附，直觉察觉进球。 -->

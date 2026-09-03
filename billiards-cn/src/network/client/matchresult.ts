@@ -5,6 +5,7 @@ import { End } from "../../controller/end"
 import { Session } from "./session"
 import { gameOverButtons } from "../../utils/gameover"
 import { VERSION } from "../../utils/version"
+import { recordResult, seriesText } from "../../utils/series"
 import { NotificationHighBreak, NotificationActionHandlers } from "../../view/notification"
 import { t } from "../../utils/i18n"
 import { downloadText } from "../../utils/download"
@@ -42,7 +43,22 @@ export class MatchResultHelper {
     )
     const subtext = endSubtext ?? this.getScoreSubtext(container, rulename)
 
-    this.notifyEndState(container, amIWinner, subtext)
+    // v1.3.65：人机对战时把「系列赛 你 X : Y 电脑」追加到结算文案末尾。
+    // 「再来一局」走 location.reload()，URL 上的 ?bot=&ruletype= 参数原样带回，
+    // 所以同一玩法连打会自动累加；换玩法或退回主菜单时清零（见 series.ts）。
+    // 注意这里必须在 notifyEndState 之前记，否则面板读到的是上一局的比分。
+    let seriesLine = ""
+    if (Session.isBotMode()) {
+      recordResult(rulename, amIWinner)
+      seriesLine = seriesText(rulename)
+    }
+    const finalSubtext = seriesLine
+      ? subtext
+        ? `${subtext}\n${seriesLine}`
+        : seriesLine
+      : subtext
+
+    this.notifyEndState(container, amIWinner, finalSubtext)
 
     const result = this.createMatchResult(rulename, session, amIWinner)
 
@@ -254,7 +270,8 @@ export class MatchResultHelper {
   }
 
   private static getGameOverButtons(): string {
-    return gameOverButtons.forMode()
+    // v1.3.65：人机对战时首个按钮显示「继续对战」（系列赛比分已在本局结算时累加）
+    return gameOverButtons.forMode(Session.isBotMode())
   }
 
   private static getRemoteGameOverButtons(): string {
