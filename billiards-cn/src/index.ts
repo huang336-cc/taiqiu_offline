@@ -116,6 +116,15 @@ function setupOverlayControls(browserContainer: BrowserContainer) {
   const backToMenu = document.getElementById("backToMenu")
   if (backToMenu) {
     backToMenu.onclick = () => {
+      // v1.3.75：与系统返回键走同一套金棕木纹确认弹窗，并提示会清零系列赛比分。
+      // 此前这里直接 location.href 跳走，玩家一个手滑就把「系列赛 你 3 : 1」全丢了。
+      const confirmExit = (
+        globalThis as unknown as { __showExitConfirm?: () => void }
+      ).__showExitConfirm
+      if (typeof confirmExit === "function") {
+        confirmExit()
+        return
+      }
       globalThis.location.href = "menu.html"
     }
   }

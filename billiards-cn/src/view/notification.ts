@@ -345,10 +345,22 @@ export class Notification {
         break
       case "menu":
       case "lobby":
-        // v1.3.65：退回主菜单即结束这轮系列赛，清掉「你 X : Y 电脑」的累计。
-        // 不清的话，下次进同一玩法会接着上次的比分算，语义不对。
-        resetSeries()
-        globalThis.location.href = "menu.html"
+        // v1.3.75：结算面板的「返回主菜单」此前直接跳走并静默清零系列赛比分。
+        // 现改为与系统返回键共用同一套金棕木纹确认弹窗（提示会清零系列赛比分），
+        // 由弹窗在用户确认后才真正 resetSeries + 跳转；无弹窗脚本时退回原行为。
+        {
+          const confirmExit = (
+            globalThis as unknown as { __showExitConfirm?: () => void }
+          ).__showExitConfirm
+          if (typeof confirmExit === "function") {
+            confirmExit()
+            break
+          }
+          // v1.3.65：退回主菜单即结束这轮系列赛，清掉「你 X : Y 电脑」的累计。
+          // 不清的话，下次进同一玩法会接着上次的比分算，语义不对。
+          resetSeries()
+          globalThis.location.href = "menu.html"
+        }
         break
       case "rematch":
         if (url) {

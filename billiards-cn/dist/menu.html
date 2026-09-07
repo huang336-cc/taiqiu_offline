@@ -749,6 +749,49 @@
           </p>
 
 <div class="setting-group">
+<h3>v1.3.75 · 2026-09-07 22:50:00</h3>
+<p class="about-text dim"><b>v1.3.75 四项：① 系列赛比分开局即显示、退出前弹确认并提示会清零；② 回放增加「暂停 / 继续」按钮；③ 根治专业档 AI「未击打任何球」（空杆）——用户实测反馈；④ 退出确认弹窗改为金棕木纹主题并修复排版。核心是第③项：出杆方向 = <code>atan2(ghost − 母球)</code>，当母球几乎贴在目标球上、且位于目标球的<strong>袋口侧</strong>时（开球后球堆密集、或母球撞完停在球边，实战非常常见），ghost 点就落在母球脚边，这条方向线的长度趋近 0，方向完全由浮点残差决定 —— harness 实测偏离 <strong>100°~340°</strong>，母球朝一个一颗球都没有的方向飞出去，被 <code>eightball.ts</code> 判「空杆，未击中任何球」直接送自由球，观感就是「AI 在乱打」。贴球场景实测空杆率 1.7%~3.0%。</b></p>
+<ul class="about-text dim">
+<li><b>③ 空杆根治 · 瞄准点退化保护</b>：<code>aimcalculator.ts</code> 新增 <code>MIN_AIM_DISTANCE = 1.2R</code>，<code>getAimPoint()</code> 在「母球→ghost」距离小于该阈值时退回<strong>直接瞄准目标球心</strong>（母球→球心恒 ≥ 2R，方向稳定）—— 宁可打厚进不去，也绝不空杆。三档 AI 与所有玩法共用该入口，一次修好。</li>
+<li><b>③ 空杆根治 · 退化线路直接剔除</b>：<code>enumeratePlans()</code> 用新增的 <code>calculator.ghostBallFor()</code>（未做退化处理的原始 ghost 点）逐条算距离，退化组合<strong>整个丢掉</strong>，让 AI 换一颗球 / 换一个袋口打，而不是硬着头皮打飞。顺带把旧代码里误用的 <code>getAimPoint()</code>（拿兜底后的球心当 ghost 做遮挡检测）改正。</li>
+<li><b>③ 空杆根治 · 出杆前最后一道保险</b>：新增 <code>rayMissDistance(cuePos, angle, targetPos)</code>，沿<strong>实际出杆角度</strong>做射线检测求母球到目标球的垂距；&gt; 1.9R 说明擦不到，立即改为直击目标球心重新出杆。覆盖 ghost 法所有剩余边界情形（球堆挤压、母球被挤在角落等）。</li>
+<li><b>① 系列赛比分</b>：<code>hud.ts</code> 的 <code>isSeriesMode</code> 由构造时缓存的 <code>readonly</code> 字段改为 <strong>运行时 getter</strong>——原写法一旦 Hud 构造早于 <code>Session.init()</code> 就永久锁死成 false，系列赛行整局都不显示；现在任何时序下开局即显示「系列赛 你 X : Y 电脑」。</li>
+<li><b>① 退出提示</b>：<code>back-confirm-cn.js</code> 的确认弹窗现在会读出当前系列赛比分并提示「返回后系列赛比分将清零」，确认时才真正 <code>removeItem</code>；设置浮层「返回主菜单」(<code>index.ts</code>) 与结算面板「返回主菜单」(<code>notification.ts</code>) 两条路径统一改走这个弹窗 —— 此前都是静默跳走 + 静默清零。</li>
+<li><b>② 回放暂停</b>：<code>play.html</code> 控制栏最左侧新增 <code>#replayPauseBtn</code>（<code>replay-seek.css</code> 配套 <code>.replay-pause-btn</code> / <code>.paused</code> 样式，暂停态暖橙高亮），<code>replay.ts</code> 新增 <code>userPaused</code> 与 <code>applyPauseState()</code>：手动暂停与「拖动进度条临时冻结」<strong>分开记账</strong>，拖完进度条不会把用户按的暂停悄悄取消；回放自然播完时按钮自动禁用。</li>
+<li><b>④ 弹窗主题与排版</b>：退出确认弹窗由深绿灰 #1f2a26 + 橙 #d84315 改为与比分栏 / 底部栏同款的<strong>金棕木纹</strong>（渐变 #6b4a22 → #4a3014、金边 #c89534、奶油金字 #f3d79a）；排版改为面板定宽 <code>min(520px, 86vw)</code> + 三段层级（标题 / 正文 / 系列赛弱提示 / 按钮行），按钮 <code>flex:1 1 0 + min-width:0</code> 等宽、文字 nowrap 不截断、两端留白不贴边，并加矮屏媒体查询收紧留白。</li>
+<li><b>验证</b>：新增 <code>tools/harness/botcheck3.ts</code>（专门统计「整杆无任何 Collision」的空杆率，botcheck/botcheck2 都以"母球碰到了球"为前提，完全测不到空杆），支持 <code>--touching</code>（母球贴球）/ <code>--rail</code>（目标球贴库）/ <code>--cuerail</code>（母球贴库）三种极端场景。贴球场景 300~500 局：空杆 1.7%~3.0% → <strong>0.0%</strong>，进球率 42.5%~49% → <strong>56%~64%</strong>；母球贴库 0% → 0%，进球率 76.0% → <strong>80.7%</strong>；常规场景回归无退化（真实八球 pot 83.4%、首撞错球 0.0%、无碰库犯规 0.2%，随机布局 pot 85.0%）。</li>
+<li><b>约束</b>：AI 修复只动「瞄准点计算」与「候选过滤」，未动力度物理反解（v1.3.68/74 的 <code>cueSpeedFor</code> / <code>POWER_MARGIN</code>）、选球评分、走位 / 防摔袋逻辑与规则判定；<code>MIN_AIM_DISTANCE=1.2R</code> 与 <code>1.9R</code> 垂距阈值为硬约束，调大即复现空杆。系列赛与回放改动不涉及物理与 AI。</li>
+</ul>
+</div>
+
+<div class="setting-group">
+<h3>v1.3.74 · 2026-09-04 19:10:00</h3>
+<p class="about-text dim"><b>v1.3.74 一项：修复专业档 AI「全是轻推 + 力度不够没撞库犯规」——用户实测反馈。根因是 v1.3.68/69 的力度物理化只反解「物体球刚好够到袋口边界」的<strong>最小力度</strong>（margin 1.05 贴下界），harness 实测平均出杆仅 27R（0.88 m/s）、78% 的杆低于 30R，观感全是轻推；更糟的是八球规则里「没进球时首撞后必须有球碰库，否则犯规」（<code>eightball.ts</code> foulReason 第 3 条），而最小力度一旦没进袋（呲框 / 薄切 throw 打偏，实测约 17%），物体球在袋口前<strong>短停</strong>、母球又被深低杆拉回原地，两球都够不到库 → 必犯规送自由球。安全球兜底更极端：推「0.4×到袋距离」的极轻球，物体球根本没打算撞库，一打出去就是 100% 犯规（旧注释把「空杆」与「无碰库」混为一谈了）。修复：① 主路径力度反解加<strong>合法性保险</strong>——反解的有效距离延长 2×袋半径，物体球到袋口边界时仍保有滚过袋心、撞上袋口库边的余速：进了袋照样合法，没进也必然撞库；② 余量 1.05 → 1.2（距离上等效 +44%），观感从「轻推」变「有目的的中等力度」，进袋速度区间上界 4.8~5.0 m/s 远未触及，摔袋由防摔袋收力与深低杆继续压制；③ 安全球改为反解「物体球滚到实际出杆方向的袋口、没进也必撞库边」的力度（距离必须沿 <code>findBestPocket</code> 的最小切角袋算，不能按最近袋算——方向偏远时余速不够仍会短停）。</b></p>
+<ul class="about-text dim">
+<li><b>主路径合法性保险</b>：<code>choosePower()</code> 调 <code>cueSpeedFor()</code> 时把 <code>ballToPocketTrue</code> 延长 <code>2×pocketRadius</code>（内部有效距离 D 从「袋口半径边界」变为「袋心 + 1 半径」），物体球到袋口边界时余速 <code>sqrt(2·aObj·2r)</code> 还能再滚 4R+ → 没进袋也必撞袋口库边，杜绝「无球碰库」犯规。<strong>硬约束</strong>：该延长不可删——删了立刻退回 v1.3.73 的「没进袋就短停犯规」状态。</li>
+<li><b>余量 1.05 → 1.2</b>：新增常量 <code>POWER_MARGIN</code>。1.05 是 potcalib 标定的「刚好进袋」下界，实战短停率高、观感全是轻推；1.2 的超供副作用（母球多跑）由 <code>scratchRisk &lt; 1.6R → min(power, 56R)</code> 收力与深低杆继续压制，1200 局实测摔袋率仍在 1.5% 以内。</li>
+<li><b>安全球合法化</b>：<code>safetyOrFallback()</code> 的 <code>powerOverride</code> 由「0.4×dToPocket 极轻球」改为 <code>cueSpeedFor(cueToBall, dBestPocket + 2.1R, 2.1R, 1, 0, 0, 1.3)</code> —— 物体球要么落袋、要么撞上袋口周围库边，兜底必合法；力度上限 42R → 60R。</li>
+<li><b>新增 harness 指标</b>：<code>tools/harness/botcheck2.ts</code> 复刻八球 foulReason 第 3 条，统计「无进球且首撞后无 Cushion」犯规并按主路径/兜底分桶 + 力度分桶。botcheck.ts 原有口径（首撞错球）测不到该犯规。</li>
+<li><b>验证（1200 局 × 2 模式）</b>：真实八球 noRailFoul 0.5% → <strong>0.0%</strong>（主路径+兜底全清零）、pot 77.8% → <strong>82.3%</strong>、avgPower 27.1R → <strong>32.3R</strong>、摔袋 0.8% → 1.4%（力度上浮的正常代价，仍在压制线内）；随机布局 noRailFoul 0.3% → <strong>0.0%</strong>、pot 82.3% → <strong>86.8%</strong>、摔袋 0.5% → 0.3%。激进/稳健档不受影响（激进用满力档，稳健用默认力度）。</li>
+<li><b>约束</b>：仅改 <code>professional.ts</code> 的力度决策与新增 harness 脚本，未动物理引擎、碰撞参数、规则判定、选球/走位/防摔袋评分逻辑，未动其它两档 AI。</li>
+</ul>
+</div>
+
+<div class="setting-group">
+<h3>v1.3.73 · 2026-09-03 08:30:00</h3>
+<p class="about-text dim"><b>v1.3.73 两项：① 根治局域网对战「输入正确 IP 进入游戏后无反应，随便填个 IP 也一模一样」——真因是 <strong>AndroidManifest 没放行明文流量</strong>。页面 origin 是 <code>https://billiards.local/</code>，对战用的是明文 <code>ws://</code>（主机连 <code>ws://127.0.0.1:24816</code>、客机连 <code>ws://&lt;对方IP&gt;:24816</code>），而 <code>targetSdkVersion</code> 已提到 35，Android 9（API 28）起 <code>usesCleartextTraffic</code> 默认为 <strong>false</strong>，WebView 会直接拒绝明文 WebSocket（<code>net::ERR_CLEARTEXT_NOT_PERMITTED</code>）。结果就是建房能出 IP（Java 侧 ServerSocket 正常 bind），但两端 ws <strong>一条都建不起来</strong>。此前 <code>WebView.setMixedContentMode(0)</code> 只管 https 页面加载 http 子资源的混合内容策略，管不到 cleartext 这一层。修复：<code>&lt;application&gt;</code> 加 <code>android:usesCleartextTraffic="true"</code>；② 客机端连接状态全程可见 + 失败引导——此前「正在连接 / 已连接 / 连接失败」全部走 <code>notify()</code>，而客机端一进游戏就常驻一个 <code>key="lan-room"</code> 的 sticky 弹窗，<code>notification.show()</code> 的粘性守卫会把这些普通提示整个丢掉，加上 WebView 连不可达地址要几十秒才回调 onerror，用户看到的就是「什么都不动」。现在改为实时刷新 sticky 弹窗本身（同 key sticky 走覆盖路径不受守卫影响），补 6 秒超时兜底，失败时先立即上屏、再经 <code>LanBridge.probePeer()</code> 原生 Socket 探测给出准确原因（手机之间通不通 / 对方房间开没开 / App 内被拦截），并附「重新连接 + 返回主菜单」引导按钮</b></p>
+<ul class="about-text dim">
+<li><b>放行明文流量（根因修复）</b>：给 <code>&lt;application&gt;</code> 注入 <code>android:usesCleartextTraffic="true"</code>，源码 <code>AndroidManifest.xml</code> 里补长注释说明「MixedContentMode 管不到 cleartext」这条易踩的坑。<strong>为什么不能直接写进源码 Manifest</strong>：本机 <code>sdk/platforms/android-34/android.jar</code> 实为 2011 年的旧版（仅 3133 个类，连 <code>NetworkSecurityPolicy</code> 都没有），资源表里没有这个属性，aapt2 link 会直接报 <code>attribute android:usesCleartextTraffic not found</code> 拒绝构建。改由新增的 <code>billiards-apk/patch_manifest.py</code> 在 <strong>aapt2 link 之后、签名之前</strong>直接改<strong>二进制</strong> manifest（真机读的就是二进制文件，与构建期 SDK 无关）：属性名插进 string pool 的「属性名区末尾」（下标 = ResourceMap 长度，<strong>不是</strong> pool 末尾），ResourceMap 同位插 attr id <code>0x010104EB</code>，chunk 内所有 ≥ 该下标的池引用 +1（<strong>含字符串型属性值的 <code>typedValue.data</code></strong>，漏平移会出现「主值错位、Raw 正确」），最后在 <code>&lt;application&gt;</code> 的属性区末尾追加一条 <code>TYPE_INT_BOOLEAN</code> 属性、<code>attrCount+1</code> 并回填 chunk size。已接入 <code>build-apk.sh</code> 第 5 步。<strong>硬约束</strong>：该注入必须在签名之前，且不可从 <code>build-apk.sh</code> 移除 —— 否则局域网对战会立刻退回 v1.3.65~v1.3.72 的「建房正常但双方连不上」状态；放行范围仅限本 App 的 WebView，页面请求全部由 <code>shouldInterceptRequest</code> 转回 assets，不产生任何真实外网明文请求。</li>
+<li><b>客机端连接状态机</b>：<code>lanrelay.ts</code> 新增 <code>joinState</code>（connecting / connected / failed / disconnected）、<code>settled</code>（ws 的 error 与 close 常成对触发，用于去重）、<code>connectTimer</code>、<code>targetUrl / targetPort</code>；新增 <code>startJoin()</code> / <code>setJoinConnected()</code> / <code>showDisconnected()</code> / <code>failJoin()</code> / <code>retryJoin()</code> / <code>showJoin()</code> / <code>clearConnectTimer()</code>。<code>open()</code> 的 join 分支不再调 <code>notify("正在连接")</code>，改调 <code>startJoin()</code>；<code>ws.onopen</code> 刷成「已连接，等待主机开球」；<code>ws.onerror / onclose</code> 按 role 分流（host 保持原 notify 行为）。<code>close()</code> 里清定时器，避免离开页面后仍弹一次失败。</li>
+<li><b>6 秒超时兜底</b>：<code>connect()</code> 对 join 端挂 <code>JOIN_TIMEOUT_MS = 6000</code> 定时器，连上即清除。此前只能干等 WebView 自己的超时（实测几十秒且全程无反馈），现在最迟 6 秒一定出结果。</li>
+<li><b>失败原因分级诊断</b>：<code>LanBridge.java</code> 新增 <code>@JavascriptInterface String probePeer(String host, int port)</code>，用<strong>原生 Socket</strong>（不走 HTTP 栈，不受 cleartext / mixed content 限制）以 3 秒超时探测对方端口，返回 <code>ok / timeout / refused:&lt;msg&gt; / error:&lt;msg&gt;</code>。<code>lanrelay.diagnoseFailure()</code> 据此分级：<code>ok</code>→「手机之间是通的，但游戏内连接被拒」（说明是 App 内被拦，引导升级）；<code>refused</code>→「对方手机在线，但房间没开」；<code>timeout</code>→「找不到 &lt;ip:port&gt;」；无该方法（老 APK）→回退通用引导（同一个 Wi-Fi / 对方已建房 / IP 填对）。探测是同步阻塞调用，放在失败态上屏后 50ms 再做，不让用户干等。</li>
+<li><b>失败引导按钮</b>：失败 / 断线弹窗带 <code>extra</code> 动作按钮（<code>retry-lan</code> 重新连接、<code>menu</code> 返回主菜单，后者走 notification 内置处理：resetSeries + 跳 menu.html）。带按钮的提示自动禁用触碰关闭，不会误触消失。</li>
+<li><b>弹窗创建时机前移</b>：<code>browsercontainer.initLanMode()</code> 把 sticky 弹窗的创建从 <code>messageRelay.subscribe()</code> <strong>之后</strong>移到<strong>之前</strong>——subscribe 会同步跑完连接起始逻辑，join 端地址非法时会当场写入失败弹窗，若弹窗后建就会把这则失败提示盖掉。join 分支初始文案也由静态「目标主机 xxx」改为「正在连接…」。<strong>约束</strong>：弹窗 key 必须保持 <code>lan-room</code>，LanRelay 与 initLanMode 靠它协同；后续刷新一律走 <code>notifyLocal(sticky:true, key:"lan-room")</code> 覆盖路径，改回 <code>notify()</code> 会被粘性守卫吞掉。</li>
+<li><b>约束</b>：本轮未动 <code>LanServer.java</code> 协议、未动物理 / 规则 / AI、未动弹窗 CSS。<code>probePeer</code> 仅为诊断，不参与对局数据流；老 APK 无该方法时 <code>probePeer()</code> 返回空串并回退通用引导，不会崩。<code>usesCleartextTraffic</code> 与 <code>probePeer</code> 诊断覆盖两类互斥的失败原因，必须都保留才能区分「网络不通」与「App 被系统拦截」。</li>
+</ul>
+</div>
+
+<div class="setting-group">
 <h3>v1.3.72 · 2026-09-03 16:00:00</h3>
 <p class="about-text dim"><b>v1.3.72 一项：根治 v1.3.71 仍显示「本机 IP 不可用 / App 版本过低」的真因——不是版本号问题，而是 JSBridge 注解根本没暴露给 JS。本机 android-34.jar 是老版 SDK（仅 43 个 webkit 类，缺 <code>android/webkit/JavascriptInterface.class</code>），之前用 renderstub 提供等价定义，但把 <code>@Retention</code> 写成了 <code>CLASS</code>；javac 随之把 <code>@JavascriptInterface</code> 编译成 <strong>RuntimeInvisibleAnnotations</strong>，d8 不把它写进 dex 的 <code>annotation_directory_item</code>（实测 <code>LanBridge</code> 该偏移为 0），ART 侧 <code>addJavascriptInterface()</code> 反射读不到，结果是 <code>window.__lan</code> 上一个方法都不暴露——<code>typeof bridge.lanInfo === "function"</code> 恒为 false，页面只能给出「App 版本过低」死文案。修复：① 把 stub 的 retention 改成 <code>RUNTIME</code>，并强制编译成 .class 打进 renderstub.jar（去掉 <code>if [ ! -f ]</code> 重建守卫，否则改了源码不进 jar）；② 顺带加一条 Java 主动推送兜底双通道（<code>MainActivity.onPageFinished</code> → <code>lanBridge.pushLanInfo()</code> → <code>window.__lanPush</code> 缓存），即使注解再因任何 ROM 失效，页面也能拿到 IP。修复后 dex 解析确认 <code>LanBridge</code> 的 <code>annotation_directory_item</code> 偏移从 0 → 25592，注解正常入库</b></p>
 <ul class="about-text dim">
@@ -2681,7 +2724,7 @@
     </div>
 
     <script>
-      window.__BILLIARDS_VERSION__ = "1.3.72-26090316";
+      window.__BILLIARDS_VERSION__ = "1.3.75-26090701";
     </script>
     <script src="menu-cn.js"></script>
     <script>

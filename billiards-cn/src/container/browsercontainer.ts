@@ -285,10 +285,11 @@ this.botName === "TheFarJaw"
       this.ruletype,
       this.container
     )
-    this.messageRelay.subscribe(this.tableId, (e) => {
-      this.netEvent(e)
-    })
     Session.getInstance().opponentName = "对手"
+    // v1.3.73：**先**把 sticky 弹窗立起来，再 subscribe 建链。
+    // 顺序很关键：subscribe 里会同步跑完 LanRelay 的连接起始逻辑，join 端
+    // 若地址非法会当场写「连接失败」弹窗；如果弹窗在 subscribe 之后才创建，
+    // 就会把这则失败提示盖掉（实测这类竞态会让失败态一闪而过）。
     // v1.3.70：host 端**主动同步**调一次 JSBridge.lanInfo()（v1.3.68+ 新增）
     // 拿到本机 IP —— 这样弹窗第一次就有 IP 显示（或具体诊断），**不再停在
     // 「等待对手加入…」**。v1.3.67/68/69 之前都是依赖 LanServer.bind 成功后
@@ -327,18 +328,29 @@ this.botName === "TheFarJaw"
         this.scheduleIpPoll(2500, true)
       }
     } else {
+      // v1.3.73：初始就写明「正在连接」，后续由 LanRelay 的状态机接管刷新
+      // （连接中 → 已连接 / 连接失败+引导），见 LanRelay.showJoin。
+      // 之前这里只是静态显示「目标主机 xxx」，而 LanRelay 的所有连接反馈都
+      // 被 sticky 守卫吞掉，用户看到的就是「填完 IP 进游戏后毫无反应」。
       this.container.notifyLocal(
         {
           type: "Info",
           title: ruleName(this.ruletype),
-          subtext: `局域网对战 · ${this.lanPeer}`,
+          subtext: "局域网对战 · 正在连接…",
           sticky: true,
           key: "lan-room",
-          detail: { label: "目标主机", value: this.lanPeer },
+          detail: {
+            label: "目标主机",
+            value: this.lanPeer,
+            hint: "正在连接对方的房间，请稍候…",
+          },
         } as const,
         0
       )
     }
+    this.messageRelay.subscribe(this.tableId, (e) => {
+      this.netEvent(e)
+    })
   }
 
   /**

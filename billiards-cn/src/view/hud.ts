@@ -18,8 +18,15 @@ export class Hud {
   private readonly p2BallsEl: HTMLElement | null
   /** 系列赛总比分行（仅人机对战显示）：「系列赛 你 X : Y 电脑」 */
   private readonly scSeriesEl: HTMLElement | null
-  /** 是否人机对战（决定系列赛总比分行是否显示） */
-  private readonly isSeriesMode: boolean
+  /**
+   * 是否人机对战（决定系列赛总比分行是否显示）。
+   * v1.3.75：不再在构造时把 `Session.isBotMode()` 缓存成只读常量 —— 一旦 Hud
+   * 的构造时序早于 `Session.init()`，这里就会永久锁死成 false，系列赛行整局
+   * 都不显示。改为运行时实时读取，任何时序下都安全。
+   */
+  private get isSeriesMode(): boolean {
+    return Session.isBotMode()
+  }
   /** 当前玩法名（rulename），用于读取系列赛累计 */
   private readonly ruleName: string
   /** 顶部「break」分（老 HUD 兼容），新 v2 比分栏不展示 */
@@ -57,7 +64,6 @@ export class Hud {
     // v1.3.66：系列赛总比分行。仅在人机对战（系列赛）模式下显示，
     // 每局开局即展示「你 0 : 0 电脑」，随结算累加。
     this.scSeriesEl = id("scSeries")
-    this.isSeriesMode = Session.isBotMode()
     try {
       this.ruleName =
         new URLSearchParams(location.search).get("ruletype") ?? ""

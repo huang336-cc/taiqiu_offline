@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.tailuge.billiards.cn"
-    android:versionCode="26090372"
-    android:versionName="1.3.72">
+    android:versionCode="26090775"
+    android:versionName="1.3.75">
 
     <!-- 明确声明 SDK 版本，避免 aapt2 按旧版兼容规则隐式追加存储/电话权限 -->
     <!-- targetSdkVersion 提升到 35，适配 Android 15/16 安装器策略 -->
@@ -14,6 +14,28 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <uses-feature android:glEsVersion="0x00020000" android:required="true" />
+
+    <!-- v1.3.73：明文（ws://）流量放行 —— 由 patch_manifest.py 构建后注入。
+         页面 origin 是 https://billiards.local/（虚拟域名，请求全部由
+         shouldInterceptRequest 转回 assets），而局域网对战用的是明文 ws:// ——
+         主机连 ws://127.0.0.1:24816，客机连 ws://<对方IP>:24816。
+         targetSdkVersion 已提到 35，而 Android 9（API 28）起 usesCleartextTraffic
+         默认为 false，且 WebView 对 target >= 26 的应用**遵循**该属性，明文
+         WebSocket 会被直接拒绝（net::ERR_CLEARTEXT_NOT_PERMITTED）。
+         这正是 v1.3.65~v1.3.72 的现象：建房能出 IP（Java 侧 ServerSocket 正常
+         bind），但两端 ws 一条都建不起来 —— 主机连不上自己、客机连不上主机，
+         页面只剩「目标主机 xxx」常驻弹窗，看起来就是「输入 IP 后没反应」。
+
+         ★ 为什么不在这里直接写 android:usesCleartextTraffic="true"？
+         本机 SDK 的 platforms/android-34/android.jar 实为 2011 年的旧版（仅
+         3133 个类，连 NetworkSecurityPolicy 都没有），资源表里没有这个属性，
+         aapt2 link 会直接报 "attribute android:usesCleartextTraffic not found"
+         拒绝构建。真机系统读的是 APK 里的**二进制** manifest，与构建期用的
+         android.jar 无关，所以改由 patch_manifest.py 在 aapt2 之后直接改二进制
+         （注入 usesCleartextTraffic，attr id = 0x010104eb，见 build-apk.sh）。
+
+         注意 WebSettings.setMixedContentMode(0) 管的是 https 页面加载 http
+         子资源的混合内容策略，管不到 cleartext 这一层。 -->
 
     <application
         android:label="@string/app_name"

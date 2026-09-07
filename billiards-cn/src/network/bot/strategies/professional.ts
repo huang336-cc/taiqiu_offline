@@ -22,6 +22,15 @@ import {
 const POCKET_INSET_FACTOR = 0.94
 
 /**
+ * v1.3.74：力度反解安全余量。
+ * 1.05 是 potcalib 标定的「刚好进袋」下界 —— 实战观感全是轻推，且没进袋时
+ * 物体球短停 + 母球被深低杆拉停 → 「击球后无球碰库」犯规。抬到 1.2：
+ * 距离上等效 +44% 余量（v² 关系），仍远低于进袋速度区间上界（4.8~5.0 m/s），
+ * 超供的副作用（母球多跑）由 scratchRisk 收力与深低杆压制。
+ */
+const POWER_MARGIN = 1.2
+
+/**
  * 专业难度 AI（Professional）：在激进策略（TheFarJaw）之上强化「决策质量」，
  * 是三档电脑里最强的一档。
  *
@@ -43,6 +52,14 @@ const POCKET_INSET_FACTOR = 0.94
  *  5. 力度自适应（adaptivePower）：按距离选力度，薄球收力，避免满力乱冲；
  *  6. 安全球（safetyPlay）：无球可进时把母球留在对手难打的位置。
  */
+
+/**
+ * v1.3.75：ghost 退化阈值（单位 R）。
+ * 「母球→ghost」的距离小于此值时，出杆方向由浮点残差决定，实测会偏离
+ * 100°~340° 直接空杆。与 AimCalculator.MIN_AIM_DISTANCE 同义，独立常量
+ * 是为了让候选枚举（剔除）与出杆兜底（退化成直击）两条路径各取所需。
+ */
+const MIN_GHOST_DISTANCE = 1.2 * R
 
 /** 一个候选打法：目标球 + 袋口 + 各项几何评估 */
 interface Plan {
@@ -147,11 +164,32 @@ export class Professional extends TheFarJaw {
       spin
     )
 
-    return [
+    // v1.3.75 最后一道保险：沿**实际出杆角度**做一次射线检测，确认母球真能
+    // 擦到目标球。ghost 法在贴球/球堆挤压等边界情形下仍可能给出打飞的方向
+    // （见 MIN_GHOST_DISTANCE 注释），这里兜底：改为直击目标球心。
+    // 直击最多打厚进不去，但绝不会空杆送对手自由球。
+    let finalHit = pocketHit
+    const hitAngle = (pocketHit.tablejson?.aim as { angle?: number } | undefined)
+      ?.angle
+    if (
+      typeof hitAngle === "number" &&
+      rayMissDistance(cue.pos, hitAngle, best.ball.pos) > 1.9 * R
+    ) {
+      finalHit = calculator.generateShot(
+        context.table,
+        this.profile.aimNoise,
+        jitterPower(power, this.profile.powerJitter),
+        best.ball.pos.clone(),
+        spin
+      )
+    }
+
+    const out: GameEvent[] = [
       AimEvent.fromJson(farKnuckleHit.tablejson.aim),
-      AimEvent.fromJson(pocketHit.tablejson.aim),
-      pocketHit,
+      AimEvent.fromJson(finalHit.tablejson.aim),
+      finalHit,
     ]
+    return out
   }
 
   /**
@@ -188,7 +226,7 @@ export class Professional extends TheFarJaw {
   }
 
   /**
-   * 力度自适应（v1.3.68 完全物理化）：
+   * 力度自适应（v1.3.68 完全物理化，v1.3.74 补「合法性保险」）：
    *
    * v1.3.67 只做了经验微调（上限 90R→72R + 低杆补偿 5-10%），摔袋率 11.5%→10.6%，
    * 收益有限。v1.3.68 改为**基于真实物理模型反解**，见 powerphysics.ts：
@@ -203,18 +241,29 @@ export class Professional extends TheFarJaw {
    *  2. f(spin) 实测拟合：低杆 −0.45 只剩 **48%** 滚动速度（不是 85%）；
    *  3. ballToPocket 是**内缩点**距离，须换算回真实袋心（角袋 +3.00R）。
    *
-   * margin 由 potcalib.ts C 段标定为 1.05（进袋速度区间很宽，贴下界即可，
-   * 超供只会让母球多跑 → 摔袋）。
+   * v1.3.74 两处修正（用户实测「全是轻推 + 力度不够没撞库犯规」）：
+   *  A. **合法性保险**：八球规则——没进球时首撞后必须有球碰库，否则直接犯规送
+   *     自由球（eightball.ts foulReason 第 3 条）。旧反解只给「物体球刚好够到
+   *     袋口边界」的最小力度，一旦没进（呲框/薄切 throw 打偏，实测 ~17%），
+   *     物体球在袋口前短停、母球又被深低杆拉回原地，两球都够不到库 → 必犯规。
+   *     现在把反解的有效距离延长 2×pocketRadius（物体球到袋口边界时仍保有滚
+   *     过袋心、撞上袋口库边的余速）：进了袋照样合法，没进也必然撞库。
+   *  B. **余量 1.05 → 1.2**：1.05 是「贴着最小进袋速度」的下界，harness 实测
+   *     平均出杆仅 27R（0.88 m/s）、78% 的杆 <30R，观感全是轻推且短停率高。
+   *     1.2 距离上等效 +44% 余量（v² 关系），仍远低于「超供只会摔袋」的上界
+   *     （potcalib 实测进袋速度区间上界 4.8~5.0 m/s，而反解典型值 ~1 m/s），
+   *     摔袋由 scratchRisk 收力 + 深低杆继续压制。
    */
   private choosePower(best: Plan, spin: Vector3): number {
     if (!this.profile.adaptivePower) return AimCalculator.DEFAULT_SHOT_POWER
     let power = cueSpeedFor(
       best.cueToBall,
-      best.ballToPocketTrue,
+      best.ballToPocketTrue + 2 * best.pocketRadius,
       best.pocketRadius,
       best.cutCos,
       spin.y,
-      spin.length()
+      spin.length(),
+      POWER_MARGIN
     )
     // 薄球：切向 throw 会让物体球偏离袋心，多给 8% 余量
     if (best.cutCos < 0.5) power *= 1.08
@@ -269,8 +318,8 @@ export class Professional extends TheFarJaw {
   /**
    * 无球可进时的处理。
    * - 安全球（专业档）：在所有合法目标球里挑「碰完之后母球离对手球最远」的
-   *   那颗，把难题丢回去。力度沿用默认力度，保证球有足够动能碰库，不会因为
-   *   轻碰未碰库而白白犯规送自由球。
+   *   那颗，把难题丢回去。力度反解为「物体球滚到袋口、没进也必撞库边」
+   *   （v1.3.74）：先保证不犯「击球后无球碰库」的规，再谈防守。
    * - 其余档位：退化为稳健的「碰最近的一颗」，只求不空杆犯规。
    *
    * v1.3.65：候选池先做**视线畅通过滤**（对全桌球，含对方球与黑8）。
@@ -330,22 +379,34 @@ export class Professional extends TheFarJaw {
           }
         }
       }
-      // v1.3.68：安全球模式下改为推极轻球，让母球轻轻碰一下目标球就停住，
-      // 把难题丢回给对手（不会被判"空杆未碰库"送自由球）。
-      // 力度用 cueSpeedFor 反解：目标球只需走"到最近袋口的 0.4 倍"距离。
+      // v1.3.68 引入、v1.3.74 修正：安全球必须先保证**合法性**。
+      // 八球规则：没进球时首撞后必须有球碰库，否则「击球后无球碰库」直接犯规
+      // 送自由球（eightball.ts foulReason 第 3 条）。旧版推「0.4×dToPocket」的
+      // 极轻球：物体球停在袋口途中、母球直线轻碰后原地停住 —— 两球都够不到库，
+      // 安全球一打出去就是必犯规送对手自由球（旧注释把「空杆」与「无碰库」混为
+      // 一谈了：轻碰碰到了球，不算空杆，照样犯无碰库的规）。
+      // 现在改为反解「物体球滚到袋口、没进也撞上袋口库边」所需的力度：
+      // 距离必须沿**实际出杆方向**算 —— getAimPoint 内部 findBestPocket 按
+      // 「切角最小」选袋，不是最近袋；v1.3.74 首版用最近袋距离反解，方向偏远
+      // 时余速不够仍会短停。这里直接取 best pocket 的真实距离，物体球要么
+      // 落袋、要么撞上袋口周围的库边 → 必合法，同时保留安全球本意。
       if (target && theirs.length > 0) {
-        const dToPocket = Math.min(
-          ...calculator.pockets.map((pk) => pk.distanceTo(target.pos))
+        const aimPocket = calculator.findBestPocket(
+          cue.pos,
+          target.pos,
+          calculator.pockets
         )
-        const lightPower = cueSpeedFor(
+        const dPocket = target.pos.distanceTo(aimPocket)
+        const railPower = cueSpeedFor(
           cue.pos.distanceTo(target.pos),
-          dToPocket * 0.4,
-          POCKET_RADIUS_CORNER,
+          dPocket + POCKET_RADIUS_CORNER, // 袋心后再留一整个袋半径的撞库余速
+          POCKET_RADIUS_CORNER,           // 内部 D = dPocket（到袋心仍有余速）
           1, // 直线轻推，切球角余弦取 1
           0, // 不打旋转
-          0
+          0,
+          1.3 // 余量给足，保证物体球真的能撞上库边
         )
-        powerOverride = Math.min(Math.max(lightPower, 22 * R), 42 * R)
+        powerOverride = Math.min(Math.max(railPower, 22 * R), 60 * R)
       }
     }
 
@@ -362,6 +423,25 @@ export class Professional extends TheFarJaw {
     )
     return [AimEvent.fromJson(hit.tablejson.aim), hit]
   }
+}
+
+/**
+ * v1.3.75：出杆方向到目标球的**垂距**（射线与球心的最近距离）。
+ * 用于判断「沿这个方向打出去到底能不能碰到这颗球」：
+ *   - ≤ 2R：会碰上（球心到射线垂距小于两球半径和）；
+ *   - > 2R：擦着飞过去，空杆。
+ * 目标球在母球背后时返回 Infinity。
+ */
+function rayMissDistance(
+  cuePos: Vector3,
+  angle: number,
+  targetPos: Vector3
+): number {
+  const dir = new Vector3(Math.cos(angle), Math.sin(angle), 0)
+  const rel = targetPos.clone().sub(cuePos)
+  const along = rel.dot(dir)
+  if (along <= 0) return Infinity
+  return Math.sqrt(Math.max(0, rel.lengthSq() - along * along))
 }
 
 /**
@@ -399,7 +479,11 @@ function enumeratePlans(
       // v1.3.67 修薄切首撞错球：母球实际打的是 ghost（目标球的"虚拟击球点"，
       // 偏离球心 2.001R），不是球心。薄切时偏离最大可达 2R，叠 2R 判定阈值
       // 等于障碍球离检查线 4R 也可能先撞。改用 ghost 终点检查线段遮挡。
-      const ghost = calculator.getAimPoint(cue.pos, ball.pos, [pocket])
+      const ghost = calculator.ghostBallFor(cue.pos, ball.pos, [pocket])
+      // v1.3.75：ghost 退化线路直接剔除。母球贴在目标球袋口侧时 ghost 就落在
+      // 母球脚边，「母球→ghost」方向被浮点残差放大成随机角度 → 空杆送自由球。
+      // 这种组合整个丢掉，让 AI 去打别的球/别的袋口，而不是硬着头皮打飞。
+      if (cue.pos.distanceTo(ghost) < MIN_GHOST_DISTANCE) continue
       if (lineBlocked(cue.pos, ghost, allBalls, cue, ball)) continue
       if (lineBlocked(ball.pos, pocket, allBalls, ball)) continue
 

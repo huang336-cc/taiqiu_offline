@@ -7,6 +7,21 @@ import { ruleName } from "../../utils/i18n"
 /** 局域网服务端监听端口（主机侧）；被占用时 LanServer 会顺延，实际端口由回调给出 */
 export const LAN_DEFAULT_PORT = 24816
 
+/**
+ * v1.3.73：连接失败时的通用引导（三条最常见的翻车点，按排查顺序排列）。
+ */
+const LAN_GUIDE_GENERAL =
+  "请确认：① 两台手机连的是同一个 Wi-Fi；② 对方已点『创建房间』并停留在该页面；③ IP 填的是对方房间界面显示的地址。"
+
+/** v1.3.73：失败弹窗的可操作引导按钮（"menu" 走 notification 的内置返回菜单） */
+const LAN_FAIL_ACTIONS =
+  '<button type="button" class="notification-btn" data-notification-action="retry-lan">重新连接</button>' +
+  '<button type="button" class="notification-btn" data-notification-action="menu">返回主菜单</button>'
+
+/** v1.3.73：join 端连接超时（毫秒）。Android WebView 连不可达地址要几十秒
+ *  才回调 onerror，用户会一直以为"没反应"，这里主动判定超时。 */
+const JOIN_TIMEOUT_MS = 6000
+
 /** Java → 页面 的状态事件（LanBridge 回调）
  *
  * v1.3.69：started 事件由 Java 端在 bind 成功后立刻附带给 ip / iface /
@@ -59,12 +74,36 @@ interface Envelope {
  * 开局握手（hello）：
  *   客机 ws 连上即发 hello（含本机 ruletype）；
  *   主机收到 hello 后校验规则一致，再推 BeginEvent 开局（主机先开球）。
+ *   客机端不需要 BeginEvent —— 主机 handleBegin 会顺带广播 WatchEvent，
+ *   客机 Init.handleWatch 收到后自动进入"后手待命"。
+ *
+ * v1.3.73：客机端状态全程可见。此前"正在连接 / 已连接 / 连接失败"全部走
+ *   notify()，而客机端一进游戏就有一个 key="lan-room" 的 sticky 弹窗常驻，
+ *   notification.show() 的粘性守卫会把这些普通提示**直接丢弃**（见 show()
+ *   里 stickyKey 非空即 return 的分支）。结果就是：填对 IP 没反应，随便填个
+ *   IP 也没反应，两种完全不同的情况长得一模一样。
+ *   现在客机端改为实时刷新 sticky 弹窗本身（同 key 的 sticky 走覆盖路径，
+ *   不受守卫影响），并补上 6 秒超时兜底与失败引导按钮。
  */
 export class LanRelay implements MessageRelay {
   private ws: WebSocket | null = null
   private callback: ((message: string) => void) | null = null
   private gotHello = false
   private closed = false
+
+  // ---- v1.3.73：客机端连接状态机 ----
+  private joinState:
+    | "connecting"
+    | "connected"
+    | "failed"
+    | "disconnected" = "connecting"
+  /** 是否已定局（连上或失败）。ws 的 error 与 close 常成对触发，靠它去重 */
+  private settled = false
+  /** 连接超时定时器 */
+  private connectTimer: number | null = null
+  /** 实际连接目标（拆分过端口），失败提示里展示给用户核对 */
+  private targetUrl = ""
+  private targetPort = LAN_DEFAULT_PORT
 
   constructor(
     private readonly role: "host" | "join",
@@ -89,6 +128,8 @@ export class LanRelay implements MessageRelay {
   /** 主动断开（返回菜单等场景） */
   public close(): void {
     this.closed = true
+    // v1.3.73：清掉连接超时定时器，否则页面离开后仍会弹一次"连接失败"
+    this.clearConnectTimer()
     try {
       this.ws?.close()
     } catch {
@@ -122,9 +163,9 @@ export class LanRelay implements MessageRelay {
       bridge.startServer(LAN_DEFAULT_PORT)
       return
     }
-    // 客机：直接连对方
-    this.notify("局域网对战", `正在连接 ${this.peerHost}…`)
-    this.connect(this.peerHost, LAN_DEFAULT_PORT)
+    // 客机：直接连对方。v1.3.73：不再用 notify() 报"正在连接"——它会被
+    // 客机端常驻的 lan-room sticky 弹窗吞掉（表现为"输入 IP 后毫无反应"）。
+    this.startJoin()
   }
 
   private onStatus(s: LanStatus): void {
@@ -166,7 +207,10 @@ export class LanRelay implements MessageRelay {
    * 的地址（menu-cn.js 的注释明确说允许），会拼成 `ws://1.2.3.4:9999:24816`
    * 这种非法 URL，连不上且报错信息很误导。
    */
-  private connect(hostAndPort: string, defaultPort: number): void {
+  private resolveTarget(
+    hostAndPort: string,
+    defaultPort: number
+  ): { host: string; port: number; url: string } {
     let host = String(hostAndPort || "")
     let port = defaultPort
     // 仅当形如 host:port 且尾部是纯数字时才拆端口（避免误伤 IPv6 的冒号）
@@ -175,22 +219,44 @@ export class LanRelay implements MessageRelay {
       host = m[1]
       port = Number(m[2])
     }
-    const url = `ws://${host}:${port}`
+    return { host, port, url: `ws://${host}:${port}` }
+  }
+
+  private connect(hostAndPort: string, defaultPort: number): void {
+    const t = this.resolveTarget(hostAndPort, defaultPort)
+    this.targetPort = t.port
+    this.targetUrl = t.url
+    const url = t.url
     let ws: WebSocket
     try {
       ws = new WebSocket(url)
-    } catch (e) {
+    } catch {
+      if (this.role === "join") {
+        this.failJoin(`地址无效：${url}`)
+        return
+      }
       this.notify("局域网对战", `连接失败：${url}`)
       return
     }
     this.ws = ws
 
+    // v1.3.73：客机端超时兜底。Android WebView 连不可达 IP 要几十秒才回调
+    // onerror，期间页面一点反馈都没有；这里 6 秒主动判失败（连上后清除）。
+    if (this.role === "join") {
+      this.clearConnectTimer()
+      this.connectTimer = globalThis.setTimeout(() => {
+        this.connectTimer = null
+        this.failJoin("连接超时")
+      }, JOIN_TIMEOUT_MS) as unknown as number
+    }
+
     ws.onopen = () => {
+      this.clearConnectTimer()
       if (this.role === "join") {
         this.send({ k: "hello", ruletype: this.ruletype, name: "玩家" })
-        // v1.3.67：join 端 ws 已连上，但还没收到主机 hello 推进 BeginEvent。
-        // 此时 sticky 弹窗还在；待主机 hello 过来、BeginEvent 触发 handleBegin
-        // 后再由 init.handleBegin 的 clear() 兜底关掉。
+        // v1.3.73：连上就明确告诉用户"已连接"，别再让人猜到底连没连上。
+        this.setJoinConnected()
+        return
       }
       this.notify("局域网对战", "已连接")
     }
@@ -209,12 +275,25 @@ export class LanRelay implements MessageRelay {
     }
 
     ws.onclose = () => {
+      if (this.role === "join") {
+        // 连上之后才断开 ≠ 连接失败：给"对方退出房间"的专属提示与引导
+        if (this.joinState === "connected") {
+          this.showDisconnected()
+        } else {
+          this.failJoin("连接被关闭")
+        }
+        return
+      }
       if (!this.closed) {
         this.notify("局域网对战", "与对手的连接已断开")
       }
     }
 
     ws.onerror = () => {
+      if (this.role === "join") {
+        this.failJoin("连接失败")
+        return
+      }
       this.notify("局域网对战", "网络错误，请确认双方连在同一个 Wi-Fi")
     }
   }
@@ -367,6 +446,203 @@ export class LanRelay implements MessageRelay {
     this.dismissRoom()
     this.notify("局域网对战", "对手已就绪，你先开球")
     this.callback?.(EventUtil.serialise(new BeginEvent()))
+  }
+
+  // ---------------- v1.3.73：客机端连接状态机 ----------------
+
+  /** 客机端连接入口：算出目标地址 → 弹窗刷成"正在连接" → 建链 */
+  private startJoin(): void {
+    if (!this.peerHost) {
+      this.settled = true
+      this.joinState = "failed"
+      this.showJoin(
+        "没有填对方 IP",
+        "请返回主菜单，在『加入房间』里填写对方房间界面显示的 IP 地址。"
+      )
+      return
+    }
+    const t = this.resolveTarget(this.peerHost, LAN_DEFAULT_PORT)
+    this.targetPort = t.port
+    this.targetUrl = t.url
+    this.settled = false
+    this.closed = false
+    this.joinState = "connecting"
+    this.showJoin()
+    this.connect(this.peerHost, LAN_DEFAULT_PORT)
+  }
+
+  private setJoinConnected(): void {
+    if (this.settled) return
+    this.settled = true
+    this.clearConnectTimer()
+    this.joinState = "connected"
+    this.showJoin()
+  }
+
+  /** 已连接后又断开：对方退出房间 / Wi-Fi 掉了 */
+  private showDisconnected(): void {
+    if (this.joinState !== "connected") return
+    this.clearConnectTimer()
+    this.joinState = "disconnected"
+    this.showJoin(
+      "与对手的连接已断开",
+      "对方可能退出了房间或网络中断。请让对方重新建房后再点『重新连接』。"
+    )
+  }
+
+  /**
+   * 失败定局：先把"失败"立刻显示出来（不等探测，避免用户继续干等），
+   * 再做一次 TCP 探测把笼统原因换成准确原因。
+   */
+  private failJoin(reason: string): void {
+    if (this.settled) return
+    this.settled = true
+    this.clearConnectTimer()
+    try {
+      this.ws?.close()
+    } catch {
+      // 忽略关闭失败
+    }
+    this.joinState = "failed"
+    this.showJoin(reason, LAN_GUIDE_GENERAL)
+    // 探测是同步阻塞调用（最多 3 秒），放到下一帧再做，先让失败态上屏
+    globalThis.setTimeout(() => {
+      if (this.joinState !== "failed") return
+      if (this.container.notification?.stickyKey !== "lan-room") return
+      const diag = this.diagnoseFailure(reason)
+      this.showJoin(diag.value, diag.hint)
+    }, 50)
+  }
+
+  /**
+   * 用 Java 原生 Socket 探对方端口（LanBridge.probePeer，v1.3.73+）。
+   * 原生 Socket 不走 HTTP 栈，不受 WebView 的 cleartext / mixed content 策略
+   * 限制，因此能把"网络根本不通"和"网络通但 App 内被拦"分开。
+   * 老 APK 没这个方法时返回空串，退回通用引导。
+   */
+  private probePeer(): string {
+    try {
+      const bridge = (
+        globalThis as unknown as {
+          __lan?: { probePeer?: (host: string, port: number) => string }
+        }
+      ).__lan
+      if (!bridge || typeof bridge.probePeer !== "function") return ""
+      return String(bridge.probePeer(this.peerHost, this.targetPort) || "")
+    } catch {
+      return ""
+    }
+  }
+
+  private diagnoseFailure(reason: string): { value: string; hint: string } {
+    const probe = this.probePeer()
+    const target = this.targetUrl || this.peerHost
+    if (probe.startsWith("ok")) {
+      return {
+        value: "手机之间是通的，但游戏内连接被拒",
+        hint:
+          "两台手机网络正常，说明是 App 内的明文连接被系统策略拦截了。" +
+          "请安装 v1.3.73 或更高版本后重试。",
+      }
+    }
+    if (probe.startsWith("refused")) {
+      return {
+        value: "对方手机在线，但房间没开",
+        hint:
+          "请让对方先在主菜单点『创建房间』并停留在该页面，然后你再点『重新连接』。",
+      }
+    }
+    if (probe.startsWith("timeout")) {
+      return {
+        value: `${reason}：找不到 ${target}`,
+        hint: LAN_GUIDE_GENERAL,
+      }
+    }
+    if (probe.startsWith("error")) {
+      return {
+        value: `${reason}：${probe.slice(6) || target}`,
+        hint: LAN_GUIDE_GENERAL,
+      }
+    }
+    return { value: `${reason}：${target}`, hint: LAN_GUIDE_GENERAL }
+  }
+
+  /** 失败弹窗上的「重新连接」：关掉旧 ws 重走一遍连接流程 */
+  private retryJoin(): void {
+    try {
+      this.ws?.close()
+    } catch {
+      // 忽略
+    }
+    this.ws = null
+    this.gotHello = false
+    this.startJoin()
+  }
+
+  /**
+   * 把客机端连接状态写进 sticky 弹窗（key 仍是 "lan-room"）。
+   *
+   * 为什么不走 notify()：notification.show() 的粘性守卫会在 stickyKey 非空
+   * 时把非 sticky 的普通提示整个丢掉（v1.3.67 引入，本意是别让瞬时提示挤掉
+   * 建房弹窗）。同 key 的 sticky 提示走的是覆盖路径，不受该守卫影响 ——
+   * 所以这里用 notifyLocal 直接刷新 sticky 弹窗本身。
+   */
+  private showJoin(reason?: string, hint?: string): void {
+    if (this.role !== "join") return
+    let subtext = "局域网对战 · 加入房间"
+    let detail: { label: string; value: string; hint?: string }
+    let extra: string | undefined
+    switch (this.joinState) {
+      case "connecting":
+        subtext = "局域网对战 · 正在连接…"
+        detail = {
+          label: "目标主机",
+          value: this.peerHost,
+          hint: `正在连接 ${this.targetUrl || this.peerHost}，请稍候…`,
+        }
+        break
+      case "connected":
+        subtext = "局域网对战 · 已连接"
+        detail = {
+          label: "连接状态",
+          value: "已连接",
+          hint: "已连上对方房间，等待主机开球…",
+        }
+        break
+      default:
+        subtext = "局域网对战 · 连接失败"
+        detail = {
+          label: "原因",
+          value: reason ?? "连接失败",
+          hint: hint ?? LAN_GUIDE_GENERAL,
+        }
+        extra = LAN_FAIL_ACTIONS
+        break
+    }
+    try {
+      this.container.notifyLocal(
+        {
+          type: "Info",
+          title: ruleName(this.ruletype),
+          subtext,
+          sticky: true,
+          key: "lan-room",
+          detail,
+          extra,
+        },
+        0,
+        { "retry-lan": () => this.retryJoin() }
+      )
+    } catch {
+      // 通知组件不可用，不影响连接逻辑
+    }
+  }
+
+  private clearConnectTimer(): void {
+    if (this.connectTimer !== null) {
+      globalThis.clearTimeout(this.connectTimer)
+      this.connectTimer = null
+    }
   }
 
   private notify(title: string, subtext: string): void {

@@ -729,6 +729,29 @@
     }
   }
 
+  // v1.3.73：局域网地址格式校验，支持 "192.168.1.5" 与 "192.168.1.5:24816"。
+  // 只做格式校验（连不连得上是进游戏之后的事，由 LanRelay 的状态机负责反馈）。
+  function isLanAddress(s) {
+    var host = s
+    var port = ""
+    var i = s.lastIndexOf(":")
+    if (i >= 0) {
+      host = s.substring(0, i)
+      port = s.substring(i + 1)
+    }
+    if (port !== "") {
+      if (!/^\d{1,5}$/.test(port)) return false
+      var p = parseInt(port, 10)
+      if (p < 1 || p > 65535) return false
+    }
+    if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return false
+    var parts = host.split(".")
+    for (var k = 0; k < parts.length; k++) {
+      if (parseInt(parts[k], 10) > 255) return false
+    }
+    return true
+  }
+
   function startLan(role) {
     var params = ["ruletype=" + encodeURIComponent(selectedRule)]
     if (role === "join") {
@@ -736,6 +759,14 @@
       var ip = raw.trim()
       if (!ip) {
         showToast("请输入对方的 IP 地址")
+        return
+      }
+      // v1.3.73：进游戏前先做格式校验。此前只要非空就放行，随手填的
+      // "123"、"abc" 也会跳进对局页，到里面连不上又没有任何反馈（v1.3.73
+      // 之前连失败提示都会被常驻弹窗吞掉），表现就是"进入游戏后无反应"。
+      // 在这里拦下最省事，用户当场就能改。
+      if (!isLanAddress(ip)) {
+        showToast("IP 格式不正确，应形如 192.168.1.5")
         return
       }
       settings.lastLanHost = ip

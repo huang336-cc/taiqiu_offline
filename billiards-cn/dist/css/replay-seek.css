@@ -51,6 +51,39 @@
   display: none;
 }
 
+/* v1.3.75：回放暂停 / 继续按钮。与倍速、视角按钮同款半透明金边，放在最左侧
+   （回放控制栏第一个操作按钮），暂停态背景加深并换成暖橙字，一眼可辨。 */
+.replay-pause-btn {
+  flex: 0 0 auto;
+  margin-left: 4px;
+  padding: 4px 10px;
+  min-width: 46px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-align: center;
+  color: #f3e3b3;
+  background: rgba(55, 35, 20, 0.6);
+  border: 1px solid rgba(212, 175, 55, 0.7);
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.replay-pause-btn:active {
+  background: rgba(90, 60, 35, 0.85);
+}
+
+/* 暂停中：暖橙底 + 金边加亮，避免用户忘记自己按过暂停 */
+.replay-pause-btn.paused {
+  color: #fff1d0;
+  background: rgba(150, 95, 30, 0.85);
+  border-color: #f0c96a;
+  box-shadow: 0 0 8px rgba(240, 201, 106, 0.45);
+}
+
 /* v1.2.17 #4：全局倍速按钮（0.5x/1x/2x/4x 循环），与退出按钮同款半透明金边，
    常驻进度条右侧，置于退出按钮之前；点击由 replay.ts 的 onSpeedClick 处理。 */
 .replay-speed-btn {

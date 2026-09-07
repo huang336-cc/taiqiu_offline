@@ -18,6 +18,20 @@ export class AimCalculator {
   private static readonly POCKET_INSET_FACTOR = 0.94
   private static readonly GHOST_BALL_DISTANCE_FACTOR = 2.001
   private static readonly RANDOM_OFFSET_RANGE = 0.6
+  /**
+   * v1.3.75：ghost ball 退化保护阈值。
+   *
+   * 病根：出杆方向 = atan2(ghost − cueBall)。当母球几乎贴在目标球上、且位于
+   * 目标球的**袋口侧**时（真实对局里开球后球堆密集、或母球撞完停在球边，
+   * 非常常见），ghost 点就在母球脚边，`ghost − cueBall` 的长度趋近 0，
+   * 方向完全由浮点残差决定 —— 实测偏 100°~340°，母球朝一个一颗球都没有的
+   * 方向飞出去，判「空杆，未击中任何球」直接送自由球。用户反馈的
+   * 「ai 还是在乱打，未击打任何球」就是这个。贴球场景实测空杆率 1.7%~3%。
+   *
+   * 处理：距离小于该阈值时退回「直接瞄准目标球心」——母球→球心 的距离恒 ≥ 2R，
+   * 方向稳定，就算打厚打不进，也保证碰到球、不空杆。
+   */
+  private static readonly MIN_AIM_DISTANCE = 1.2 * R
 
   static readonly DEFAULT_SHOT_POWER = 90 * R
   static readonly MAX_SHOT_POWER = 110 * R
@@ -37,6 +51,26 @@ export class AimCalculator {
    * with the target ball to send it towards the best pocket.
    */
   public getAimPoint(
+    cuePos: Vector3,
+    targetPos: Vector3,
+    pockets: Vector3[] = this.pockets
+  ): Vector3 {
+    const ghost = this.ghostBallFor(cuePos, targetPos, pockets)
+    // v1.3.75：ghost 退化保护（母球贴在目标球袋口侧时方向会失控，见
+    // MIN_AIM_DISTANCE 注释）。退回瞄准球心，宁可打厚也不空杆。
+    if (cuePos.distanceTo(ghost) < AimCalculator.MIN_AIM_DISTANCE) {
+      return targetPos.clone()
+    }
+    return ghost
+  }
+
+  /**
+   * v1.3.75：取未做退化保护的原始 ghost 点。
+   * 候选枚举（professional.ts 的 enumeratePlans）要用它判断某条
+   * 「球 × 袋口」线路是否退化，退化线路应当整个剔除、换别的球打，
+   * 而不是像 getAimPoint 那样退化成直击。
+   */
+  public ghostBallFor(
     cuePos: Vector3,
     targetPos: Vector3,
     pockets: Vector3[] = this.pockets

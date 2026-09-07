@@ -129,6 +129,31 @@ export class Replay extends ControllerBase {
     document.body.classList.remove("replay-mode")
     globalThis.location.href = LOBBY_URL
   }
+  /**
+   * v1.3.75：用户手动暂停（与拖动进度条的临时冻结 `userScrubbing` 分开）。
+   * 放在实例字段而不是直接改 `container.replayPaused`，是因为拖动进度条结束时
+   * 会把 `replayPaused` 复位成 false —— 那样用户按的暂停会被一次拖动无意取消掉。
+   */
+  private userPaused = false
+  /** v1.3.75：「暂停 / 继续」按钮引用与点击处理 */
+  private pauseBtn: HTMLButtonElement | null = null
+  private onPauseClick = () => {
+    this.userPaused = !this.userPaused
+    this.applyPauseState()
+    if (this.pauseBtn) {
+      this.pauseBtn.textContent = this.userPaused ? "继续" : "暂停"
+      this.pauseBtn.classList.toggle("paused", this.userPaused)
+    }
+  }
+  /** v1.3.75：把「用户暂停 ∨ 拖动中」统一写回 container，并同步按钮外观 */
+  private applyPauseState(): void {
+    const frozen = this.userPaused || this.userScrubbing
+    this.container.replayPaused = frozen
+    if (this.pauseBtn) {
+      this.pauseBtn.textContent = this.userPaused ? "继续" : "暂停"
+      this.pauseBtn.classList.toggle("paused", this.userPaused)
+    }
+  }
   /** v1.2.17 #4：全局倍速按钮引用与点击处理（点击循环切换 0.5x/1x/2x/4x） */
   private speedBtn: HTMLButtonElement | null = null
   private onSpeedClick = () => {
@@ -748,6 +773,10 @@ this.frameCameraForShot(this.container.table.cue.aim)
    * 选择的全局倍速：默认 1x（仍看清击球/碰撞/进球），选 2x/4x 即整段回放加速。
    */
   private replayTimeScale(): number {
+    // v1.3.75：用户按了「暂停」→ 直接冻结（timeScale=0）。
+    // 即使某处把 container.replayPaused 复位（如拖动进度条松手），
+    // 用户显式按下的暂停也不会被悄悄取消。
+    if (this.userPaused) return 0
     // v1.2.27：移除「击球过程中强制 1x」的限制。
     // 此前该限制让用户的倍速选择只在杆间短暂等待里生效，球运动（回放最主要内容）
     // 阶段恒为 1x，导致「倍速」按钮看起来完全无效。
@@ -915,7 +944,8 @@ private topDownBounds(
   // ---- 进度条交互（拖动冻结物理、释放恢复；吸附到进球前时间点） ----
   private onSeekStart = () => {
     this.userScrubbing = true
-    this.container.replayPaused = true
+    // v1.3.75：改用 applyPauseState，拖动结束后若用户此前按过暂停会正确恢复冻结
+    this.applyPauseState()
     // 取消挂起的「下一杆」定时器：拖动重跑本杆后再次静止会重新调度一次，
     // 若不取消则原定时器仍会触发，导致下一杆被重复调度。
     clearTimeout(this.timer)
@@ -951,7 +981,8 @@ private topDownBounds(
   }
   private onSeekEnd = () => {
     this.userScrubbing = false
-    this.container.replayPaused = false
+    // v1.3.75：拖完是否恢复播放取决于用户有没有按过暂停，不能一律复位
+    this.applyPauseState()
     this.resumeAfterSeek()
   }
 
@@ -1002,7 +1033,20 @@ private topDownBounds(
     if (menu) menu.style.setProperty("display", "none", "important")
     this.container.replayPaused = false
     this.userScrubbing = false
+    // v1.3.75：进入回放时复位手动暂停，按钮文案回到「暂停」
+    this.userPaused = false
     this.lastSnapSig = ""
+    // v1.3.75：挂载「暂停 / 继续」按钮（回放全程常驻，置于倍速按钮之前）
+    const pause = document.getElementById(
+      "replayPauseBtn"
+    ) as HTMLButtonElement | null
+    this.pauseBtn = pause
+    if (pause) {
+      pause.disabled = false
+      pause.textContent = "暂停"
+      pause.classList.remove("paused")
+      pause.addEventListener("click", this.onPauseClick)
+    }
     this.container.replayTimeScaleHook = () => this.replayTimeScale()
 this.container.replayFrameHook = () => {
 this.tickSeekUI()
@@ -1057,8 +1101,17 @@ this.tickSeekUI()
     }
     this.container.replayPaused = false
     this.userScrubbing = false
+    // v1.3.75：退出回放时复位手动暂停
+    this.userPaused = false
     this.container.replayTimeScaleHook = null
     this.container.replayFrameHook = null
+    // v1.3.75：解绑并复位暂停按钮
+    if (this.pauseBtn) {
+      this.pauseBtn.removeEventListener("click", this.onPauseClick)
+      this.pauseBtn.textContent = "暂停"
+      this.pauseBtn.classList.remove("paused")
+      this.pauseBtn = null
+    }
     // 隐藏「退出回放」并解绑
     if (this.exitBtn) {
       this.exitBtn.removeEventListener("click", this.exitHandler)
@@ -1127,6 +1180,13 @@ this.container.timeScale = 1
       // 保留进度条与「退出回放」按钮，让用户先自行拖动进度条回看本局。
       this.container.timeScale = 1
       this.container.replayPaused = true
+      // v1.3.75：整局回放播完后禁用暂停按钮 —— 此时物理已经走完，
+      // 再点「继续」只会让空转的 timeScale 恢复，没有任何画面可看。
+      if (this.pauseBtn) {
+        this.pauseBtn.disabled = true
+        this.pauseBtn.textContent = "暂停"
+        this.pauseBtn.classList.remove("paused")
+      }
       return this
     }
     return this

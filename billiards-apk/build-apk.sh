@@ -152,6 +152,14 @@ echo "[5/6] 组装 APK"
 mkdir -p apk_content
 cd apk_content
 unzip -oq ../base.apk
+
+# v1.3.73：注入 android:usesCleartextTraffic="true"（局域网对战的明文 ws:// 依赖
+# 它，详见 AndroidManifest.xml 里的长注释）。本机 android.jar 是 2011 年版，资源
+# 表里没这个属性，aapt2 会直接拒绝构建，因此改为在这里改二进制 manifest —— 真机
+# 读的就是这个文件，与构建期 SDK 无关。必须在签名之前完成，否则签名校验不通过。
+echo "  注入 usesCleartextTraffic（明文 ws:// 放行，局域网对战必需）"
+python3 ../patch_manifest.py AndroidManifest.xml
+
 cp ../obj/dex/classes.dex .
 cp -r ../assets .
 

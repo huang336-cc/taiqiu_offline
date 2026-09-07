@@ -4,7 +4,9 @@ import android.webkit.JavascriptInterface;
 
 import java.net.Inet4Address;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
+import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
@@ -29,6 +31,9 @@ import java.util.List;
  * 服务端生命周期与状态通知，与消息转发解耦。
  */
 public class LanBridge {
+
+    /** v1.3.73：probePeer 的 TCP 连接超时（毫秒） */
+    private static final int PROBE_TIMEOUT_MS = 3000;
 
     private final MainActivity activity;
     private final LanServer server;
@@ -177,6 +182,50 @@ public class LanBridge {
         }
         sb.append("],\"error\":\"").append(jsEscape(error)).append("\"}");
         return sb.toString();
+    }
+
+    /**
+     * v1.3.73：TCP 连通性探测（供客机端失败时给出**准确**原因）。
+     *
+     * 为什么需要它？页面建立 WebSocket 失败时只能拿到一个空的 error 事件，
+     * 分不清到底是下面哪种情况：
+     *   a) 对方 IP 填错 / 对方还没建房 / 两台手机不在同一网段 → 网络层就不通
+     *   b) 网络层是通的，只是 App 内明文流量被系统策略拦了（见 Manifest 的
+     *      usesCleartextTraffic 注释）
+     *
+     * 这里用**原生 Socket** 直连对方端口：原生 Socket 不走 HTTP 栈，不受
+     * cleartext / mixed content 策略限制，因此它能把上述两种情况分开 ——
+     *   ok       → 网络通，问题在 App/WebView 侧（引导升级 App）
+     *   timeout  → IP 不可达或对方没建房（引导检查 IP 与建房状态）
+     *   refused  → 主机在线但端口没监听（引导对方重进房间）
+     *
+     * 同步阻塞：由 JSBridge 线程（JavaBridge）调用，不在主线程，最多阻塞
+     * timeoutMs 毫秒，不会 ANR。
+     *
+     * @return "ok" | "timeout" | "refused:<msg>" | "error:<msg>"
+     */
+    @JavascriptInterface
+    public String probePeer(String host, int port) {
+        String h = host == null ? "" : host.trim();
+        if (h.isEmpty()) return "error:empty host";
+        if (port <= 0 || port > 65535) port = 24816;
+        Socket s = new Socket();
+        try {
+            s.connect(new InetSocketAddress(h, port), PROBE_TIMEOUT_MS);
+            boolean connected = s.isConnected();
+            try { s.close(); } catch (Throwable ignored) {}
+            return connected ? "ok" : "error:not connected";
+        } catch (java.net.ConnectException e) {
+            // Connection refused：主机在线但端口没人监听
+            return "refused:" + (e.getMessage() == null ? "" : e.getMessage());
+        } catch (java.net.SocketTimeoutException e) {
+            return "timeout";
+        } catch (Throwable t) {
+            return "error:" + t.getClass().getSimpleName()
+                + (t.getMessage() == null ? "" : " " + t.getMessage());
+        } finally {
+            try { s.close(); } catch (Throwable ignored) {}
+        }
     }
 
     /**

@@ -314,6 +314,10 @@
         />
         <div id="replaySeekSnaps" class="replay-seek-snaps" aria-hidden="true"></div>
       </div>
+      <!-- v1.3.75：回放暂停 / 继续按钮。此前回放控制栏只有「倍速 / 视角 / 退出」，
+           想定格看某一帧只能按住进度条不放（一松手就恢复播放）。现加常驻暂停按钮：
+           点一下定格、再点一下继续；暂停期间拖动进度条也不会自动恢复播放。 -->
+      <button id="replayPauseBtn" class="replay-pause-btn" type="button">暂停</button>
       <!-- v1.2.17 #4：全局倍速按钮（回放模式常驻），在 0.5x/1x/2x/4x 间循环，
            不自动按击球/进球提速，完全由用户选择，保证击球到进球的真实时间间隔。 -->
       <button id="replaySpeedBtn" class="replay-speed-btn" type="button">1x</button>
