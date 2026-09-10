@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="billiards-cn/dist/assets/icon-512.png" alt="Ultraman Billiards" width="140" />
+</p>
+
 # Ultraman Billiards · Chinese Offline Edition
 
 <p align="center"><a href="README.md"><b>中文</b></a> | <b>English</b></p>

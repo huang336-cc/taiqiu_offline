@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="billiards-cn/dist/assets/icon-512.png" alt="奥特曼的台球" width="140" />
+</p>
+
 # 奥特曼的台球 · 中文离线版
 
 <p align="center"><b>中文</b> | <a href="README.en.md"><b>English</b></a></p>
