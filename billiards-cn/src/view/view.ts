@@ -13,6 +13,8 @@ import {
   DoubleSide,
   DirectionalLight,
   HemisphereLight,
+  PCFShadowMap,
+  BasicShadowMap,
   Fog,
   ACESFilmicToneMapping,
   NoToneMapping,
@@ -30,6 +32,99 @@ import { Assets } from "./assets"
 import { Snooker } from "../controller/rules/snooker"
 import { Settings, getEnvScene } from "../utils/settings"
 import { getEnvSpec, INDOOR_CEIL_Z } from "./sceneenvironment"
+
+/* ══════════════════════════════════════════════════════════════════════
+ * v1.3.85 室内三件套光照常量
+ *
+ * 目标：把室内环境材质从不受光的 MeshBasicMaterial 升级为 PBR，同时让
+ * **画面平均亮度与改造前一致**（「零变形」保底版），再在此基础上加方向感。
+ *
+ * 推导：PBR 的漫反射走 BRDF_Lambert，含 1/π 因子
+ *   out_linear = albedo_linear × (ambient + Σ dir·max(0,N·L)) × (1/π)
+ * 改造前 basic 是
+ *   out_linear = albedo_linear
+ * 两者相等 ⟹ **ambient + Σ dir·max(0,N·L) = π = 3.14159265**
+ *
+ * 分配：环境光承担 90%（各向同性，不引入新的明暗差异，保证零变形），
+ * 方向光承担 10%（制造方向感，代价是朝水平面最多暗 10%）。
+ * ══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * 室内环境光强度：0.58 × π。
+ *
+ * ⚠️ v1.3.86 重大调整：从 1.08×π（占 90% 照度）降到 0.58×π（占 58%）。
+ *
+ * 原设计（v1.3.85）刻意让环境光承担 90% 照度，理由是「各向同性的光给每个
+ * 顶点乘同一个常数，不引入任何空间明暗差异，逐像素保持零变形」。这个论证
+ * 本身没错 —— 但它同时也是**画面「平涂、像 2D」的根因**：
+ * AmbientLight 没有方向、不产生阴影、对每个面的贡献完全相同，90% 的光来自
+ * 它，等于「用一盏均匀的灯把房间照亮」，结果必然是没有一处明暗变化。
+ *
+ * 用户实测反馈「还是以前版本糟糕的情况」「期望效果：不再是糟糕的 2d 场景」
+ * 之后，**「零变形」这条旧约束正式让位给立体感**。
+ *
+ * 新的配比（保持总照度 ≈ π 不变，防止画面整体变暗/变亮）：
+ *   amb  = 0.58·π = 1.8221   （58%）
+ *   dir  = 1.10    = 1.1000   （29%）  ← 见 INDOOR_DIR_I
+ *   hemi = 0.50    = 0.5000   （13%）  ← 见 indoorHemi
+ *   合计 = 3.4221 ≈ π·1.089
+ *
+ * 配比依据：环境光仍占多数（>50%）以保证暗部不会死黑、场景整体不发闷；
+ * 但方向光+半球光合计 42%，足以在墙面/家具侧面/地面之间拉开可见的亮度梯度。
+ */
+const INDOOR_AMB_I = 0.58 * Math.PI // 1.82212
+
+/**
+ * 室内方向光强度。
+ *
+ * ⚠️ v1.3.86：从 0.42066（10%）提到 1.10（29%），并**换了一个真正斜射的方向**。
+ *
+ * 旧朝向 (0.35, -0.35, 1.0) 归一化后 z 分量高达 0.896 —— 几乎是**垂直向下照**。
+ * 垂直光打在地面上，各处 N·L 都接近 1，**产生不了可见的明暗对比**，这正是它
+ * 虽然存在、画面却依然平的原因。
+ *
+ * 新朝向 (0.75, -0.85, 0.42)：z 分量只有 0.42/1.1965 = 0.351，
+ * 是**低仰角斜射**。这样：
+ *   · 地面（N=+Z）受光中等
+ *   · 墙面朝向光源的一侧明显更亮，背光侧进入阴影
+ *   · 家具侧面与顶面形成亮度差 → 立体感
+ *
+ * 强度推导（保持总照度 ≈ π）：
+ *   L = normalize(0.75, -0.85, 0.42)，模长 = 1.19648
+ *   L = (0.62684, -0.71042, 0.35102)
+ *   朝上表面 N·L = 0.35102
+ *   要 dir 贡献 1.10 的照度 ⟹ intensity = 1.10 / 0.35102 = 3.1337
+ *
+ * 校验各朝向的亮度倍数（含 hemi 贡献，见 indoorHemi 的 hemi(N)）：
+ *   朝上（地面）    amb + dir×0.351 + hemi×1.00 = 1.822 + 1.100 + 0.500 = 3.422
+ *   朝水平受光面   amb + dir×0.627 + hemi×0.50 = 1.822 + 0.690 + 0.250 = 2.762
+ *   朝水平背光面   amb + dir×0     + hemi×0.50 = 1.822 + 0.000 + 0.250 = 2.072
+ *   朝下（天花板） amb + dir×0     + hemi×0    = 1.822 + 0.000 + 0.000 = 1.822
+ *
+ * 即：最亮面 3.422 / 最暗面 1.822 = **1.88 倍**的明暗比。
+ * 对比旧方案（朝上 3.815 / 水平背光 2.827 = 1.35 倍，且地面上各处几乎相同），
+ * 新方案的立体层次显著更强。
+ */
+const INDOOR_DIR_I = 1.1 / 0.35102 // 3.1337
+
+/**
+ * 室内半球光强度（v1.3.86 新增）。
+ *
+ * 半球光按法线的 z 分量在「天空色」与「地面色」之间插值，模拟「上方来光、
+ * 地面反射回补」这一真实室内最重要的间接光。它直接给出**朝上比朝下亮**的
+ * 基础梯度 —— 这是「立体感」的最低成本来源，也是最自然的一层。
+ *
+ * hemi(N) = intensity × lerp(groundColor, skyColor, N.z/2+0.5)
+ * 取 sky=白、ground=浅灰白（0xb8bcc4），则：
+ *   N.z = +1（朝上）→ 全 sky  → 系数 1.00
+ *   N.z =  0（水平）→ 各半    → 系数 0.50
+ *   N.z = −1（朝下）→ 全 ground → 系数 0.00
+ *
+ * 0.50 这个值的选取：它单独贡献朝上/朝下 0.50 的亮度差，
+ * 约占总照度 15%，与方向光的 29% 叠加后共同撑起立体感，
+ * 同时不至于让天花板死黑（天花板仍有 amb 的 1.822 托底）。
+ */
+const INDOOR_HEMI_I = 0.5
 import { TableGeometry } from "./tablegeometry"
 
 export class View {
@@ -56,6 +151,47 @@ export class View {
   private sun?: DirectionalLight
   /** Req 3：天空天光（半球光，天空蓝/地面雪白） */
   private hemi?: HemisphereLight
+  /**
+   * v1.3.85：室内三件套专用环境光（v1.3.86 起降为辅助角色）。
+   *
+   * 室内环境物体是 PBR 材质（见 sceneenvironment.envMaterial 的 pbr 参数），
+   * BRDF_Lambert 含 1/π 因子，因此照度总和需满足
+   * `ambient + Σ dir·max(0,N·L) + hemi(N) ≈ π`，画面才不会整体变暗/变亮。
+   *
+   * v1.3.85 时它承担 90% 照度，理由是「不引入任何空间明暗差异 → 零变形」。
+   * v1.3.86 把它降到 58% —— 那条「零变形」约束正是画面平涂像 2D 的根因，
+   * 已让位给立体感。它现在的作用只剩「给暗部托底，避免死黑」。
+   */
+  private indoorAmb?: AmbientLight
+  /**
+   * v1.3.86：室内半球光（新增）—— 立体感的第一层来源。
+   *
+   * 按法线 z 分量在 sky/ground 之间插值：朝上的面最亮、朝下的面最暗，
+   * 天然给出「上亮下暗」的基础梯度。这模拟的是真实室内最主导的间接光：
+   * 天光/顶灯从上方来，地面再反射回补。
+   *
+   * ⚠️ v1.3.85 的注释曾明确写着「不用 HemisphereLight，它会破坏零变形」——
+   * 那句话在新目标（要立体感）下已失效，故此处显式推翻。
+   *
+   * 颜色取 sky=纯白、ground=0xb8bcc4（冷浅灰）：
+   * 顶点色已烘焙了各场景色偏，所以这盏灯**不能带明显色相**，
+   * ground 端只做极轻的冷偏，模拟地面反光的冷调。
+   */
+  private indoorHemi?: HemisphereLight
+  /**
+   * v1.3.85：室内方向光（立体感的主要来源，v1.3.86 大幅加强）。
+   *
+   * v1.3.86 的两处关键改动：
+   *   ① 强度 0.42066（10%）→ 3.1337（29%）
+   *   ② 朝向 (0.35,-0.35,1.0)（z=0.896，近乎垂直）→
+   *          (0.75,-0.85,0.42)（z=0.351，低仰角斜射）
+   * 第 ② 条才是关键 —— 垂直光打在地面上各处 N·L 都接近 1，
+   * 产生不了可见的明暗对比，所以旧方案虽然「有方向光」画面依然平。
+   *
+   * ⚠️ 颜色必须是纯白：顶点色已烘焙了各场景色偏（room 暖黄 /
+   * cybercafe 冷蓝），带色光会二次染色。
+   */
+  private indoorDir?: DirectionalLight
   /**
    * 各场景的色调映射（v1.3.63：表驱动，每次显式赋值）。
    *
@@ -302,6 +438,48 @@ export class View {
     this.hemi = new HemisphereLight(0xb8d8f5, 0xfafdff, 0.55)
     this.hemi.visible = false
     this.scene.add(this.hemi)
+
+    // v1.3.85：室内三件套的真实光源（配合 PBR 化的环境材质）。
+    // v1.3.86：改为「环境光 58% + 方向光 29% + 半球光 13%」三灯组合 ——
+    //          原先 90% 环境光主导的配比必然平涂，是「画面像 2D」的根因。
+    // 强度与朝向的推导见文件头 INDOOR_AMB_I / INDOOR_DIR_I / INDOOR_HEMI_I 注释。
+    // 三盏都先建成隐藏，由 applyScene 按 spec.indoor 显式开关。
+    this.indoorAmb = new AmbientLight(0xffffff, INDOOR_AMB_I)
+    this.indoorAmb.visible = false
+    this.scene.add(this.indoorAmb)
+
+    // 半球光：朝上亮、朝下暗的基础梯度，立体感的第一层来源。
+    this.indoorHemi = new HemisphereLight(0xffffff, 0xb8bcc4, INDOOR_HEMI_I)
+    this.indoorHemi.visible = false
+    this.scene.add(this.indoorHemi)
+
+    // 方向光：低仰角斜射（z 分量仅 0.351），负责制造可见的明暗对比。
+    this.indoorDir = new DirectionalLight(0xffffff, INDOOR_DIR_I)
+    this.indoorDir.position.set(0.75, -0.85, 0.42)
+    this.indoorDir.target.position.set(0, 0, 0)
+    this.indoorDir.visible = false
+    // v1.3.86：开启阴影 —— 球桌投影到地面是「接地感」的关键，
+    // 环境物体全部关闭投影时，桌子看起来是「飘」在地面上的。
+    this.indoorDir.castShadow = true
+    // 阴影贴图 1024²（不用 2048²）：本项目历史上出现过 WebGL 上下文丢失导致的
+    // 闪退（v1.3.84f），2048² 的显存与填充率压力在中低端 GPU 上会放大该风险。
+    this.indoorDir.shadow.mapSize.set(1024, 1024)
+    const dsc = this.indoorDir.shadow.camera
+    dsc.near = 0.1
+    dsc.far = 12
+    // frustum 收窄到球桌周围 ±3m：场景环境物体在 6m 外，不需要参与投影，
+    // 收窄可显著减少 shadow pass 的几何量。3m 足以覆盖球桌 + 近处家具。
+    dsc.left = -3
+    dsc.right = 3
+    dsc.top = 3
+    dsc.bottom = -3
+    this.indoorDir.shadow.bias = -0.0008
+    // 斜射光下自阴影（shadow acne）更明显，normalBias 沿法线推移采样点，
+    // 对「桌面投影到地面」这种大面积平铺阴影尤其有效。
+    this.indoorDir.shadow.normalBias = 0.02
+    this.scene.add(this.indoorDir)
+    this.scene.add(this.indoorDir.target)
+
     // Request D-v2：3D 房间（天空盒）作为环境，台球桌置于房间中央，
     // 得到「台球桌放在真实场景里的 3D 效果」。
     if (this.assets.background) this.scene.add(this.assets.background)
@@ -511,6 +689,38 @@ export class View {
 
     if (this.sun) this.sun.visible = spec.outdoor
     if (this.hemi) this.hemi.visible = spec.outdoor
+
+    /**
+     * v1.3.85：室内三件套的真实光源开关。
+     *
+     * 同样必须「显式赋值」而非「存旧值再还原」—— 本方法会被调用两次
+     * （构造后一次、renderer 惰性重建后一次），保存/还原的写法在第二次
+     * 调用时会把旧值记成已修改后的状态，导致残留（sun/hemi 在 v1.3.63
+     * 就是为了这个坑才改成表驱动）。
+     */
+    if (this.indoorAmb) this.indoorAmb.visible = spec.indoor
+    if (this.indoorHemi) this.indoorHemi.visible = spec.indoor
+    if (this.indoorDir) this.indoorDir.visible = spec.indoor
+
+    /**
+     * v1.3.86：阴影总开关。
+     *
+     * 户外（雪山）本来就有 sun.castShadow，靠 spec.outdoor 打开；
+     * 室内现在也投阴影（indoorDir.castShadow），因此两者取「或」。
+     * 其余场景（沙滩/足球/篮球/UFC）既无阳光也无室内方向光，
+     * shadowMap 保持关闭 —— 不产生任何额外开销。
+     */
+    if (this.renderer) {
+      const wantShadow = spec.outdoor || spec.indoor
+      if (this.renderer.shadowMap.enabled !== wantShadow) {
+        this.renderer.shadowMap.enabled = wantShadow
+        // 切换开关后必须让所有材质重新编译着色器，否则阴影不会生效
+        this.renderer.shadowMap.needsUpdate = true
+      }
+      this.renderer.shadowMap.type = spec.indoor
+        ? PCFShadowMap
+        : BasicShadowMap
+    }
 
     // 远裁剪面：必须能容纳天穹（天穹半径 + 相机最大偏心 22.2）
     this.camera.camera.far = spec.far

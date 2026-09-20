@@ -19,13 +19,15 @@ export class Hud {
   /** 系列赛总比分行（仅人机对战显示）：「系列赛 你 X : Y 电脑」 */
   private readonly scSeriesEl: HTMLElement | null
   /**
-   * 是否人机对战（决定系列赛总比分行是否显示）。
+   * 是否「连续对局」模式（决定局比分行是否显示）。
    * v1.3.75：不再在构造时把 `Session.isBotMode()` 缓存成只读常量 —— 一旦 Hud
    * 的构造时序早于 `Session.init()`，这里就会永久锁死成 false，系列赛行整局
    * 都不显示。改为运行时实时读取，任何时序下都安全。
+   * v1.3.83：判据换成 `Session.isSeriesMode()` —— 局域网对战也属于连续对局，
+   * 同样要显示「局比分」（用户反馈第 1 条）。
    */
   private get isSeriesMode(): boolean {
-    return Session.isBotMode()
+    return Session.isSeriesMode()
   }
   /** 当前玩法名（rulename），用于读取系列赛累计 */
   private readonly ruleName: string
@@ -199,6 +201,12 @@ export class Hud {
    * 仅人机对战（series 模式）显示「系列赛 你 X : Y 电脑」；
    * 比分栏的 p2 名字由 opponentName 决定（含难度如「电脑(专业)」）。
    * 当前这一局尚未结算，故显示的是此前各局累计——本局结束后下一局会自动 +1。
+   *
+   * v1.3.76：**第一局不显示这一行**。用户明确要求比分栏的系列赛行只在
+   * 「已经打完一局、并点了继续对战」之后才出现；开局 0:0 时这一行纯属噪音，
+   * 而且会让玩家误以为「这局已经算进去了」。判定条件就是「你/电脑至少
+   * 有一方已经赢过至少一局」——recordResult 只在结算时写入，因此 0:0
+   * 必然等价于「本轮还没打完任何一局」。
    */
   private refreshSeries(): void {
     if (!this.scSeriesEl) return
@@ -207,8 +215,17 @@ export class Hud {
       return
     }
     const s = getSeries(this.ruleName)
-    const label = Session.getInstance().opponentName ?? "电脑"
-    this.scSeriesEl.textContent = `系列赛　你 ${s.you} : ${s.cpu} ${label}`
+    // 一局都没打完（0:0）→ 不显示局比分行
+    if (s.you === 0 && s.cpu === 0) {
+      this.scSeriesEl.hidden = true
+      this.scSeriesEl.textContent = ""
+      return
+    }
+    // v1.3.83：局域网对战的对手是对面玩家，不能叫「电脑」。
+    const label = Session.isBotMode()
+      ? (Session.getInstance().opponentName ?? "电脑")
+      : "对手"
+    this.scSeriesEl.textContent = `局比分　你 ${s.you} : ${s.cpu} ${label}`
     this.scSeriesEl.hidden = false
   }
 

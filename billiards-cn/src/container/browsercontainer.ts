@@ -351,6 +351,25 @@ this.botName === "TheFarJaw"
     this.messageRelay.subscribe(this.tableId, (e) => {
       this.netEvent(e)
     })
+
+    // v1.3.82：页面卸载时主动断开原生通道。
+    //
+    // 为什么必须做：原生 WebSocket 客户端住在 Java 侧（NativeWsClient），
+    // **不随页面销毁而消失**。一局打完点「继续对战」走的是 location.replace
+    // 重载页面，旧页面卸载后 Java 那条连接还挂在 LanServer 的 clients 列表里
+    // （直到 TCP 超时或下一局 wsConnect 时被 closeWsClient 顶掉）。后果有二：
+    //   ① 新页面进来时 clients 计数虚高，主机侧「对手已连接」判断提前成立；
+    //   ② 主机的旧连接若被当成"另一个客户端"，广播会白发一轮。
+    // 这里在卸载前同步断一次，让服务端立刻掉到 0 连接，新一局从干净状态开始。
+    const shutdown = (): void => {
+      try {
+        this.messageRelay?.close?.()
+      } catch {
+        // 卸载阶段的异常一律吞掉，不能影响导航
+      }
+    }
+    globalThis.addEventListener("beforeunload", shutdown)
+    globalThis.addEventListener("pagehide", shutdown)
   }
 
   /**

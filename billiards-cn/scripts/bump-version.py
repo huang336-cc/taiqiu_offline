@@ -19,14 +19,42 @@
 import os
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+# 变更履历的时间戳一律按北京时间（GMT+8）显示 —— 用户在国内看履历，
+# 用 UTC 会整体差 8 小时，跨日时更会出现「后发布的版本时间反而更早」的倒挂。
+# 容器内 `datetime.now()` 取的是本机时区（实测为 UTC），不能直接用。
+CST = timezone(timedelta(hours=8))
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-INDEX = os.path.join(ROOT, "dist", "index.html")
+# v1.3.88：发布页已从 dist/index.html 迁到独立站点目录（上轮清理在线产物后）
+# v1.3.89：快照目录按 publish-vXXXX 递增，不再硬编码——运行时自动扫描取版本号最大的那个
+INDEX = "/workspace/publish-site/index.html"
 MENU = os.path.join(ROOT, "dist", "menu.html")
 VERSION_TS = os.path.join(ROOT, "src", "utils", "version.ts")
 
 VER_RE = re.compile(r"v1\.3\.(\d+)")
+
+
+def resolve_latest_index():
+    """扫描 /workspace/publish-v*/site/index.html，返回版本号最大的快照页。
+
+    每升一版都会新建 publish-vXXXX 目录，硬编码路径必然过期；自动扫描后
+    bump-version.py 永远锚定当前最新发布页。找不到任何快照时回退旧 INDEX。
+    """
+    import glob
+    best_path, best_n = INDEX, 0
+    for d in glob.glob("/workspace/publish-v*/site/index.html"):
+        try:
+            with open(d, "r", encoding="utf-8") as f:
+                txt = re.sub(r"<!--.*?-->", "", f.read(), flags=re.S)
+        except OSError:
+            continue
+        for m in VER_RE.finditer(txt):
+            n = int(m.group(1))
+            if n > best_n:
+                best_n, best_path = n, d
+    return best_path if best_n > 0 else INDEX
 
 
 def current_max_version():
@@ -87,7 +115,7 @@ def bump_menu(old, new, summary):
     ver_pat = re.compile(r'(__BILLIARDS_VERSION__\s*=\s*")1\.3\.%d(-[^"]+)(")' % old)
     txt = ver_pat.sub(r'\g<1>1.3.%d\g<2>\g<3>' % new, txt)
 
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S")
     sum_text = summary or "（本次变更说明待补充）"
 
     # 把 summary 拆成多个子项，生成与历史版本一致的详细条目格式。
@@ -144,8 +172,8 @@ def bump_menu(old, new, summary):
 
 
 def bump_version_ts():
-    """刷新 src/utils/version.ts 的时间戳版本。"""
-    d = datetime.now()
+    """刷新 src/utils/version.ts 的时间戳版本（按北京时间 GMT+8）。"""
+    d = datetime.now(CST)
     v = "%02d%02d%02d.%02d" % (d.year % 100, d.month, d.day, d.hour)
     if os.path.exists(VERSION_TS):
         with open(VERSION_TS, "r", encoding="utf-8") as f:
@@ -161,7 +189,10 @@ def bump_version_ts():
 
 
 def main():
+    global INDEX
     summary = sys.argv[1] if len(sys.argv) > 1 else ""
+    INDEX = resolve_latest_index()
+    print(f"发布页锚定: {INDEX}")
     old = current_max_version()
     if old == 0:
         print("[error] 未在任何文件中找到 v1.3.N 版本号，终止。")

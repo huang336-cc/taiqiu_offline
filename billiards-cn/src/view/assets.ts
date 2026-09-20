@@ -20,6 +20,10 @@ import { TableGeometry } from "./tablegeometry"
 import { Settings, getSkin, getTableSkin } from "../utils/settings"
 import { buildSceneEnvironment, GROUND_Z } from "./sceneenvironment"
 import { getClothTexture, getFrameTexture } from "./tableskinfactory"
+import {
+  getFrameNormalTexture,
+  getFrameRoughnessTexture,
+} from "./tableskinfactory"
 
 export class Assets {
   /**
@@ -53,6 +57,11 @@ export class Assets {
       edgeGlow: ts.edgeGlow,
       clothTexture: getClothTexture(ts.id),
       frameTexture: getFrameTexture(ts.id),
+      // v1.3.88：桌框木纹的凹凸与光泽贴图。桌框在俯视下占画面 67.5%，
+      // 只给颜色贴图会像「上过色的塑料」——木纹之所以可见靠的是纤维
+      // 沟槽的明暗差，这必须由法线贴图提供。
+      frameNormal: getFrameNormalTexture(ts.id),
+      frameRoughness: getFrameRoughnessTexture(ts.id),
     }
   }
 
@@ -143,10 +152,12 @@ export class Assets {
     return assets
   }
 
-  private isTableSize5(): boolean {
-    const urlParams = new URLSearchParams(globalThis.location?.search ?? "")
-    return parseFloat(urlParams.get("tableSize") || "10") === 5
-  }
+  // v1.3.86：`isTableSize5()` 已删除。
+  //
+  // 它原本只有一个用途 —— 给 `paintTable` 的 `fixUVs` 参数做门禁，让 UV 修正
+  // 只对 5 尺台生效。但实测**所有** GLTF 台球桌模型都没有 TEXCOORD_0，
+  // 默认台同样需要修 UV（详见 `customizeTableScene` 的说明），门禁本身即是
+  // 那个 bug。修正对所有台尺寸解锁后，这个函数再无调用点。
 
   private customizeTableScene(scene): void {
     const cfg = Assets.tableCustomizationFor(
@@ -161,8 +172,32 @@ export class Assets {
     // 台呢永远停留在模型自带的蓝色，导致「首页换皮肤进游戏后台布没变」。
     // 因此颜色必须在同步阶段就落定，贴图只作为可选增强。
     //
-    // UV 修正只针对 5 尺台模型（其台呢 UV 是塌缩的）。
-    this.paintTable(scene, cfg, this.isTableSize5())
+    // ⚠️ v1.3.86：UV 修正不再只针对 5 尺台。
+    //
+    // 病史：这里原本传 `this.isTableSize5()`，即只有 5 尺台修 UV。但直接
+    // 解析 GLTF 的 JSON chunk 逐 primitive 统计 attributes，结果是：
+    //
+    //     p8.min.gltf           primitives=7   缺UV=7   TEXCOORD=否
+    //     snooker.min.gltf      primitives=7   缺UV=7   TEXCOORD=否
+    //     threecushion.min.gltf primitives=5   缺UV=5   TEXCOORD=否
+    //     d-snooker.min.gltf    primitives=7   缺UV=6   TEXCOORD=是(仅1个)
+    //     background.gltf       primitives=1   缺UV=0   TEXCOORD=是
+    //
+    // 即**四张台球桌模型 26 个 primitive 里 25 个没有 UV**，只有
+    // d-snooker 的其中一个带了 TEXCOORD_0。于是默认台（tableSize=10）的
+    // 台呢**根本没有 uv 属性**，v1.3.61 挂上去的那张 512² 程序化绒面贴图
+    // **每一个像素都采样到 (0,0)** —— 整块台呢实际渲染成一种纯色。这就是
+    // 「台呢像一块涂平的硬纸板、完全没有织物层次」的根因，也是 `repeat`
+    // 怎么调都看不出变化的解释。
+    //
+    // 之所以长期没被发现：`verify84j.js` 有 `mapWithoutUv` 断言，但它的
+    // 遍历范围只覆盖**场景环境**，球桌不在其中（球桌走 GLTF 分支而非
+    // 程序化分支），所以这项检查一直是绿的。v1.3.87 起
+    // `verify84j.js` 增补了 `table.*` 一组断言专门守球桌这一侧。
+    //
+    // 解禁是安全的：`fixClothUVs` 自身有两道守卫 —— 只有「无 uv」或
+    // 「uv 已塌缩」时才生成，已有正常 UV 的模型完全不受影响。
+    this.paintTable(scene, cfg, true)
 
     // 异步阶段：旧 wave.jpg 贴图缺失则静默跳过（颜色与程序化纹理已在上面生效）。
     new TextureLoader().load(
@@ -305,6 +340,10 @@ export class Assets {
           mat.needsUpdate = true
         } else if (name.includes("wood")) {
           // 桌框：底色 + 发光（emissive）。无发光时 emissive 置黑。
+          // v1.3.86：木纹贴图此前同样「挂了但无效」—— GLTF 桌框没有 TEXCOORD_0，
+          // 采样恒为 (0,0)。这里补三平面 UV（桌框是立体框，必须用 triplanar
+          // 而非顶视投影，见 fixFrameUVs）。
+          if (fixUVs) this.fixFrameUVs(child)
           mat.color.set(cfg.frameColor)
           if ("emissive" in mat) {
             ;(mat as any).emissive.set(cfg.frameGlow || 0x000000)
@@ -312,6 +351,16 @@ export class Assets {
           }
           if (cfg.frameTexture) {
             mat.map = cfg.frameTexture
+          }
+          // v1.3.88：木纹凹凸 + 不均匀光泽。没有这两项，俯视下的桌框
+          // 就是一整片均匀色块（颜色有变化但不产生明暗），看着像塑料。
+          if ("normalMap" in mat) {
+            ;(mat as any).normalMap = cfg.frameNormal
+            ;(mat as any).normalScale?.set?.(0.85, 0.85)
+          }
+          if ("roughnessMap" in mat && cfg.frameRoughness) {
+            ;(mat as any).roughnessMap = cfg.frameRoughness
+            ;(mat as any).roughness = 1
           }
           mat.needsUpdate = true
         } else if (name === "blackpocket" || name.includes("pocket")) {
@@ -348,9 +397,29 @@ export class Assets {
           if ("specularIntensity" in mat) { (mat as any).specularIntensity = 0 }
           mat.needsUpdate = true
         } else if (name === "diamond") {
-          // v1.3.38-fix：隐藏 GLTF 模型桌边 diamond（菱形瞄准标记）小凸点，
-          // 用户反馈其视觉上很突兀。直接隐藏 mesh，不动物理。
-          child.visible = false
+          // v1.3.88：**恢复显示**桌沿菱形镶点（224 顶点、尺寸 15559×8387×15
+          // 模型单位的扁平小点，沿桌沿均匀分布）。
+          //
+          // 病史：v1.3.38 因为「视觉上很突兀」把它 `child.visible = false`
+          // 直接隐藏了。但菱形镶点是真实球桌的标志性细节 —— 用户要求
+          // 「把桌子本身做精致」，而俯视机位下桌框占画面 67.5%，
+          // 一排镶点正是打破整片木色单调的关键。
+          //
+          // 之所以当年「突兀」：GLTF 原定义是 baseColor=0.8 亮银 + metal=0.77
+          // + rough=0.29（高反光镜面金属），在暗绿台面上就是一片刺眼的白点。
+          // 现在改为**哑光浅金**：降低金属度与镜面强度、提高粗糙度，
+          // 让它像嵌进木头的黄铜钉，而不是贴在表面的亮片。
+          mat.color.set(0xc9a86a)
+          if ("emissive" in mat) {
+            ;(mat as any).emissive.set(0x000000)
+            ;(mat as any).emissiveIntensity = 0
+          }
+          ;(mat as any).map = null
+          ;(mat as any).metalness = 0.45
+          ;(mat as any).roughness = 0.52
+          if ("specularIntensity" in mat) { (mat as any).specularIntensity = 0.4 }
+          ;(mat as any).envMapIntensity = 0.5
+          mat.needsUpdate = true
         }
       }
     })
@@ -420,11 +489,80 @@ export class Assets {
     }
   }
 
+  /**
+   * 修正台呢 UV：无 uv 或 uv 塌缩时，按顶视平面投影生成。
+   *
+   * 台呢是一块**水平平面**，所以顶视投影是精确的（不产生任何拉伸），
+   * 且 `generatePlanarUVs` 用 `max(rangeX, rangeV)` 归一会保住长宽比 ——
+   * 2.54×1.27 的台面得到 `u∈[0,1] v∈[0,0.52]`，贴图不会被拉扁。
+   */
   private fixClothUVs(mesh): void {
     const geometry = mesh.geometry as BufferGeometry
     if (!geometry) return
     if (geometry.attributes.uv && !this.uvsAreCollapsed(geometry)) return
     this.generatePlanarUVs(geometry)
+  }
+
+  /**
+   * 修正桌框 UV（v1.3.86 新增）。
+   *
+   * 桌框不是平面，而是**一圈有厚度的立体木框** —— 若照搬台呢的顶视投影，
+   * 竖直面（框的侧面）会被压成一条线，木纹糊成条纹。
+   *
+   * 因此改用**三平面（triplanar）投影**：对每个顶点取法线的主导轴，
+   * 再用与它垂直的那两个坐标做 UV。
+   *   · 法线偏 Z（顶/底面）→ 用 (x, y)
+   *   · 法线偏 X（左右侧面）→ 用 (y, z)
+   *   · 法线偏 Y（前后侧面）→ 用 (x, z)
+   * 这样每个面都拿到「正对该面」的投影，木纹走向自然、无拉伸。
+   *
+   * 同样按全局尺寸归一，保证各面木纹尺度一致、接缝不明显。
+   */
+  private fixFrameUVs(mesh): void {
+    const geometry = mesh.geometry as BufferGeometry
+    if (!geometry) return
+    if (geometry.attributes.uv && !this.uvsAreCollapsed(geometry)) return
+
+    const pos = geometry.attributes.position
+    const nor = geometry.attributes.normal
+    const count = pos.count
+    if (!nor) return
+
+    let minX = Infinity, maxX = -Infinity
+    let minY = Infinity, maxY = -Infinity
+    let minZ = Infinity, maxZ = -Infinity
+    for (let i = 0; i < count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i)
+      if (x < minX) minX = x
+      if (x > maxX) maxX = x
+      if (y < minY) minY = y
+      if (y > maxY) maxY = y
+      if (z < minZ) minZ = z
+      if (z > maxZ) maxZ = z
+    }
+    const scale = Math.max(maxX - minX, maxY - minY, maxZ - minZ) || 1
+
+    const uvs = new Float32Array(count * 2)
+    for (let i = 0; i < count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i)
+      const nx = Math.abs(nor.getX(i))
+      const ny = Math.abs(nor.getY(i))
+      const nz = Math.abs(nor.getZ(i))
+      let u: number, v: number
+      if (nz >= nx && nz >= ny) {
+        u = (x - minX) / scale
+        v = (y - minY) / scale
+      } else if (nx >= ny) {
+        u = (y - minY) / scale
+        v = (z - minZ) / scale
+      } else {
+        u = (x - minX) / scale
+        v = (z - minZ) / scale
+      }
+      uvs[i * 2] = u
+      uvs[i * 2 + 1] = v
+    }
+    geometry.setAttribute("uv", new Float32BufferAttribute(uvs, 2))
   }
 
   private uvsAreCollapsed(geometry: BufferGeometry): boolean {

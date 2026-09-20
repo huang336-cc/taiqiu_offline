@@ -61,6 +61,7 @@
     "node-notifier": "^10.0.1",
     "postcss-html": "2.0.0",
     "prettier": "3.9.6",
+    "puppeteer-core": "^23.11.1",
     "stylelint": "17.14.1",
     "stylelint-config-standard": "^40.0.0",
     "swc-loader": "0.2.7",

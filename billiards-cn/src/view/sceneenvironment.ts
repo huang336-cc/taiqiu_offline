@@ -20,6 +20,7 @@ import {
   Group,
   Mesh,
   MeshBasicMaterial,
+  MeshStandardMaterial,
   PlaneGeometry,
   BoxGeometry,
   RingGeometry,
@@ -28,15 +29,19 @@ import {
   CylinderGeometry,
   IcosahedronGeometry,
   SphereGeometry,
+  TorusGeometry,
   BackSide,
   BufferGeometry,
   BufferAttribute,
   Color,
   Matrix4,
   Vector3,
+  Texture,
   SRGBColorSpace,
 } from "three"
 import { makeValueNoise2D, fbm2D, makeSeededRng } from "../utils/noise"
+import { getBeachTexture } from "./beachtexturefactory"
+import { getInteriorTexture } from "./interiortexturefactory"
 
 /**
  * 台球桌底沿真实世界 z 坐标（Z-up 世界），用于雪山场景：
@@ -119,16 +124,24 @@ export const SNOW_SKY_RADIUS = 145
  */
 export const ENV_SPECS: Record<string, EnvSpec> = {
   // ── 室内三件套：墙 + 顶棚，不需要天穹 ──
+  //
+  // v1.3.85：`amb` 显式置 0，关掉 view.ts 那盏全局 AmbientLight(0x009922, 0.3)。
+  // 那盏灯是绿色（R=0,G=0.6,B=0.13），强度 0.3 → 辐照度约 (0, 0.18, 0.04)，
+  // 折算照度因子 0.18/π ≈ 5.7% 的绿偏。环境物体升级为 PBR 后会真实吃到它，
+  // 画面会泛绿。室内照度全部交给 indoorAmb / indoorDir（纯白），故此处归零。
   room: {
     far: 70, skyRadius: 0, outdoor: false, fog: null,
+    amb: { color: 0xffffff, intensity: 0 },
     realShadow: false, indoor: true, geometric: true,
   },
   office: {
     far: 70, skyRadius: 0, outdoor: false, fog: null,
+    amb: { color: 0xffffff, intensity: 0 },
     realShadow: false, indoor: true, geometric: true,
   },
   cybercafe: {
     far: 70, skyRadius: 0, outdoor: false, fog: null,
+    amb: { color: 0xffffff, intensity: 0 },
     realShadow: false, indoor: true, geometric: true,
   },
   // ── 户外：地形外缘 60/70，天穹 110/100 ──
@@ -139,10 +152,6 @@ export const ENV_SPECS: Record<string, EnvSpec> = {
   // 环境物体与球桌各走各的着色路径、互不干扰。
   beach: {
     far: 140, skyRadius: 110, outdoor: false, fog: null,
-    realShadow: false, indoor: false, geometric: true,
-  },
-  forest: {
-    far: 130, skyRadius: 100, outdoor: false, fog: null,
     realShadow: false, indoor: false, geometric: true,
   },
   // ── 雪山（golden 基准，参数与 v1.3.62 完全一致）──
@@ -164,11 +173,11 @@ export const ENV_SPECS: Record<string, EnvSpec> = {
   },
   // ── 球场：室内体育馆观感，无天穹（步 6 重做后再复核）──
   football: {
-    far: 70, skyRadius: 40, outdoor: false, fog: null,
+    far: 160, skyRadius: 110, outdoor: false, fog: null,
     realShadow: false, indoor: false, geometric: true,
   },
   basketball: {
-    far: 70, skyRadius: 40, outdoor: false, fog: null,
+    far: 100, skyRadius: 110, outdoor: false, fog: null,
     realShadow: false, indoor: false, geometric: true,
   },
   // ── UFC 八角笼：室内暗场馆，同球场用天穹当顶棚 ──
@@ -198,14 +207,29 @@ export const ENV_SPECS: Record<string, EnvSpec> = {
  *     仍然建模，只为让篮球架的支撑结构在近处有个交代
  * 所以看台只做 3 排、座椅只做前 2 排朝向场内的那一面，再往上纯属浪费。
  */
-const FB_HX = 5.0 // v1.3.64：足球场半长 8 → 5（球桌 1.4、瞄准相机 5.7m 可见上限，看台已落在远景里）
-const FB_HY = 3.2 // v1.3.64：半宽 5 → 3.2
-const BK_HX = 4.0 // v1.3.64：篮球场半长 6 → 4
-const BK_HY = 2.4 // v1.3.64：半宽 3.5 → 2.4
+/**
+ * v1.3.90b：球场改为真实比例。
+ *
+ * 之前为迁就台球桌把球场缩到 8×4.8m（篮球）/ 10×6.4m（足球），
+ * 但篮板 1.8m、篮筐 3.05m、球门 7.32m 仍按真实尺寸建，导致器材
+ * 相对于球场大得离谱，整体像「玩具场地上插真实器材」。现在统一
+ * 按真实运动场地尺寸重建：
+ *   - 篮球 FIBA：28m × 15m
+ *   - 足球 FIFA：105m × 68m
+ * 球桌保持真实 2.84m 左右，在全景中会是场地中央的一个小桌，
+ * 这是正确比例；aim 机位仍紧贴台面，不影响游玩。
+ */
+const FB_HX = 52.5 // 105m / 2
+const FB_HY = 34.0 // 68m / 2
+const BK_HX = 14.0 // 28m / 2
+const BK_HY = 7.5  // 15m / 2
 const FIELD_Z = GROUND_Z - 0.004
 const LINE_Z = GROUND_Z + 0.008
-/** 天穹半径。相机最大偏心 22.2 → far 需 ≥ 62.2，两个球场都是 70 */
-const FIELD_SKY_R = 40
+/**
+ * 天穹半径。足球场真实尺寸下对角约 125m，相机退到一端上方时
+ * 最远点超过 120m；篮球 28×15 对角 31.8m。取 110 同时覆盖两者。
+ */
+const FIELD_SKY_R = 110
 
 /** 球场线：XY 平面上的一条白条（Z-up 下无需旋转） */
 function lineGeo(w: number, l: number, x: number, y: number): BufferGeometry {
@@ -251,21 +275,137 @@ function stakeGeo(
 
 /** 只合并 position/normal（线条这类统一白色的部件，颜色交给 bakeVertices 生成） */
 function mergePlain(geos: BufferGeometry[]): BufferGeometry {
+  /**
+   * v1.3.89c：合并前统一展开 index。
+   *
+   * BoxGeometry(24 顶点+36 索引) / PlaneGeometry / SphereGeometry 全是
+   * indexed 几何，只拷顶点数组会丢索引；返回的 non-indexed 几何按「每 3
+   * 个连续顶点一个三角形」渲染，BoxGeometry 8 个三角形里 4 个跨面乱连
+   * —— 实拍症状：观众盒/记分牌数码段/篮球全部撕裂成斜三角碎片，大块
+   * 墙面因乱三角彼此相邻、颜色渐变相近而看不出破绽。office / cybercafe
+   * 的 Props 路径一直是先 toNonIndexed 再合并（所以那两个场景完好），
+   * 这里补齐同一手法。toNonIndexed 会同步展开 color 属性。
+   */
+  const flat = geos.map((g) => {
+    const ni = g.index ? g.toNonIndexed() : g
+    if (ni !== g) g.dispose()
+    return ni
+  })
   let total = 0
-  for (const g of geos) total += g.attributes.position.count
+  for (const g of flat) total += g.attributes.position.count
   const pos = new Float32Array(total * 3)
   const nrm = new Float32Array(total * 3)
   let o = 0
-  for (const g of geos) {
+  for (const g of flat) {
     pos.set(g.attributes.position.array as Float32Array, o * 3)
     nrm.set(g.attributes.normal.array as Float32Array, o * 3)
     o += g.attributes.position.count
     g.dispose()
   }
+  /**
+   * v1.3.84h：清洗退化顶点。
+   *
+   * `RingGeometry`（中圈 / 罚球弧 / 角弧）与 `CircleGeometry`（开球点 /
+   * 罚球点）在闭合处会出现坐标重合的**退化三角形**，`computeVertexNormals`
+   * 对那些面做 normalize 时得到 0 长度向量 → NaN 法线。NaN 会经
+   * `bakeByPos` 的顶点循环扩散到顶点色，最终写进 `normal` / `color` 属性。
+   *
+   * 真机 WebGL 遇到 NaN 顶点坐标/法线时可能直接抛错（与 v1.3.84f 空几何体
+   * 闪退同源），因此这里统一兜底：
+   *   · 非法 position → 归零；
+   *   · 非法 normal  → 归 (0,0,1)（贴地标线的正确朝向，不影响观感）；
+   * 正常顶点一个不动。
+   */
+  for (let i = 0; i < pos.length; i++) if (!Number.isFinite(pos[i])) pos[i] = 0
+  for (let i = 0; i < nrm.length; i += 3) {
+    if (
+      !Number.isFinite(nrm[i]) ||
+      !Number.isFinite(nrm[i + 1]) ||
+      !Number.isFinite(nrm[i + 2])
+    ) {
+      nrm[i] = 0
+      nrm[i + 1] = 0
+      nrm[i + 2] = 1
+    }
+  }
   const out = new BufferGeometry()
   out.setAttribute("position", new BufferAttribute(pos, 3))
   out.setAttribute("normal", new BufferAttribute(nrm, 3))
   return out
+}
+
+/**
+ * v1.3.89：合并**已填顶点色**的几何（position/normal/color 三属性）。
+ *
+ * 观众彩点这类「每件一个颜色」的批量小件：先逐件涂色再合并成一个 Mesh，
+ * 避免 100+ 个 draw call。与 mergePlain 同源的 NaN 清洗。
+ */
+function mergeBaked(geos: BufferGeometry[]): BufferGeometry {
+  // v1.3.89c：与 mergePlain 同款修复 —— 先展开 index 再拷数组，否则
+  // indexed 小件（观众盒/数码段）合并后跨面乱连成斜三角碎片。
+  const flat = geos.map((g) => {
+    const ni = g.index ? g.toNonIndexed() : g
+    if (ni !== g) g.dispose()
+    return ni
+  })
+  let total = 0
+  for (const g of flat) {
+    if (!g.attributes.color) throw new Error("mergeBaked: 缺 color 属性")
+    total += g.attributes.position.count
+  }
+  const pos = new Float32Array(total * 3)
+  const nrm = new Float32Array(total * 3)
+  const col = new Float32Array(total * 3)
+  let o = 0
+  for (const g of flat) {
+    pos.set(g.attributes.position.array as Float32Array, o * 3)
+    nrm.set(g.attributes.normal.array as Float32Array, o * 3)
+    col.set(g.attributes.color.array as Float32Array, o * 3)
+    o += g.attributes.position.count
+    g.dispose()
+  }
+  for (let i = 0; i < pos.length; i++) if (!Number.isFinite(pos[i])) pos[i] = 0
+  for (let i = 0; i < nrm.length; i += 3) {
+    if (
+      !Number.isFinite(nrm[i]) ||
+      !Number.isFinite(nrm[i + 1]) ||
+      !Number.isFinite(nrm[i + 2])
+    ) {
+      nrm[i] = 0
+      nrm[i + 1] = 0
+      nrm[i + 2] = 1
+    }
+  }
+  for (let i = 0; i < col.length; i++)
+    if (!Number.isFinite(col[i])) col[i] = 0.5
+  const out = new BufferGeometry()
+  out.setAttribute("position", new BufferAttribute(pos, 3))
+  out.setAttribute("normal", new BufferAttribute(nrm, 3))
+  out.setAttribute("color", new BufferAttribute(col, 3))
+  return out
+}
+
+/** v1.3.89：给单个 geometry 全部顶点填一个颜色（LED 自发光语义） */
+function fillBaked(geo: BufferGeometry, hex: number): BufferGeometry {
+  const n = geo.attributes.position.count
+  const cols = new Float32Array(n * 3)
+  const c = new Color(hex) // sRGB hex → 线性工作空间
+  for (let v = 0; v < n; v++) {
+    /**
+     * v1.3.89c：直写线性分量。旧版在此套 SRGBToDisplay 是双重编码——
+     * vertexColors 路径不做 sRGB 解码、属性值被 shader 当 linear，GPU
+     * 输出（outputColorSpace=SRGB）又做一次 linear→sRGB 提亮，LED 件
+     * 整体过曝一档（观众马卡龙化 / 数码段发粉的元凶）。bakeVertices 之
+     * 所以没这个问题，是它末尾 setRGB(..., SRGBColorSpace) 把显示空间
+     * 数值转回了线性再落属性 —— 这里直写线性分量，GPU 输出后精确还原
+     * hex。
+     */
+    cols[v * 3] = c.r
+    cols[v * 3 + 1] = c.g
+    cols[v * 3 + 2] = c.b
+  }
+  geo.setAttribute("color", new BufferAttribute(cols, 3))
+  return geo
 }
 
 /** bakeVertices 的 base 只给法线 z，这里补一版能拿到世界坐标的 */
@@ -320,15 +460,20 @@ function buildStands(
       out.push(g)
       // 座椅正面：只有前两排排得进画面（见文件头注释）
       if (i < 2) {
-        const face = sd.onX
-          ? new PlaneGeometry(len, 0.45, Math.round(len * 3), 2)
-          : new PlaneGeometry(len, 0.45, Math.round(len * 3), 2)
+        const face = new PlaneGeometry(len, 0.45, Math.round(len * 3), 2)
+        /**
+         * v1.3.89c：旋转链路重写 —— 原 rotateY 在 Z-up 世界里把 8m 长边
+         * 转到了 z 轴上，座椅面变成「贯穿天地」的竖直长条，实拍正中一根
+         * 深红柱（mergePlain 撕裂修复后现出原形）。正确链路：先 rotateX
+         * (-90°) 把 XY 面片放平（长沿 x、高沿 z），再按侧别把长边转向排
+         * 向、法线转向场内。
+         */
+        face.rotateX(-Math.PI / 2)
         if (sd.onX) {
-          // 法线默认 +Z，转到 −sign·X（朝场内）
-          face.rotateY(sd.sign > 0 ? -Math.PI / 2 : Math.PI / 2)
+          face.rotateZ(sd.sign > 0 ? Math.PI / 2 : -Math.PI / 2)
           face.translate(sd.sign * (d - stepD / 2), 0, FIELD_Z + h + 0.225)
         } else {
-          face.rotateY(sd.sign > 0 ? Math.PI / 2 : -Math.PI / 2)
+          if (sd.sign > 0) face.rotateY(Math.PI)
           face.translate(0, sd.sign * (d - stepD / 2), FIELD_Z + h + 0.225)
         }
         out.push(face)
@@ -412,11 +557,11 @@ export function buildFootballField(): Group {
   g.name = "Football"
   g.add(
     buildSkyDome(
-      0xf0d9b0, // 地平线：傍晚暖黄
-      0x7fb0d8, // 中段
-      0x2a6bb0, // 天顶
+      0xf0d9b0,
+      0x7fb0d8,
+      0x2a6bb0,
       FIELD_SKY_R,
-      0x6a7d5a, // 下半球 = 场外草地，与地面外缘同色
+      0x6a7d5a,
       false,
       [0.012, 0.05]
     )
@@ -425,48 +570,57 @@ export function buildFootballField(): Group {
     buildOuterGround(FB_HX, FB_HY, 0x5f6f52, FB_HORIZON, FB_SHADE, FB_BAKE_SUN)
   )
 
-  // 草皮：横向割草条纹（每 1.6m 交替）—— 掠射下是最强的一根纵深线索
-  const turf = new PlaneGeometry(FB_HX * 2, FB_HY * 2, 120, 75)
+  // 草皮：横向割草条纹（每 5.5m 一道，接近真实球场割草宽度）
+  const turf = new PlaneGeometry(FB_HX * 2, FB_HY * 2, 160, 100)
   turf.translate(0, 0, FIELD_Z)
   bakeByPos(turf, FB_SHADE, FB_BAKE_SUN, (out, P) => {
-    const s = Math.floor((P.y + 50) / 1.6) % 2
+    const s = Math.floor((P.y + 100) / 5.5) % 2
     out.copy(s === 0 ? FB_TURF_A : FB_TURF_B)
-    const n = hash2(Math.round(P.x * 7), Math.round(P.y * 7))
+    const n = hash2(Math.round(P.x * 2), Math.round(P.y * 2))
     out.offsetHSL(0, 0, (n - 0.5) * 0.05)
   })
   const tm = new Mesh(turf, envMaterial())
   tm.name = "Turf"
   g.add(tm)
 
-  // 标线
+  // 标线：真实 FIFA 尺寸
+  const centerR = 9.15
+  const penaltyD = 16.5
+  const penaltyW = 40.32
+  const goalAreaD = 5.5
+  const goalAreaW = 18.32
+  const spotD = 11.0
+  const arcR = 9.15
+  const cornerR = 1.0
   const lines: BufferGeometry[] = [
-    lineGeo(FB_HX * 2, 0.10, 0, FB_HY),
-    lineGeo(FB_HX * 2, 0.10, 0, -FB_HY),
-    lineGeo(0.10, FB_HY * 2, FB_HX, 0),
-    lineGeo(0.10, FB_HY * 2, -FB_HX, 0),
-    lineGeo(FB_HX * 2, 0.08, 0, 0), // 中线
-    ringGeo(0.9, 0.96, 0, 0), // v1.3.64：中圈 1.75 → 0.9
-    dotGeo(0.06, 0, 0),       // v1.3.64：开球点 0.09 → 0.06
+    lineGeo(FB_HX * 2, 0.12, 0, FB_HY),
+    lineGeo(FB_HX * 2, 0.12, 0, -FB_HY),
+    lineGeo(0.12, FB_HY * 2, FB_HX, 0),
+    lineGeo(0.12, FB_HY * 2, -FB_HX, 0),
+    lineGeo(FB_HX * 2, 0.10, 0, 0),
+    ringGeo(centerR - 0.05, centerR + 0.05, 0, 0),
+    dotGeo(0.12, 0, 0),
   ]
   for (const sgn of [-1, 1]) {
     const yb = sgn * FB_HY
-    // 大禁区：v1.3.64 整体按球场缩比缩小（球场 5×3.2，硬编码 6.4×2.6 太大）
-    lines.push(lineGeo(4.0, 0.08, 0, yb - sgn * 1.6))      // v1.3.64：6.4×2.6 → 4.0×1.6
-    lines.push(lineGeo(0.08, 1.6, -2.0, yb - sgn * 0.8))  // v1.3.64：2.6×3.2 → 1.6×2.0
-    lines.push(lineGeo(0.08, 1.6, 2.0, yb - sgn * 0.8))
+    // 大禁区
+    lines.push(lineGeo(penaltyW, 0.12, 0, yb - sgn * penaltyD / 2))
+    lines.push(lineGeo(0.12, penaltyD, -penaltyW / 2, yb - sgn * penaltyD / 2))
+    lines.push(lineGeo(0.12, penaltyD, penaltyW / 2, yb - sgn * penaltyD / 2))
     // 小禁区
-    lines.push(lineGeo(2.0, 0.06, 0, yb - sgn * 0.7))      // v1.3.64：3.2×1.1 → 2.0×0.7
-    lines.push(lineGeo(0.06, 0.7, -1.0, yb - sgn * 0.35))  // v1.3.64：1.1×1.6 → 0.7×1.0
-    lines.push(lineGeo(0.06, 0.7, 1.0, yb - sgn * 0.35))
-    // 罚球点 + 罚球弧
-    lines.push(dotGeo(0.06, 0, yb - sgn * 1.2))            // v1.3.64：1.9 → 1.2
+    lines.push(lineGeo(goalAreaW, 0.10, 0, yb - sgn * goalAreaD / 2))
+    lines.push(lineGeo(0.10, goalAreaD, -goalAreaW / 2, yb - sgn * goalAreaD / 2))
+    lines.push(lineGeo(0.10, goalAreaD, goalAreaW / 2, yb - sgn * goalAreaD / 2))
+    // 罚球点 + 弧
+    lines.push(dotGeo(0.12, 0, yb - sgn * spotD))
     lines.push(
-      ringGeo(1.0, 1.06, 0, yb - sgn * 1.2, sgn > 0 ? Math.PI * 1.22 : Math.PI * 0.22, Math.PI * 0.56) // v1.3.64：1.75 → 1.0
+      ringGeo(arcR - 0.05, arcR + 0.05, 0, yb - sgn * spotD, sgn > 0 ? Math.PI * 1.20 : Math.PI * 0.20, Math.PI * 0.60)
     )
     // 角弧
     for (const sx of [-1, 1]) {
+      const cornerAng = sx * sgn > 0 ? 0 : Math.PI
       lines.push(
-        ringGeo(0.30, 0.36, sx * FB_HX, yb, 0, Math.PI * 2) // v1.3.64：0.42 → 0.30
+        ringGeo(cornerR - 0.04, cornerR + 0.04, sx * FB_HX, yb, cornerAng, Math.PI * 0.5)
       )
     }
   }
@@ -476,96 +630,362 @@ export function buildFootballField(): Group {
   lm.name = "FieldLines"
   g.add(lm)
 
-  // 球门（只有门柱下段入画）+ 泛光灯塔（只有塔基入画）
+  // 泛光灯塔：四根大灯柱
   const props: BufferGeometry[] = []
-  for (const sgn of [-1, 1]) {
-    for (const sx of [-1, 1]) {
-      props.push(stakeGeo(0.08, 0.08, 1.6, sx * 1.0, sgn * FB_HY)) // v1.3.64：sx*1.83 → 1.0，门柱高度 2.44 → 1.6
-    }
-    props.push(stakeGeo(2.0, 0.08, 0.06, 0, sgn * FB_HY, FIELD_Z + 1.6)) // v1.3.64：横梁 3.9×0.09 → 2.0×0.08
-  }
   for (const sx of [-1, 1])
     for (const sy of [-1, 1]) {
-      props.push(stakeGeo(0.5, 0.5, 6.0, sx * 9, sy * 6)) // v1.3.64：sx*15 sy*11 → 9/6（球场缩了，灯塔也内收）
-      props.push(stakeGeo(1.0, 1.0, 0.20, sx * 9, sy * 6))
+      props.push(stakeGeo(0.8, 0.8, 18.0, sx * 55, sy * 38))
+      props.push(stakeGeo(1.6, 1.6, 0.4, sx * 55, sy * 38))
     }
+
+  // 球门
+  for (const sgn of [-1, 1])
+    for (const m of buildGoal(sgn * FB_HX, sgn)) g.add(m)
 
   const standGeos = buildStands(
     FB_HX,
     FB_HY,
-    14,            // v1.3.64：22 → 14（球场缩了 8→5，看台也得缩，否则两端溢出天穹）
-    10,            // v1.3.64：15 → 10
-    2,             // v1.3.64：3 排 → 2 排（顶上一排 z=0.6 已压到台呢视觉上沿，留着只会让红蓝条纹成「红墙」）
-    0.20,          // v1.3.64：0.30 → 0.20，最高看台 z=0.4 仍在台呢 z=0.06 之上但不压到相机 z=0.295
-    0.80,          // v1.3.64：0.95 → 0.80
-    1.2,           // v1.3.64：1.4 → 1.2，球场小了间隙也收一点
+    100,  // 沿长边看台长度
+    64,   // 沿短边看台长度
+    3,
+    0.45,
+    0.90,
+    3.0,
     0x545e69,
-    [0x2f5d8a]     // v1.3.64：去掉 0x8a3f3a 红色调
+    [0x2f5d8a, 0x8a3f3a]
   )
   const all = props.concat(standGeos)
   const pg = mergePlain(all)
   bakeByPos(pg, FB_SHADE, FB_BAKE_SUN, (out, P) => {
-    // 白色门柱 / 深色塔身 / 看台 / 座椅，靠几何尺寸区分太脆，直接按高度与世界位置判
-    const smallFootprint =
-      Math.abs(P.x) > 13.5 || Math.abs(P.y) > 9.5
-    if (P.z > FIELD_Z + 2.0 && !smallFootprint) {
-      out.setHex(0xf2f2ee) // 门柱 / 横梁
+    const ax = Math.abs(P.x)
+    const ay = Math.abs(P.y)
+    // 门柱/横梁（buildGoal 里的 box）高度在 2.44m 左右
+    if (P.z > FIELD_Z + 2.0 && ax < FB_HX + 2 && ay < FB_HY + 2) {
+      out.setHex(0xf2f2ee)
       return
     }
-    const inField =
-      Math.abs(P.x) <= FB_HX + 1.5 && Math.abs(P.y) <= FB_HY + 1.5
-    if (smallFootprint) {
-      out.setHex(0x3f4650) // 灯塔
+    // 灯塔
+    if (ax > FB_HX + 15 || ay > FB_HY + 15) {
+      out.setHex(0x3f4650)
       return
     }
-    if (inField) {
-      out.setHex(0x545e69) // 台阶
+    // 看台台阶
+    const inStand = (ax > FB_HX + 2.5 && ax < FB_HX + 6.0) || (ay > FB_HY + 2.5 && ay < FB_HY + 6.0)
+    if (inStand) {
+      out.setHex(0x545e69)
       return
     }
-    // 座椅正面：法线水平的竖直面
-    seatStripe(out, Math.abs(P.x) > Math.abs(P.y) ? P.y : P.x, [
-      0x2f5d8a,
-      0x8a3f3a,
-    ])
+    seatStripe(out, ax > ay ? P.y : P.x, [0x2f5d8a, 0x8a3f3a])
   })
   const pm = new Mesh(pg, envMaterial())
   pm.name = "FieldProps"
   g.add(pm)
+
+  // 场边 LED 广告围挡
+  const paintFlatCb = (
+    geo: BufferGeometry,
+    cb: (out: Color, px: number, py: number, pz: number) => void
+  ) => {
+    const pos = geo.attributes.position as BufferAttribute
+    const cols = new Float32Array(pos.count * 3)
+    const c = new Color()
+    for (let v = 0; v < pos.count; v++) {
+      cb(c, pos.getX(v), pos.getY(v), pos.getZ(v))
+      cols[v * 3] = SRGBToDisplay(c.r)
+      cols[v * 3 + 1] = SRGBToDisplay(c.g)
+      cols[v * 3 + 2] = SRGBToDisplay(c.b)
+    }
+    geo.setAttribute("color", new BufferAttribute(cols, 3))
+    return new Mesh(geo, envMaterial())
+  }
+
+  const adGeos: BufferGeometry[] = []
+  const addAdBoard = (cx: number, cy: number, alongY: boolean, seed: number) => {
+    const base = new BoxGeometry(
+      alongY ? 0.12 : 3.0,
+      alongY ? 3.0 : 0.12,
+      1.2
+    )
+    base.translate(cx, cy, FIELD_Z + 0.6)
+    const r = hash2(seed, 3)
+    fillBaked(base, r < 0.62 ? 0x123368 : r < 0.85 ? 0x7a1f2c : 0x0d5a34)
+    adGeos.push(base)
+    const n = 3 + Math.floor(hash2(seed, 11) * 3)
+    for (let k = 0; k < n; k++) {
+      const u = (k + 0.5) / n + (hash2(seed, k + 20) - 0.5) * 0.1
+      const w = 0.2 + hash2(seed, k + 40) * 0.28
+      const zc = FIELD_Z + 0.55 + hash2(seed, k + 60) * 0.18
+      const off = (u - 0.5) * 2.8
+      const dir = cy >= 0 ? -1 : 1
+      const t = new BoxGeometry(
+        alongY ? 0.03 : w,
+        alongY ? w : 0.03,
+        0.3
+      )
+      t.translate(
+        alongY ? cx - 0.08 : cx + off,
+        alongY ? cy + off : cy + dir * 0.08,
+        zc
+      )
+      fillBaked(t, 0xf2f6fa)
+      adGeos.push(t)
+    }
+  }
+  // 长边围挡（x = +FB_HX 外侧）
+  const adY = FB_HY + 3.5
+  const adX = FB_HX + 3.5
+  for (let i = -5; i <= 5; i++) addAdBoard(adX, i * 6, true, i + 100)
+  // 底线后围挡
+  for (const sgn of [-1, 1]) {
+    for (let i = -7; i <= 7; i++) addAdBoard(i * 7, sgn * adY, false, 200 + sgn * 20 + i)
+  }
+  const adMerged = mergeBaked(adGeos)
+  const adMesh = new Mesh(adMerged, envMaterial())
+  adMesh.name = "AdBoards"
+  g.add(adMesh)
+
+  // 看台观众
+  const FB_CROWD = [
+    0x6a3a34, 0x3a4a6a, 0x7a6a38, 0x8a867e, 0x3d3d44, 0x3a5a4a, 0x7a5434,
+    0x4a3e5e,
+  ]
+  const fbCrowdGeos: BufferGeometry[] = []
+  const addCrowdFb = (
+    rowX: number,
+    rowY: number,
+    alongX: boolean,
+    from: number,
+    to: number,
+    topZ: number
+  ) => {
+    for (let u = from; u <= to; u += 0.6) {
+      const px = alongX ? u : rowX
+      const py = alongX ? rowY : u
+      if (hash2(Math.round(px * 13) + 1, Math.round(py * 7)) < 0.12) continue
+      const idx =
+        Math.floor(
+          hash2(Math.round(px * 31) + 7, Math.round(py * 17) + 3) *
+            FB_CROWD.length
+        ) % FB_CROWD.length
+      const body = new BoxGeometry(0.45, 0.35, 0.7)
+      body.translate(px, py, FIELD_Z + topZ + 0.35)
+      const cDim = new Color(FB_CROWD[idx])
+      cDim.multiplyScalar(0.45)
+      fbCrowdGeos.push(fillBaked(body, cDim.getHex()))
+    }
+  }
+  const facade = (cx: number, cy: number, alongY: boolean, from: number, to: number, h: number) => {
+    const len = to - from
+    const f = alongY
+      ? new BoxGeometry(0.8, len, h)
+      : new BoxGeometry(len, 0.8, h)
+    f.translate(alongY ? cx : (from + to) / 2, alongY ? (from + to) / 2 : cy, FIELD_Z + h / 2)
+    fbCrowdGeos.push(fillBaked(f, 0x39424e))
+  }
+  // 看台位置：gap=3.0, stepD=0.9, stepZ=0.45
+  const fD1 = FB_HX + 3.0 + 0 * 0.9
+  const fD2 = FB_HX + 3.0 + 1 * 0.9
+  const fD3 = FB_HX + 3.0 + 2 * 0.9
+  const fY1 = FB_HY + 3.0 + 0 * 0.9
+  const fY2 = FB_HY + 3.0 + 1 * 0.9
+  const fY3 = FB_HY + 3.0 + 2 * 0.9
+  facade(fD1, 0, true, -FB_HY, FB_HY, 0.45)
+  facade(fD2, 0, true, -FB_HY, FB_HY, 0.90)
+  facade(fD3, 0, true, -FB_HY, FB_HY, 1.35)
+  addCrowdFb(fD1, 0, false, -FB_HY, FB_HY, 0.45)
+  addCrowdFb(fD2, 0, false, -FB_HY, FB_HY, 0.90)
+  addCrowdFb(fD3, 0, false, -FB_HY, FB_HY, 1.35)
+  facade(0, fY1, false, -FB_HX, FB_HX, 0.45)
+  facade(0, fY2, false, -FB_HX, FB_HX, 0.90)
+  facade(0, fY3, false, -FB_HX, FB_HX, 1.35)
+  addCrowdFb(0, fY1, true, -FB_HX, FB_HX, 0.45)
+  addCrowdFb(0, fY2, true, -FB_HX, FB_HX, 0.90)
+  addCrowdFb(0, fY3, true, -FB_HX, FB_HX, 1.35)
+  facade(0, -fY1, false, -FB_HX, FB_HX, 0.45)
+  facade(0, -fY2, false, -FB_HX, FB_HX, 0.90)
+  facade(0, -fY3, false, -FB_HX, FB_HX, 1.35)
+  addCrowdFb(0, -fY1, true, -FB_HX, FB_HX, 0.45)
+  addCrowdFb(0, -fY2, true, -FB_HX, FB_HX, 0.90)
+  addCrowdFb(0, -fY3, true, -FB_HX, FB_HX, 1.35)
+  const fbCrowdMerged = mergeBaked(fbCrowdGeos)
+  const fbCrowdMesh = new Mesh(fbCrowdMerged, envMaterial())
+  fbCrowdMesh.name = "Crowd"
+  g.add(fbCrowdMesh)
+
+  // 四角角旗
+  for (const sx of [-1, 1])
+    for (const sy of [-1, 1]) {
+      const pole = new BoxGeometry(0.06, 0.06, 1.5)
+      pole.translate(sx * FB_HX, sy * FB_HY, FIELD_Z + 0.75)
+      const pm0 = paintFlatCb(pole, (out) => out.setHex(0xe8e8e2))
+      pm0.name = `FlagPole${sx}${sy}`
+      g.add(pm0)
+      const flag = new BoxGeometry(0.03, 0.6, 0.4)
+      flag.translate(sx * FB_HX, sy * (FB_HY - 0.35), FIELD_Z + 1.35)
+      const fm0 = paintFlatCb(flag, (out) => out.setHex(0xf2c53d))
+      fm0.name = `FlagCloth${sx}${sy}`
+      g.add(fm0)
+    }
   return g
 }
 
 // ───────────────────────── 篮球场 ─────────────────────────
 
-const BK_SHADE = { AMB: [0.42, 0.42, 0.43], SUN: [0.70, 0.70, 0.72], GAMMA: 1.15 }
+/**
+ * v1.3.89：室外场 → 室内馆的烘焙配比。原先 AMB 0.42 + SUN 0.70 是
+ * 「晴天直射」语义 —— 室内化后正墙面朝 -x 全部背光（nd=0 → 0.42），
+ * 墙体/墙裙/横幅/记分牌集体变黑剪影。改「天窗漫射馆」：环境光抬到
+ * 0.72 为主、方向光压到 0.35（高窗天光的柔和方向性），背光面 0.72
+ * 不再糊黑，向阳面（地板）0.91 保持木色不过曝。
+ */
+const BK_SHADE = { AMB: [0.72, 0.72, 0.73], SUN: [0.35, 0.35, 0.36], GAMMA: 1.15 }
 const BK_BAKE_SUN = [0.681, -0.454, 0.574]
-const BK_HORIZON = [0.847, 0.824, 0.769] // 0xd8d2c4
+// v1.3.89：BK_HORIZON 删除（室外 OuterGround 已随室内化移除）
 const BK_WOOD_A = new Color(0xc99f63)
 const BK_WOOD_B = new Color(0xbd8f52)
 
 export function buildBasketballCourt(): Group {
   const g = new Group()
   g.name = "Basketball"
-  g.add(
-    buildSkyDome(
-      0xd8d2c4, // 地平线
-      0x8fa6bd,
-      0x3c5a80,
-      FIELD_SKY_R,
-      0x9a9184,
-      false,
-      [0.012, 0.05]
-    )
-  )
-  g.add(
-    buildOuterGround(BK_HX, BK_HY, 0x8b8375, BK_HORIZON, BK_SHADE, BK_BAKE_SUN)
-  )
+  /**
+   * v1.3.90b：按真实 FIBA 28m×15m 重建后，馆体也同步放大。
+   * 墙体坐落在看台后方，给场地留出真实缓冲带。
+   */
+  const WALL_X = 19.0
+  const WALL_Y = 13.0
+  const WALL_H = 6.0
+  const PAD_H = 1.2
+  const wallGeos: BufferGeometry[] = []
+  wallGeos.push(stakeGeo(0.3, WALL_Y * 2, WALL_H, WALL_X, 0))
+  for (const sgn of [-1, 1])
+    wallGeos.push(stakeGeo(WALL_X + 0.3, 0.3, WALL_H, 0, sgn * WALL_Y))
+  const wallMerged = mergePlain(wallGeos)
+  bakeByPos(wallMerged, BK_SHADE, BK_BAKE_SUN, (out, P) => {
+    if (P.z < FIELD_Z + PAD_H) {
+      out.setHex(0x24406e)
+      const u = P.x > WALL_X - 0.4 ? P.y : P.x
+      const f = (u + 60) / 0.8 - Math.floor((u + 60) / 0.8)
+      if (f < 0.05) out.setHex(0x182c4e)
+      return
+    }
+    out.setHex(0x3d4652)
+  })
+  const wallMesh = new Mesh(wallMerged, envMaterial())
+  wallMesh.name = "GymWalls"
+  g.add(wallMesh)
 
-  // 木地板：沿 X 的长条拼板
-  const floor = new PlaneGeometry(BK_HX * 2, BK_HY * 2, 108, 63)
+  // 馆内地面：木地板之外的跑道/水泥过道
+  const aisle = new PlaneGeometry(WALL_X * 2, WALL_Y * 2)
+  aisle.translate(0, 0, FIELD_Z - 0.004)
+  bakeByPos(aisle, BK_SHADE, BK_BAKE_SUN, (out) => out.setHex(0x59534d))
+  const aisleMesh = new Mesh(aisle, envMaterial())
+  aisleMesh.name = "GymAisle"
+  g.add(aisleMesh)
+
+  // 记分牌 + 横幅 + 记录台
+  const boardGeos: BufferGeometry[] = []
+  boardGeos.push(stakeGeo(0.06, 3.0, 1.0, WALL_X - 0.18, 0, FIELD_Z + 1.5))
+  const boardMerged = mergePlain(boardGeos)
+  bakeByPos(boardMerged, BK_SHADE, BK_BAKE_SUN, (out) => out.setHex(0x141d2a))
+  const boardMesh = new Mesh(boardMerged, envMaterial())
+  boardMesh.name = "Scoreboard"
+  g.add(boardMesh)
+
+  const segGeos: BufferGeometry[] = []
+  const segX = [-1.0, -0.55, -0.1, 0.35, 0.8]
+  for (const sx of segX) {
+    const seg = new BoxGeometry(0.02, 0.4, 0.55)
+    seg.translate(WALL_X - 0.22, sx, FIELD_Z + 1.75)
+    segGeos.push(fillBaked(seg, 0xff4030))
+  }
+  for (const lx of [-1.3, 1.3]) {
+    const lamp = new BoxGeometry(0.02, 0.12, 0.12)
+    lamp.translate(WALL_X - 0.22, lx, FIELD_Z + 1.65)
+    segGeos.push(fillBaked(lamp, 0xf2c53d))
+  }
+  const segMerged = mergeBaked(segGeos)
+  const segMesh = new Mesh(segMerged, envMaterial())
+  segMesh.name = "ScoreboardDigits"
+  g.add(segMesh)
+
+  const decoGeos: BufferGeometry[] = []
+  for (const bx of [-4.5, 4.5])
+    decoGeos.push(stakeGeo(0.06, 3.6, 1.0, WALL_X - 0.18, bx, FIELD_Z + 1.5))
+  const decoMerged = mergePlain(decoGeos)
+  bakeByPos(decoMerged, BK_SHADE, BK_BAKE_SUN, (out, P) => {
+    out.setHex(0x8a3038)
+    if (P.z > FIELD_Z + 2.2) out.setHex(0xe8e0cc)
+  })
+  const decoMesh = new Mesh(decoMerged, envMaterial())
+  decoMesh.name = "WallDeco"
+  g.add(decoMesh)
+
+  const deskGeos: BufferGeometry[] = [
+    stakeGeo(1.0, 3.2, 0.1, WALL_X - 0.9, 0, FIELD_Z + 0.85),
+    stakeGeo(0.9, 3.0, 0.8, WALL_X - 0.95, 0, FIELD_Z + 0.05),
+  ]
+  const deskMerged = mergePlain(deskGeos)
+  bakeByPos(deskMerged, BK_SHADE, BK_BAKE_SUN, (out, P) => {
+    out.setHex(P.z > FIELD_Z + 0.8 ? 0x8a3038 : 0x303844)
+  })
+  const deskMesh = new Mesh(deskMerged, envMaterial())
+  deskMesh.name = "ScorerTable"
+  g.add(deskMesh)
+
+  // 观众：按新看台位置排布
+  const CROWD_COLORS = [
+    0x6a3a34, 0x3a4a6a, 0x7a6a38, 0x8a867e, 0x3d3d44, 0x3a5a4a, 0x7a5434,
+    0x4a3e5e,
+  ]
+  const crowdGeos: BufferGeometry[] = []
+  const addCrowdRow = (
+    rowX: number,
+    rowY: number,
+    alongX: boolean,
+    from: number,
+    to: number,
+    topZ: number
+  ) => {
+    for (let u = from; u <= to; u += 0.45) {
+      const px = alongX ? u : rowX
+      const py = alongX ? rowY : u
+      if (hash2(Math.round(px * 13), Math.round(py * 7)) < 0.12) continue
+      const idx =
+        Math.floor(
+          hash2(Math.round(px * 31) + 7, Math.round(py * 17) + 3) *
+            CROWD_COLORS.length
+        ) % CROWD_COLORS.length
+      const body = new BoxGeometry(0.35, 0.28, 0.55)
+      body.translate(px, py, FIELD_Z + topZ + 0.275)
+      const cDim = new Color(CROWD_COLORS[idx])
+      cDim.multiplyScalar(0.45)
+      crowdGeos.push(fillBaked(body, cDim.getHex()))
+    }
+  }
+  // 看台排距：gap=2.5, stepD=0.8, stepZ=0.4
+  const standD1 = BK_HX + 2.5 + 0 * 0.8
+  const standD2 = BK_HX + 2.5 + 1 * 0.8
+  const standY1 = BK_HY + 2.5 + 0 * 0.8
+  const standY2 = BK_HY + 2.5 + 1 * 0.8
+  addCrowdRow(standD1, 0, false, -12, -1.0, 0.4)
+  addCrowdRow(standD1, 0, false, 1.0, 12, 0.4)
+  addCrowdRow(standD2, 0, false, -12, -1.0, 0.8)
+  addCrowdRow(standD2, 0, false, 1.0, 12, 0.8)
+  addCrowdRow(0, standY1, true, -12, 12, 0.4)
+  addCrowdRow(0, standY2, true, -12, 12, 0.8)
+  addCrowdRow(0, -standY1, true, -12, 12, 0.4)
+  addCrowdRow(0, -standY2, true, -12, 12, 0.8)
+  const crowdMerged = mergeBaked(crowdGeos)
+  const crowdMesh = new Mesh(crowdMerged, envMaterial())
+  crowdMesh.name = "Crowd"
+  g.add(crowdMesh)
+
+  // 木地板
+  const floor = new PlaneGeometry(BK_HX * 2, BK_HY * 2, 140, 75)
   floor.translate(0, 0, FIELD_Z)
   bakeByPos(floor, BK_SHADE, BK_BAKE_SUN, (out, P) => {
-    const PW = 0.22
-    const PL = 1.3
+    const PW = 0.12 // 真实球馆窄板 ~120mm
+    const PL = 2.2
     const row = Math.floor(P.y / PW)
     const sx = P.x + row * PL * 0.4
     out.copy(BK_WOOD_A).lerp(BK_WOOD_B, hash2(Math.floor(sx / PL), row))
@@ -573,36 +993,49 @@ export function buildBasketballCourt(): Group {
       Math.min(sx / PL - Math.floor(sx / PL), 1 - (sx / PL - Math.floor(sx / PL))) * PL,
       Math.min(P.y / PW - row, 1 - (P.y / PW - row)) * PW
     )
-    out.lerp(new Color(0x6d4f2c), (1 - smoothstep(0, 0.014, seam)) * 0.7)
-    // 三分线以内的漆面比外圈亮一档（真实球场就是这么分区上漆的）
-    if (Math.hypot(P.x, P.y) < 6.2) out.offsetHSL(0, 0, 0.03)
+    out.lerp(new Color(0x6d4f2c), (1 - smoothstep(0, 0.008, seam)) * 0.7)
+    // 三分线以内整体提亮一档
+    if (Math.hypot(P.x, P.y) < 12) out.offsetHSL(0, 0, 0.012)
   })
   const fmesh = new Mesh(floor, envMaterial())
   fmesh.name = "CourtFloor"
   g.add(fmesh)
 
-  // 标线
+  // 标线：真实 FIBA 尺寸
+  const keyW = 4.9   // 罚球区/禁区宽度
+  const keyD = 5.8   // 禁区深度（端线到罚球线）
+  const ftCircleR = 1.8
+  const centerR = 1.8
+  const threeR = 6.75
+  const rimIn = 1.575 // 篮筐中心投影距端线
   const lines: BufferGeometry[] = [
-    lineGeo(BK_HX * 2, 0.08, 0, BK_HY),
-    lineGeo(BK_HX * 2, 0.08, 0, -BK_HY),
-    lineGeo(0.08, BK_HY * 2, BK_HX, 0),
-    lineGeo(0.08, BK_HY * 2, -BK_HX, 0),
-    lineGeo(BK_HX * 2, 0.06, 0, 0),
-    ringGeo(0.9, 0.96, 0, 0), // v1.3.64：中圈 1.75 → 0.9（球场缩了 6×3.5 → 4×2.4，中圈也得缩）
+    lineGeo(BK_HX * 2, 0.10, 0, BK_HY),
+    lineGeo(BK_HX * 2, 0.10, 0, -BK_HY),
+    lineGeo(0.10, BK_HY * 2, BK_HX, 0),
+    lineGeo(0.10, BK_HY * 2, -BK_HX, 0),
+    lineGeo(BK_HX * 2, 0.08, 0, 0),
+    ringGeo(centerR - 0.03, centerR + 0.03, 0, 0),
   ]
   for (const sgn of [-1, 1]) {
     const yb = sgn * BK_HY
-    const ft = yb - sgn * 2.0  // v1.3.64：罚球线距端线 2.6 → 2.0（球场缩到 2.4 半宽）
-    lines.push(lineGeo(3.0, 0.06, 0, ft)) // v1.3.64：罚球线 3.6 → 3.0
-    lines.push(ringGeo(1.2, 1.26, 0, ft)) // v1.3.64：罚球弧 1.75 → 1.2
-    // 三分弧：以篮筐为圆心的一段 + 两段直边
-    const cx = 0
-    const cy = yb - sgn * 0.75
-    lines.push(
-      ringGeo(3.0, 3.06, cx, cy, sgn > 0 ? Math.PI * 0.13 : Math.PI * 1.13, Math.PI * 0.74) // v1.3.64：5.6 → 3.0
-    )
-    lines.push(lineGeo(0.06, 1.6, -2.8, yb)) // v1.3.64：2.4 → 1.6，位置 5.3 → 2.8
-    lines.push(lineGeo(0.06, 1.6, 2.8, yb))
+    const ft = yb - sgn * keyD
+    // 罚球线
+    lines.push(lineGeo(keyW, 0.08, 0, ft))
+    // 罚球圈
+    lines.push(ringGeo(ftCircleR - 0.04, ftCircleR + 0.04, 0, ft))
+    // 禁区边线
+    lines.push(lineGeo(0.08, keyD, -keyW / 2, yb - sgn * keyD / 2))
+    lines.push(lineGeo(0.08, keyD, keyW / 2, yb - sgn * keyD / 2))
+    // 三分弧：圆心在篮筐投影
+    const cy = yb - sgn * rimIn
+    const dx = Math.sqrt(threeR * threeR - rimIn * rimIn)
+    const ang0 = Math.atan2(rimIn, dx)
+    const thetaStart = sgn > 0 ? ang0 : Math.PI - ang0
+    const thetaLen = Math.PI - 2 * ang0
+    lines.push(ringGeo(threeR - 0.04, threeR + 0.04, 0, cy, thetaStart, thetaLen))
+    // 三分线两端直边（从弧端点垂直到端线内侧）
+    lines.push(lineGeo(0.08, rimIn, dx, sgn * (BK_HY - rimIn / 2)))
+    lines.push(lineGeo(0.08, rimIn, -dx, sgn * (BK_HY - rimIn / 2)))
   }
   const lg = mergePlain(lines)
   bakeByPos(lg, BK_SHADE, BK_BAKE_SUN, (out) => out.setRGB(1, 1, 1))
@@ -610,76 +1043,72 @@ export function buildBasketballCourt(): Group {
   lm.name = "CourtLines"
   g.add(lm)
 
-  // 篮球架（篮板 3.05m，恒不入画，只建模求个交代）+ 一圈围栏
-  const props: BufferGeometry[] = []
+  // 三秒区涂漆：真实禁区 4.9m × 5.8m
+  const paintGeos: BufferGeometry[] = []
   for (const sgn of [-1, 1]) {
-    const yb = sgn * BK_HY
-    props.push(stakeGeo(1.30, 0.90, 0.14, 0, yb + sgn * 0.55)) // 底座
-    props.push(stakeGeo(0.14, 0.14, 2.10, 0, yb + sgn * 0.90)) // 立柱
-    props.push(stakeGeo(0.10, 1.30, 0.10, 0, yb + sgn * 0.30, FIELD_Z + 2.05)) // 悬臂
-    props.push(stakeGeo(1.80, 0.06, 1.05, 0, yb + sgn * 0.10, FIELD_Z + 2.30)) // 篮板
+    const pg0 = new PlaneGeometry(keyW, keyD)
+    pg0.translate(0, sgn * (BK_HY - keyD / 2), GROUND_Z + 0.004)
+    paintGeos.push(pg0)
   }
-  // 围栏：每 2.2m 一根竖杆 + 两道横杆
-  const fx = BK_HX + 1.6
-  const fy = BK_HY + 1.6
-  const posts: BufferGeometry[] = []
-  const nx = Math.round((fx * 2) / 2.2)
-  const ny = Math.round((fy * 2) / 2.2)
-  for (let i = 0; i <= nx; i++) {
-    const x = -fx + (i / nx) * fx * 2
-    posts.push(stakeGeo(0.05, 0.05, 1.10, x, fy))
-    posts.push(stakeGeo(0.05, 0.05, 1.10, x, -fy))
+  const paintMerged = mergePlain(paintGeos)
+  bakeByPos(paintMerged, BK_SHADE, BK_BAKE_SUN, (out) => out.setHex(0xb35a2e))
+  const paintMesh = new Mesh(paintMerged, envMaterial())
+  paintMesh.name = "CourtPaint"
+  g.add(paintMesh)
+
+  // 散落的篮球
+  const ballGeos: BufferGeometry[] = []
+  for (const [bx, by] of [
+    [4.0, 3.5],
+    [6.5, -3.8],
+    [8.5, 3.6],
+  ]) {
+    const bgeo = new SphereGeometry(0.15, 12, 9)
+    bgeo.translate(bx, by, FIELD_Z + 0.15)
+    ballGeos.push(bgeo)
   }
-  for (let j = 1; j < ny; j++) {
-    const y = -fy + (j / ny) * fy * 2
-    posts.push(stakeGeo(0.05, 0.05, 1.10, fx, y))
-    posts.push(stakeGeo(0.05, 0.05, 1.10, -fx, y))
+  const ballMerged = mergePlain(ballGeos)
+  bakeByPos(ballMerged, BK_SHADE, BK_BAKE_SUN, (out) => out.setHex(0xe06018))
+  const ballMesh = new Mesh(ballMerged, envMaterial())
+  ballMesh.name = "CourtBalls"
+  g.add(ballMesh)
+
+  // 队席垫
+  const benchGeos: BufferGeometry[] = []
+  for (const sgn of [-1, 1]) {
+    const bg = new BoxGeometry(0.6, 2.2, 0.3)
+    bg.translate(BK_HX - 0.8, sgn * (BK_HY - 2.0), FIELD_Z + 0.15)
+    benchGeos.push(bg)
   }
-  for (const hz of [0.55, 1.05]) {
-    posts.push(stakeGeo(fx * 2, 0.04, 0.04, 0, fy, FIELD_Z + hz))
-    posts.push(stakeGeo(fx * 2, 0.04, 0.04, 0, -fy, FIELD_Z + hz))
-    posts.push(stakeGeo(0.04, fy * 2, 0.04, fx, 0, FIELD_Z + hz))
-    posts.push(stakeGeo(0.04, fy * 2, 0.04, -fx, 0, FIELD_Z + hz))
-  }
+  const benchMerged = mergePlain(benchGeos)
+  bakeByPos(benchMerged, BK_SHADE, BK_BAKE_SUN, (out) => out.setHex(0x8a3038))
+  const benchMesh = new Mesh(benchMerged, envMaterial())
+  benchMesh.name = "TeamBenches"
+  g.add(benchMesh)
+
+  // 篮球架
+  for (const sgn of [-1, 1])
+    for (const m of buildHoop(sgn * BK_HY, sgn)) g.add(m)
 
   const standGeos = buildStands(
     BK_HX,
     BK_HY,
-    11,            // v1.3.64：17 → 11
-    8,             // v1.3.64：12 → 8
-    2,             // v1.3.64：3 排 → 2 排
-    0.20,          // v1.3.64：0.30 → 0.20
-    0.80,          // v1.3.64：0.95 → 0.80
-    1.6,           // v1.3.64：2.6 → 1.6，球场小了间隙收一点
+    26,   // 沿长边看台长度 ≈ 球场长
+    13,   // 沿短边看台长度 ≈ 球场宽
+    2,
+    0.40, // 每排升高
+    0.80, // 每排深度
+    2.5,  // 距场地间隙
     0x4d5661,
-    [0x2f5d8a]     // v1.3.64：单色，去掉红
+    [0x2f5d8a]
   )
-  const pg = mergePlain(props.concat(posts, standGeos))
+  const pg = mergePlain(standGeos)
   bakeByPos(pg, BK_SHADE, BK_BAKE_SUN, (out, P) => {
     const ax = Math.abs(P.x)
     const ay = Math.abs(P.y)
-    if (P.z > FIELD_Z + 2.0) {
-      out.setHex(0xf4f4f0) // 篮板 / 悬臂
-      return
-    }
-    if (ax < fx + 0.4 && ay < fy + 0.4) {
-      // 场地内：篮球架底座与立柱
-      out.setHex(P.z > FIELD_Z + 0.6 ? 0x4a505a : 0x3a4048)
-      return
-    }
-    if (ax > fx - 0.3 && ax < fx + 0.3 && ay < fy) {
-      out.setHex(0x6d747c) // 围栏竖杆 / 横杆
-      return
-    }
-    if (ay > fy - 0.3 && ay < fy + 0.3 && ax < fx) {
-      out.setHex(0x6d747c)
-      return
-    }
-    // 看台：台阶 vs 座椅面。座椅面是竖直平面（法线水平），用高度区分不可靠，
-    // 改用「是否贴着台阶顶面 + 离场地更远」来判。
-    const onSeat = P.z > FIELD_Z + 0.30
-    if (onSeat && (ax > 7.4 || ay > 5.0)) {
-      seatStripe(out, ax > ay ? P.y : P.x, [0x2f5d8a, 0x8a3f3a])
+    const inStand = (ax > BK_HX + 2.0 && ax < BK_HX + 4.0) || (ay > BK_HY + 2.0 && ay < BK_HY + 4.0)
+    if (P.z > FIELD_Z + 0.6 && inStand) {
+      seatStripe(out, ax > ay ? P.y : P.x, [0x2f5d8a])
       return
     }
     out.setHex(0x4d5661)
@@ -1028,8 +1457,6 @@ export function buildSceneEnvironment(sceneId: string): Group | null {
       return buildSnowMountainV3()
     case "beach":
       return buildBeach()
-    case "forest":
-      return buildForest()
     case "room":
     case "office":
     case "cybercafe":
@@ -1266,6 +1693,21 @@ interface TerrainStyle {
   hTFallback?: number
   /** 生成网格的 name（默认 "Terrain"） */
   name?: string
+  /**
+   * v1.3.84j：给地形挂细节贴图（可选）。
+   *
+   * 返回 null 表示该风格不用贴图（默认）。**规则由调用方保证**：如果 albedo
+   * 会把整片地形倒进同一显示色（如雪山：纯白、几乎无明暗），贴图必须返回
+   * null —— 因为 `envMaterial` 是 `finalColor = 顶点色 × 贴图色`，纯色地形上
+   * 挂一张细节贴图，等于把细节**直接画在**白面上，纹理对比度会加倍暴露、
+   * 呈现为噪点。沙滩有从湿沙到干沙的连续明暗过渡，贴图只做 ±5% 的微调，
+   * 才安全。
+   *
+   * 两张不同 repeat 的贴图**各自预建**（见 beachtexturefactory），禁用 clone()：
+   * `disposeEnvGroup()` 不 dispose map，clone 出来的贴图的 image 是同一份，
+   * 一旦某处释放就会连坐另一处。
+   */
+  map?: () => Texture | null
 }
 
 interface TerrainBand {
@@ -1389,6 +1831,15 @@ function buildTerrainBand(band: TerrainBand, style: TerrainStyle): Mesh {
     colors[i * 3 + 2] = tmp.b
   }
   geo.setAttribute("color", new BufferAttribute(colors, 3))
+  /**
+   * v1.3.84j：可选细节贴图。
+   *
+   * RingGeometry 自带 uv（归一化到 [0,1] 的方形），整块环带只用一张贴图的
+   * 一小块，靠 `repeat` 铺开。顶点色的光照与雾都已烘好，贴图只提供
+   * ±5% 明度扰动（见 beachtexturefactory 的「明度 ≥0.8」铁律），
+   * `finalColor = 顶点色 × 贴图色` 因此只微调明暗、不改色调。
+   */
+  const mapTex = style.map ? style.map() : null
   // v1.3.62c：MeshLambertMaterial → MeshBasicMaterial + toneMapped=false。
   // 顶点色已经算完了光照，不能再接受场景真实光照（否则 2.53 的辐照度
   // 会把 0.5 以上的反照率全部顶到过曝），也不能再走 ACES（0.5 以上
@@ -1396,7 +1847,12 @@ function buildTerrainBand(band: TerrainBand, style: TerrainStyle): Mesh {
   // v1.3.62d：fog=false，大气透视改为烘进顶点色（见 SNOW_HAZE）。
   const mesh = new Mesh(
     geo,
-    new MeshBasicMaterial({ vertexColors: true, toneMapped: false, fog: false })
+    new MeshBasicMaterial({
+      vertexColors: true,
+      toneMapped: false,
+      fog: false,
+      ...(mapTex ? { map: mapTex } : {}),
+    })
   )
   mesh.name = style.name ?? "Terrain"
   mesh.castShadow = false
@@ -1416,21 +1872,42 @@ function buildTerrainBand(band: TerrainBand, style: TerrainStyle): Mesh {
  * 顶点色完全可控。
  *
  * 要求所有输入几何体都有 position / normal / color 属性且非索引。
+ *
+ * v1.3.84j：新增 `opts.uv` —— 合并时一并搬运 uv 属性。
+ * 沙滩近景绿植要挂 `foliage` 贴图，而 `map` 必须有 uv 才能采样；
+ * 原来这个函数只搬 position/normal/color，合并后 uv 就丢了，贴图会失效。
+ * 默认 false，现有调用（球场/UFС/室内等）行为完全不变。
+ * 注意：开启时**每个**输入几何体都必须带 uv，否则跳过该属性并保持不合并 uv。
  */
-function mergeColored(geos: BufferGeometry[]): BufferGeometry {
+function mergeColored(
+  geos: BufferGeometry[],
+  opts?: { uv?: boolean }
+): BufferGeometry {
+  // v1.3.89c：防御性展开 index（现有调用方在 push 前已自行 toNonIndexed，
+  // 这里兜底防直传 indexed 件撕裂 —— 机制同 mergePlain 注释）。
+  const flat = geos.map((g) => {
+    const ni = g.index ? g.toNonIndexed() : g
+    if (ni !== g) g.dispose()
+    return ni
+  })
   let total = 0
-  for (const g of geos) total += g.attributes.position.count
+  for (const g of flat) total += g.attributes.position.count
+  const wantUv = opts?.uv === true && flat.every((g) => !!g.attributes.uv)
   const pos = new Float32Array(total * 3)
   const nrm = new Float32Array(total * 3)
   const col = new Float32Array(total * 3)
+  const uv = wantUv ? new Float32Array(total * 2) : null
   let o = 0
-  for (const g of geos) {
+  for (const g of flat) {
     const p = g.attributes.position.array as Float32Array
     const n = g.attributes.normal.array as Float32Array
     const c = g.attributes.color.array as Float32Array
     pos.set(p, o * 3)
     nrm.set(n, o * 3)
     col.set(c, o * 3)
+    if (uv) {
+      uv.set(g.attributes.uv.array as Float32Array, o * 2)
+    }
     o += g.attributes.position.count
     g.dispose()
   }
@@ -1438,6 +1915,7 @@ function mergeColored(geos: BufferGeometry[]): BufferGeometry {
   out.setAttribute("position", new BufferAttribute(pos, 3))
   out.setAttribute("normal", new BufferAttribute(nrm, 3))
   out.setAttribute("color", new BufferAttribute(col, 3))
+  if (uv) out.setAttribute("uv", new BufferAttribute(uv, 2))
   return out
 }
 
@@ -1467,9 +1945,26 @@ function bakeVertices(
   const rgb: number[] = [0, 0, 0]
   const [sx, sy, sz] = bakeSun
   for (let i = 0; i < n; i++) {
-    const nx = nrm.getX(i)
-    const ny = nrm.getY(i)
-    const nz = nrm.getZ(i)
+    /**
+     * v1.3.84h：法线 NaN 兜底。
+     *
+     * `computeVertexNormals()` 对退化三角形（坐标重合，如 RingGeometry /
+     * CircleGeometry 的闭合圆心）会算出 0 长度法线 → NaN。NaN 一旦流入
+     * `nz` 会同时污染光照项与顶点色，且写进 normal 属性后真机 WebGL 可能
+     * 直接抛错（与 v1.3.84f 空几何体闪退同源）。
+     * 这里对读到的法线逐分量校验，非法则退化为「朝上」——对贴地标线而言
+     * 正是正确朝向，观感零影响。
+     */
+    let nx = nrm.getX(i)
+    let ny = nrm.getY(i)
+    let nz = nrm.getZ(i)
+    if (!Number.isFinite(nx) || !Number.isFinite(ny) || !Number.isFinite(nz)) {
+      nx = 0
+      ny = 0
+      nz = 1
+      // 回写：把修复后的法线写回属性，避免 NaN 残留在 normal 里。
+      nrm.setXYZ(i, nx, ny, nz)
+    }
     base(tmp, nz, i)
     const nd = Math.max(0, nx * sx + ny * sy + nz * sz)
     const ndc = Math.pow(nd, shade.GAMMA)
@@ -1488,15 +1983,142 @@ function bakeVertices(
     colors[i * 3 + 2] = tmp.b
   }
   geo.setAttribute("color", new BufferAttribute(colors, 3))
+  // 若上面回写过被修复的法线，标记更新，确保上传到 GPU 的是干净数据
+  nrm.needsUpdate = true
 }
 
-/** 环境物体统一材质：顶点色即最终显示色，不吃场景光照也不走色调映射 */
-function envMaterial(): MeshBasicMaterial {
-  return new MeshBasicMaterial({
+/**
+ * 环境物体统一材质。
+ *
+ * v1.3.85：新增可选 `pbr` 参数，实现**按场景分流**。
+ *
+ * 背景：顶点色是 CPU 侧烘焙好的「最终显示色」（`bakeIndoor` / `bakeVertices`
+ * 用 `tmp.setRGB(..., SRGBColorSpace)` 转成**线性 albedo** 后写入 `color`
+ * 属性）。three 的 `vertexColors` 路径**不对顶点色做 sRGB 解码**
+ * （`color_vertex.glsl.js` 只有 `vColor.rgb *= color`，解码只存在于贴图
+ * 路径），所以属性里的线性值可以直接喂给 PBR。
+ *
+ * 而 `MeshBasicMaterial` 把顶点色**原样喷到屏幕**，完全不参与光照计算
+ * —— 这正是「画面像色块平涂、没有立体感」的根因。
+ *
+ * ⚠️ 为什么必须传参分流、不能全局换：
+ * 本函数同时服务 beach / football / basketball / ufc / snow。这些场景
+ * `outdoor` 为 false（snow 除外），太阳光与半球光都隐藏，环境物体**只吃**
+ * view.ts 里那盏 `AmbientLight(0x009922, 0.3)`（绿、强度 0.3）。全局换 PBR
+ * 会让它们整体变暗约九成并染绿。所以默认行为保持 basic 不变，只有显式
+ * 传 `pbr` 的调用点（室内三件套）才升级。
+ *
+ * 「零变形」约束：PBR 的 `BRDF_Lambert` 带 1/π，要让改造后亮度与改造前
+ * （直接输出顶点色）一致，需满足 `ambient + Σ dir·max(0,N·L) = π`。
+ * 光照参数见 view.ts 的 indoorAmb / indoorDir。
+ */
+function envMaterial(pbr?: {
+  roughness?: number
+  metalness?: number
+}): MeshBasicMaterial | MeshStandardMaterial {
+  if (!pbr) {
+    return new MeshBasicMaterial({
+      vertexColors: true,
+      toneMapped: false,
+      fog: false,
+    })
+  }
+  return new MeshStandardMaterial({
     vertexColors: true,
+    // 材质基色保持默认白：顶点色已是最终 albedo，再乘个底色会二次压暗
+    roughness: pbr.roughness ?? 0.9,
+    metalness: pbr.metalness ?? 0,
+    // NoToneMapping 下与 true 等效；保留是为了防止将来被误共享进 ACES 场景
     toneMapped: false,
     fog: false,
   })
+}
+
+/**
+ * v1.3.90：体育器材框架件（篮球筐 / 足球门）。
+ *
+ * 此前两场景的「球门」是占位草模 —— 篮球只有 3.05m 篮板（无筐无网、
+ * aim 机位恒不入画），足球只有 1.6m 门柱下段（横梁 2.0m、无网）。本
+ * 轮按真实尺寸建模，让场景在 overview 机位下「一眼认出是哪一种球」。
+ *
+ * 一律用顶点色 flat 填充（fillBaked）：这些件在画面里占比小、远离相机，
+ * 吃 shading 反而发灰；自发光式纯色更跳、更像真实器材的反光件。
+ */
+
+// ── 篮球架（一端一只，yE = 端线 y，sgn = 朝向场心方向）──
+function buildHoop(yE: number, sgn: number): Mesh[] {
+  const z = FIELD_Z
+  const meshes: Mesh[] = []
+  // 真实尺寸：篮板内沿距端线 1.2m，篮筐中心投影距端线 1.575m，高 3.05m
+  const boardY = yE - sgn * 1.2
+  const rimY = yE - sgn * 1.575
+  // 立柱：端线后 0.9m，从地起 3.9m
+  const pole = new BoxGeometry(0.13, 0.13, 3.9)
+  pole.translate(0, yE + sgn * 0.9, z + 1.95)
+  meshes.push(new Mesh(fillBaked(pole, 0x5b6675), envMaterial()))
+  // 悬臂：从立柱顶伸到篮板（z 3.425）
+  const arm = new BoxGeometry(0.1, 0.75, 0.1)
+  arm.translate(0, yE + sgn * 0.45, z + 3.425)
+  meshes.push(new Mesh(fillBaked(arm, 0x5b6675), envMaterial()))
+  // 篮板：1.8(宽 X) × 1.05(高 Z) × 0.07(厚 Y)，底 2.90 顶 3.95
+  const board = new BoxGeometry(1.8, 0.07, 1.05)
+  board.translate(0, boardY, z + 3.425)
+  meshes.push(new Mesh(fillBaked(board, 0xf2f2ec), envMaterial()))
+  // 篮筐：橙圈 r0.225 管0.022，高 3.05
+  const rim = new TorusGeometry(0.225, 0.022, 8, 22)
+  rim.rotateX(Math.PI / 2)
+  rim.translate(0, rimY, z + 3.05)
+  meshes.push(new Mesh(fillBaked(rim, 0xe8651e), envMaterial()))
+  // 网：开口锥（上 r0.225 下 r0.12，高 0.40），白
+  const net = new CylinderGeometry(0.225, 0.12, 0.4, 18, 2, true)
+  net.translate(0, rimY, z + 3.05 - 0.2)
+  meshes.push(new Mesh(fillBaked(net, 0xe6e6e0), envMaterial()))
+  for (const m of meshes) m.name = "Hoop"
+  return meshes
+}
+
+// ── 足球门（一端一只，xE = 端线 x，sgn = 朝向场心方向）──
+function buildGoal(xE: number, sgn: number): Mesh[] {
+  const z = FIELD_Z
+  // 真实尺寸：门宽 7.32m（内沿），门高 2.44m
+  const gy = 3.66
+  const gh = 2.44
+  const postW = 0.12
+  const meshes: Mesh[] = []
+  // 两根门柱
+  for (const sy of [-1, 1]) {
+    const post = new BoxGeometry(postW, postW, gh)
+    post.translate(xE, sy * gy, z + gh / 2)
+    meshes.push(new Mesh(fillBaked(post, 0xeef0ec), envMaterial()))
+  }
+  // 横梁：沿 Y 跨 7.32m，高 gh
+  const bar = new BoxGeometry(postW, gy * 2, postW)
+  bar.translate(xE, 0, z + gh)
+  meshes.push(new Mesh(fillBaked(bar, 0xeef0ec), envMaterial()))
+  // 简易球网：白色细 box 拼成后框 + 斜撑，depth 1.5m
+  const netDepth = 1.5
+  const netColor = 0xe6e6e0
+  const backX = xE - sgn * netDepth
+  // 后横梁
+  const backBar = new BoxGeometry(postW, gy * 2, postW)
+  backBar.translate(backX, 0, z + gh)
+  meshes.push(new Mesh(fillBaked(backBar, netColor), envMaterial()))
+  // 后立柱（矮，挂网用）
+  for (const sy of [-1, 1]) {
+    const backPost = new BoxGeometry(postW, postW, gh * 0.6)
+    backPost.translate(backX, sy * gy, z + gh * 0.3)
+    meshes.push(new Mesh(fillBaked(backPost, netColor), envMaterial()))
+  }
+  // 顶网（稀疏网格，用薄板+透明不可行，改用细盒条）
+  for (let i = 1; i <= 4; i++) {
+    const t = i / 5
+    const yw = gy * 2 * (1 - t * 0.25)
+    const topStrut = new BoxGeometry(netDepth * (1 - t * 0.1), yw, postW * 0.5)
+    topStrut.translate((xE + backX) / 2, 0, z + gh * (1 - t * 0.15))
+    meshes.push(new Mesh(fillBaked(topStrut, netColor), envMaterial()))
+  }
+  for (const m of meshes) m.name = "Goal"
+  return meshes
 }
 
 /** 谷底高度：R0 以内是球桌所在的山顶平台，之外按 FLOOR_SLOPE 下降 */
@@ -1856,8 +2478,8 @@ function beachTerrainZ(
 }
 
 // 沙滩调色板
-const BEACH_C_WET = new Color(0xa8875a) // 湿沙/谷底：深
-const BEACH_C_DRY = new Color(0xdfc79a) // 干沙/丘顶：亮
+const BEACH_C_WET = new Color(0xb89a66) // 湿沙/谷底：暖深
+const BEACH_C_DRY = new Color(0xead2a0) // 干沙/丘顶：亮金
 const BEACH_C_FOAM = new Color(0xf2f6f4) // 浪花泡沫
 
 const BEACH_STYLE: TerrainStyle = {
@@ -1875,7 +2497,7 @@ const BEACH_STYLE: TerrainStyle = {
   albedo(out, ctx) {
     const { hT, r } = ctx
     // 湿沙（谷底/近水）→ 干沙（丘顶）
-    out.copy(BEACH_C_WET).lerp(BEACH_C_DRY, smoothstep(0.12, 0.88, hT))
+    out.copy(BEACH_C_WET).lerp(BEACH_C_DRY, smoothstep(0.06, 0.94, hT))
     // 岸线泡沫：SHORE 附近一条白带，柔化沙与水的分界
     const foam =
       1 - smoothstep(0.15, 1.5, Math.abs(r - BEACH_TERRAIN.SHORE + 0.25))
@@ -1909,8 +2531,8 @@ function buildBeachSea(): Mesh {
 
   const nrm = geo.attributes.normal
   const colors = new Float32Array(pos.count * 3)
-  const cNear = new Color(0x3fb3ad) // 近岸浅绿松石
-  const cFar = new Color(0x11608f) // 远海深蓝
+  const cNear = new Color(0x35c9c0) // 近岸青绿松石（更通透）
+  const cFar = new Color(0x0a5a9e) // 远海钴蓝（更深邃）
   const cFoam = new Color(0xe8f6f2)
   const tmp = new Color()
   const { AMB, SUN, GAMMA } = BEACH_SHADE
@@ -1931,11 +2553,36 @@ function buildBeachSea(): Mesh {
     // 波纹：让海面在 aim 下不是一块死板渐变
     const ripple =
       1 +
-      0.06 * Math.sin(r * 1.7 + ang * 2.3) +
-      0.04 * Math.sin(r * 4.1 - ang * 5)
+      0.09 * Math.sin(r * 1.7 + ang * 2.3) +
+      0.055 * Math.sin(r * 4.1 - ang * 5)
     let dr = SRGBToDisplay(tmp.r) * (AMB[0] + SUN[0] * ndc) * ripple
     let dg = SRGBToDisplay(tmp.g) * (AMB[1] + SUN[1] * ndc) * ripple
     let db = SRGBToDisplay(tmp.b) * (AMB[2] + SUN[2] * ndc) * ripple
+    /**
+     * v1.3.84j：海面横向碎光。
+     *
+     * 原来的 `ripple` 是两条正弦叠加，在极坐标下是**同心圆 + 螺旋**——
+     * 静态时看不太出来，一旦相机随球路晃动，整片海面会像唱片一样整体
+     * 转，非常假。真实海面的闪烁是「横向的、破碎的、互不相干的」短亮
+     * 线，由不同角度、不同波长的毛细波干涉而成。
+     *
+     * 这里叠两组交叉行波（相位一个随 +ang、一个随 −ang），再**取两者
+     * 乘积的正部**：只在两组波峰同时经过的位置出亮点，于是自动得到
+     * 「短横线」而不是连续条纹。波段限制在 r ∈ [6, 58]（岸线泡沫到
+     * 地平线之间），刚好避开岸边白线与 haze 饱和区。
+     *
+     * 幅度 0.40 是刻意偏大的：它作用在已经乘完光照的颜色上，属于
+     * 「镜面高光」语义，稍亮一点才读得出「波光」而不是「水色不匀」。
+     */
+    const glintBand = smoothstep(6, 30, r) * (1 - smoothstep(48, 58, r))
+    if (glintBand > 0) {
+      const g1 = Math.sin(r * 2.7 + ang * 11.0)
+      const g2 = Math.sin(r * 5.3 - ang * 19.0)
+      const glint = Math.max(0, g1 * g2) * 0.4 * glintBand
+      dr += glint
+      dg += glint * 0.98
+      db += glint * 0.92
+    }
     // 岸边碎浪白线
     const surf = 1 - smoothstep(0, 1.8, r - (BEACH_TERRAIN.SHORE - 2))
     if (surf > 0) {
@@ -1943,6 +2590,21 @@ function buildBeachSea(): Mesh {
       dr += (SRGBToDisplay(cFoam.r) - dr) * s
       dg += (SRGBToDisplay(cFoam.g) - dg) * s
       db += (SRGBToDisplay(cFoam.b) - db) * s
+    }
+    /**
+     * v1.3.84i：远海「日光带」。
+     *
+     * 真实海景里海天交界处总有一条比两侧都亮的横带（阳光在海面的高反射
+     * 散射）。原实现只有一条 hover 渐变压过去，海平线是「深蓝撞浅蓝」，
+     * 分界读起来发闷。这里在 haze 之前先往地平线色提一档亮度，峰值落在
+     * r≈42m（正好是海面中远段），形成一条柔和的亮带。
+     */
+    const sunGlint = smoothstep(18, 42, r) * (1 - smoothstep(44, 58, r))
+    if (sunGlint > 0) {
+      const g0 = sunGlint * 0.5
+      dr += (BEACH_HAZE.COLOR[0] * 1.06 - dr) * g0
+      dg += (BEACH_HAZE.COLOR[1] * 1.06 - dg) * g0
+      db += (BEACH_HAZE.COLOR[2] * 1.06 - db) * g0
     }
     // 大气透视：到 OUTER 处必须到满值（否则露出世界尽头硬边）
     const haze =
@@ -1977,42 +2639,132 @@ function buildBeachSea(): Mesh {
  * 禁区：俯视相机视野半径只有 0.94m（横屏短边）~1.68m（竖屏）—— 俯视时
  * 球桌之外几乎什么都看不见。礁石放在 r ≥ 2.6 之外，俯视完全不入画；
  * aim 视角水平半角 18.37°，d > 7.8m 起才看得见，正好落在中景。
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ * v1.3.84j 重建：修掉「一堆黑色三棱锥纸板」
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * 真机截图显示礁石是一堆**纯黑的三棱锥纸板**：平面、锐角、全黑、朝同一侧倒。
+ * 三个叠加的成因：
+ *
+ *   1. **面数太少** —— `IcosahedronGeometry(s, 0)` 只有 20 个面，顶点抖动又把
+ *      z 压到 0.5~1.1 倍 → 变成扁平的尖锥。20 面在掠射光下就是「纸板三角」。
+ *
+ *   2. **光照项没有下限** —— 原式 `nd = max(0, 法线·光向)`，背光面 `nd = 0` →
+ *      颜色 = `albedo × AMB`，而 `BEACH_SHADE.AMB = [0.42, 0.44, 0.47]`。
+ *      深色岩石 `0x5c5347`（≈0.36,0.33,0.28）乘完只剩 **0.15 左右 → 几乎纯黑**。
+ *      这是「黑纸板」的主因，不是颜色选错了。
+ *
+ *   3. **球面 UV 不可用** —— `IcosahedronGeometry` 继承 `PolyhedronGeometry`
+ *      的球面 UV，极点畸变严重，直接贴岩石纹理会被拉花成放射状。
+ *
+ * 对应三条修复：
+ *   · 细分 0 → 2（20 面 → 320 面），并**压扁成石块**（`z × 0.62~0.82`）、
+ *     法线向天顶混合，得到圆润的鹅卵石／礁石轮廓，而不是尖锥。
+ *   · 光照加**半球补光**（`+0.20 × hemi`，hemi = 朝上程度）：背光面不再掉到 0，
+ *     同时提亮岩石底色（cLo/cHi 由 0x5c5347/0x8d8375 → 0x7a7062/0x9a9084）。
+ *   · **自算三平面 UV**：按顶点法线主轴选投影平面，避免极点畸变。
+ *
+ * 另挂 `rock` 贴图（明度 ≥0.8 的细节层，见 beachtexturefactory.ts 的铁律）。
  */
 function buildBeachRocks(): Group {
   const g = new Group()
   g.name = "BeachRocks"
   const rng = makeSeededRng(4211)
-  const cLo = new Color(0x5c5347)
-  const cHi = new Color(0x8d8375)
+  // v1.3.84j：提亮岩石底色。原来 0x5c5347 太深，在 0.42 的环境光下直接发黑。
+  const cLo = new Color(0x7a7062)
+  const cHi = new Color(0x9a9084)
   const tmp = new Color()
   const { AMB, SUN, GAMMA } = BEACH_SHADE
-  // 礁石用固定的斜上方光照，配合低多边形面产生块面感
+  // 礁石用固定的斜上方光照，配合多面体产生块面感
   const L = [0.681, -0.454, 0.574]
-  for (let i = 0; i < 14; i++) {
+  // v1.3.84j：半球补光强度。0.20 让背光面从「纯黑」提到「深灰」，是修复发黑的关键。
+  const HEMI = 0.2
+  const rockTex = getBeachTexture("rock")
+  /**
+   * v1.3.84i：礁石 14 → 24 块，半径 2.6~9.0m → 2.6~14m。
+   * v1.3.84k：**上限从 14m 收到 11.5m** —— 修「石头泡在海里」。
+   *
+   * 原上限 14m 正好是沙地带的尽头，那里沙地基准已降到 −0.610、低于
+   * 海面 −0.55，沙丘振幅也衰减到 0 —— 最外圈礁石会直接泡在水中。
+   * 海水浮力/折射都没做，泡水必然穿帮。
+   *
+   * 出水沙地的实际范围是 r ≈ 7.5~12.8（沙地基准整条带都在海面之下，
+   * 全靠沙丘起伏顶出来；且海面环带从 r=12 起铺开、会盖住更外的沙地），
+   * 但礁石**可以**放在更近处：它沉 s×0.42、半径也小（r=2.6 处 s 仅
+   * 0.18），沙地平台（r<4）够高，近景礁石一直是正常的。所以只收上限、
+   * 不动下限 —— 近处保持「半埋在沙里」的既有观感。
+   */
+  for (let i = 0; i < 24; i++) {
     const ang = rng() * Math.PI * 2
-    const r = 2.6 + rng() * 6.4
-    const s = 0.18 + rng() * 0.3
-    const geo = new IcosahedronGeometry(s, 0)
+    const r = 2.6 + rng() * 8.9
+    const s = 0.18 + rng() * 0.3 + (r - 2.6) * 0.022
+    // 细分 2 = 320 面：足够圆润，又不至于顶点爆炸（24 块 × 320 面 ≈ 7.7k 面）
+    const geo = new IcosahedronGeometry(s, 2)
     const pos = geo.attributes.position
+    // 压扁系数：把球压成「半埋在沙里的石块」（z 轴压到 62%~82%）
+    const flattenZ = 0.62 + rng() * 0.2
     for (let v = 0; v < pos.count; v++) {
-      // 低多边形石头：顶点随机抖动
+      // 圆润抖动：0.86~1.08，刻意**不下压 z**（旧版 z×(0.5+rng×0.6) 是尖锥元凶）
       pos.setXYZ(
         v,
-        pos.getX(v) * (0.75 + rng() * 0.5),
-        pos.getY(v) * (0.75 + rng() * 0.5),
-        pos.getZ(v) * (0.5 + rng() * 0.6)
+        pos.getX(v) * (0.86 + rng() * 0.22),
+        pos.getY(v) * (0.86 + rng() * 0.22),
+        pos.getZ(v) * (0.86 + rng() * 0.22)
       )
     }
+    // 压扁（在 computeVertexNormals 之前做，法线才正确）
+    for (let v = 0; v < pos.count; v++) {
+      pos.setZ(v, pos.getZ(v) * flattenZ)
+    }
     geo.computeVertexNormals()
+
+    // ── 自算三平面 UV（避开 Icosahedron 球面 UV 的极点畸变）──
+    const uv = new Float32Array(pos.count * 2)
+    const denom = Math.max(1e-6, s * 2)
+    for (let v = 0; v < pos.count; v++) {
+      const x = pos.getX(v)
+      const y = pos.getY(v)
+      const z = pos.getZ(v)
+      const ax = Math.abs(x)
+      const ay = Math.abs(y)
+      const az = Math.abs(z)
+      let u: number
+      let vv: number
+      if (az >= ax && az >= ay) {
+        // 法线偏 Z（顶/底面）→ 投影到 XY 平面
+        u = (x / denom) * 0.5 + 0.5
+        vv = (y / denom) * 0.5 + 0.5
+      } else if (ax >= ay) {
+        // 法线偏 X（侧面）→ 投影到 YZ 平面
+        u = (z / denom) * 0.5 + 0.5
+        vv = (y / denom) * 0.5 + 0.5
+      } else {
+        // 法线偏 Y（侧面）→ 投影到 XZ 平面
+        u = (x / denom) * 0.5 + 0.5
+        vv = (z / denom) * 0.5 + 0.5
+      }
+      uv[v * 2] = u
+      uv[v * 2 + 1] = vv
+    }
+    geo.setAttribute("uv", new BufferAttribute(uv, 2))
+
     const nrm = geo.attributes.normal
     const colors = new Float32Array(pos.count * 3)
     for (let v = 0; v < pos.count; v++) {
       const nx = nrm.getX(v)
       const ny = nrm.getY(v)
       const nz = nrm.getZ(v)
-      tmp.copy(cLo).lerp(cHi, smoothstep(-0.2, 0.8, nz))
+      // 朝上的面用亮色、侧面用深色：配合半球补光形成体积感
+      tmp.copy(cLo).lerp(cHi, smoothstep(-0.4, 0.9, nz))
       const nd = Math.max(0, nx * L[0] + ny * L[1] + nz * L[2])
       const ndc = Math.pow(nd, GAMMA)
+      /**
+       * 半球补光：hemi = 0.5 + 0.5·nz（朝上 1、朝下 0）。
+       * 这是修复「背光面纯黑」的核心 —— 原式只有 AMB + SUN·ndc，
+       * nd=0 时只剩 AMB=0.42，深色岩石直接黑掉。
+       */
+      const hemi = 0.5 + 0.5 * nz
       let dr = SRGBToDisplay(tmp.r)
       let dg = SRGBToDisplay(tmp.g)
       let db = SRGBToDisplay(tmp.b)
@@ -2021,10 +2773,13 @@ function buildBeachRocks(): Group {
       dr += (BEACH_HAZE.COLOR[0] - dr) * haze
       dg += (BEACH_HAZE.COLOR[1] - dg) * haze
       db += (BEACH_HAZE.COLOR[2] - db) * haze
+      const litR = AMB[0] + SUN[0] * ndc + HEMI * hemi
+      const litG = AMB[1] + SUN[1] * ndc + HEMI * hemi
+      const litB = AMB[2] + SUN[2] * ndc + HEMI * hemi
       tmp.setRGB(
-        Math.min(1, dr * (AMB[0] + SUN[0] * ndc)),
-        Math.min(1, dg * (AMB[1] + SUN[1] * ndc)),
-        Math.min(1, db * (AMB[2] + SUN[2] * ndc)),
+        Math.min(1, dr * litR),
+        Math.min(1, dg * litG),
+        Math.min(1, db * litB),
         SRGBColorSpace
       )
       colors[v * 3] = tmp.r
@@ -2034,12 +2789,18 @@ function buildBeachRocks(): Group {
     geo.setAttribute("color", new BufferAttribute(colors, 3))
     const m = new Mesh(
       geo,
-      new MeshBasicMaterial({ vertexColors: true, toneMapped: false, fog: false })
+      new MeshBasicMaterial({
+        vertexColors: true,
+        toneMapped: false,
+        fog: false,
+        map: rockTex,
+      })
     )
     m.position.set(
       Math.cos(ang) * r,
       Math.sin(ang) * r,
-      beachFloorZ(r) - s * 0.25
+      // 半埋在沙里：下沉多一点，露出的部分才像「礁石」而不是「摆件」
+      beachFloorZ(r) - s * 0.42
     )
     m.rotation.z = rng() * Math.PI * 2
     g.add(m)
@@ -2048,87 +2809,300 @@ function buildBeachRocks(): Group {
 }
 
 /**
- * 椰树干（柱廊）。
+ * ⚠️ v1.3.84l：**椰树（`buildBeachPalms`）已彻底删除，不要再加回来。**
  *
- * **不做树冠** —— 这是相机几何决定的，不是偷懒：aim 可见窗口
- * z ∈ [0.295 − 0.087·d, 0.295 + 0.0354·d]，d=20m 处只能看到 1.0m 高，
- * d=60m 处才 2.4m。真实椰树 5~8m，树冠要到 d≈282m 才进画 —— 做了
- * 90% 的顶点永不入画。所以只做树干：aim 下看到的就是一片椰林柱廊，
- * 竖屏（fov 50.19，顶边 +8.77°）还能多看到一截。
+ * 它存在过两版（84i~84k），两次都被真机截图否定：
+ *
+ *   84i —— 外沿扩到 40m，**忘了岸线只有 14m**，26 根里 20 根种进海里；
+ *          加上不做树冠，用户看到的就是「海里插了一排光杆柱子」。
+ *   84k —— 半径收进 8~11.5m 的出水沙地带，位置对了，但**问题不在位置**。
+ *
+ * 根本矛盾：`aim` 可见窗口 z ∈ [0.295 − 0.087·d, 0.295 + 0.0354·d]，
+ * d=20m 处只能看到 1.0m 高 —— <strong>椰树的树干必然被画面顶边截断</strong>，
+ * 永远只能看到一个没有顶的圆柱。树冠要到 d≈282m 才进画（那时树干已细到
+ * 看不见），所以「树干入画、树冠不入画」是相机几何决定的死结：
+ * 只要画树干，就一定是「柱子」；要画得像树，就得做树冠，而树冠永远不可见。
+ *
+ * 用户最终决定：**整个删掉，不留任何树**。沙滩的高度层改由礁石（r 2.6~11.5）
+ * 与矮灌木丛（r 8~11.5，高 ≤0.45m）承担 —— 它们的尺度在可见窗口内是
+ * 完整的，不会被截断，也就不会产生「这是个什么东西」的疑问。
  */
-function buildBeachPalms(): Group {
+
+/**
+ * 近景绿植：沙滩上成丛的矮灌木／海草。
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ * 为什么是「扁平叶簇」而不是「锥体／球体」
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * 前几个版本的教训很直接：在掠射视角下，**低多边形的锥体会变成尖刺、
+ * 低多边形的球体会变成黑色圆盘**。它们都有共同的毛病 —— 轮廓上没有
+ * 「叶片」这种细碎、带缺口的结构，一旦法线朝向不利（背光面 nd=0），
+ * 整块就是一个纯色多边形，看起来像摆件。
+ *
+ * 叶片不同：单个叶片是压扁的多面体（z 压到 35%），轮廓本身就是扁的，
+ * 掠射时呈现一条斜向的细长面 —— 哪怕单个叶片颜色有偏差，一堆叶片
+ * 交错叠在一起也会自动形成「蓬松的团」。这是「形状正确」压过
+ * 「光照正确」的少数情况。
+ *
+ * 位置策略（与礁石同理，见 buildBeachRocks）：
+ *   · r ∈ [8, 11.5] —— **必须落在真正能露出水面的沙地上**。这一点踩过坑：
+ *     沙地基准 `beachFloorZ(r)` 在整条沙丘带上都低于海面（−0.55），沙子
+ *     全靠 `DUNE_H = 0.5` 的沙丘起伏顶出来，而沙丘振幅 `grow × fade` 只在
+ *     **r ≈ 7.5~12.8** 之间才够高，且海面环带从 **r = 12** 起铺开。取到
+ *     区间外的丛会整丛泡在水里 —— 真机截图里就是「海里插的柱子」那类穿帮。
+ *   · 俯视相机视野半径只有 0.94~1.68m，这个半径完全不入画，不会挡球桌。
+ *   · 高 ≤ 0.45m —— 必须压在画面下缘附近。aim 可见窗口在 d=8m 处
+ *     只有 z ∈ [0.295−0.70, 0.295+0.28] 里可见，太高会顶到画面外。
+ *
+ * 光照：与礁石同一套（半球补光 HEMI = 0.20），否则背光叶片会掉到
+ * `albedo × AMB` ≈ 0.25 亮度，近景一片黑。叶片两面都有，法线方向
+ * 分布极散，没有半球补光几乎必然出现黑块。
+ */
+function buildBeachShrubs(): Group {
   const g = new Group()
-  g.name = "BeachPalms"
-  const rng = makeSeededRng(9042)
-  const cLo = new Color(0x6b5334)
-  const cHi = new Color(0xa8875a)
+  g.name = "BeachShrubs"
+  const rng = makeSeededRng(7723)
+  // 叶绿：背面深、朝天面亮 —— 插值轴用「法线朝上程度」，与叶片的
+  // 双面观感一致（朝上的叶面受光、朝下的叶背在阴影里）
+  const cLo = new Color(0x3f6b3a)
+  const cHi = new Color(0x6f9f52)
   const tmp = new Color()
   const { AMB, SUN, GAMMA } = BEACH_SHADE
   const L = [0.681, -0.454, 0.574]
-  for (let i = 0; i < 16; i++) {
-    const ang = (i / 16) * Math.PI * 2 + rng() * 0.25
-    const r = 4.5 + rng() * 24
-    const h = 3.2 + rng() * 1.6
-    const rad = 0.075 + rng() * 0.045
-    const geo = new CylinderGeometry(rad * 0.72, rad, h, 7, 1)
-    const pos = geo.attributes.position
-    // 让树干略微弯曲（顶端偏移），破掉「电线杆」感
-    const leanX = (rng() - 0.5) * 0.5
-    const leanY = (rng() - 0.5) * 0.5
-    for (let v = 0; v < pos.count; v++) {
-      const t = (pos.getZ(v) + h / 2) / h // 0 = 根部, 1 = 顶端
-      const bend = t * t
-      pos.setXYZ(
-        v,
-        pos.getX(v) + leanX * bend,
-        pos.getY(v) + leanY * bend,
-        pos.getZ(v)
-      )
+  const HEMI = 0.2
+  const foliageTex = getBeachTexture("foliage")
+  const geos: BufferGeometry[] = []
+  /**
+   * 18 丛。每丛 6~10 片叶 —— 片数少了不成团，多了顶点数上升但视觉收益
+   * 递减（叶片互相遮挡）。18 丛 × 平均 8 片 = 约 144 片，片均
+   * `IcosahedronGeometry(_, 1)` = 80 面，合计约 11.5k 面，可接受。
+   */
+  for (let i = 0; i < 18; i++) {
+    const ang = rng() * Math.PI * 2
+    // 与椰树/礁石同一段出水沙地：8~11.5m
+    const r = 8 + rng() * 3.5
+    const cx = Math.cos(ang) * r
+    const cy = Math.sin(ang) * r
+    // 直接复用地形带的种子，保证灌木丛**贴着**它脚下那块沙丘的高度，
+    // 不会悬空或陷进沙里（种子一致 → 高度函数取值一致）。
+    // 只用 bands[0] 一组即可：两条带本来就是同一组种子（见 bands 定义），
+    // 高度函数在任何半径上取值都相同。
+    const cz = beachTerrainZ(
+      r,
+      ang,
+      noise2D(211),
+      noise2D(733),
+      noise2D(419)
+    )
+    const blades = 6 + Math.floor(rng() * 5)
+    for (let b = 0; b < blades; b++) {
+      // 叶片尺寸随机、位置在丛内散开：同一丛的叶片不能太像
+      const leaf = 0.1 + rng() * 0.14
+      const geo = new IcosahedronGeometry(leaf, 1)
+      const pos = geo.attributes.position
+      // 每片叶子的主朝向（丛内偏移）：水平半径 0~0.16m、高度 0~0.13m
+      const lx = (rng() - 0.5) * 0.32
+      const ly = (rng() - 0.5) * 0.32
+      const lz = rng() * 0.13
+      // 叶片倾角：0.2~0.9 rad 朝上，让叶片呈「张开」的姿态而不是平摊
+      const tilt = 0.2 + rng() * 0.7
+      const roll = rng() * Math.PI * 2
+      const ct = Math.cos(tilt)
+      const st = Math.sin(tilt)
+      const cr = Math.cos(roll)
+      const sr = Math.sin(roll)
+      for (let v = 0; v < pos.count; v++) {
+        let vx = pos.getX(v)
+        let vy = pos.getY(v)
+        let vz = pos.getZ(v)
+        // 1) 压扁成叶片（z 方向 35%）—— 双面扁体，掠射下呈细长面
+        vz *= 0.35
+        // 2) 沿叶片长轴拉伸一点，让形状更「叶」而不是「饼」
+        vx *= 1.35
+        // 3) 绕 X 轴倾斜（叶片立起来）
+        const ty = vy * ct - vz * st
+        const tz = vy * st + vz * ct
+        vy = ty
+        vz = tz
+        // 4) 绕 Z 轴滚转（每片方向不同，丛内才不呆板）
+        const rx = vx * cr - vy * sr
+        const ry = vx * sr + vy * cr
+        // 5) 在叶尖处加一点下弯（顶端回收），轮廓更像草叶
+        const tip = Math.max(0, vx / (leaf * 1.35))
+        pos.setXYZ(v, rx + lx, ry + ly, vz + lz - tip * tip * leaf * 0.5)
+      }
+      geo.computeVertexNormals()
+      // 用叶片贴图采样 —— 需要 uv，IcosahedronGeometry 自带（球面 UV）。
+      // 球面 UV 在极点有畸变，但叶片贴图本身只是「杂乱叶脉」，
+      // 各向异性畸变反而增加了随机感，这里可以接受（不像礁石那样会被
+      // 拉成放射状规则的条纹）。
+      const nrm = geo.attributes.normal
+      const colors = new Float32Array(pos.count * 3)
+      for (let v = 0; v < pos.count; v++) {
+        const nx = nrm.getX(v)
+        const ny = nrm.getY(v)
+        const nz = nrm.getZ(v)
+        // 朝上的叶面亮、朝下暗
+        tmp.copy(cLo).lerp(cHi, smoothstep(-0.5, 0.9, nz))
+        const nd = Math.max(0, nx * L[0] + ny * L[1] + nz * L[2])
+        const ndc = Math.pow(nd, GAMMA)
+        const hemi = 0.5 + 0.5 * nz
+        let dr = SRGBToDisplay(tmp.r)
+        let dg = SRGBToDisplay(tmp.g)
+        let db = SRGBToDisplay(tmp.b)
+        const haze =
+          BEACH_HAZE.MAX * smoothstep(BEACH_HAZE.START, BEACH_HAZE.END, r)
+        dr += (BEACH_HAZE.COLOR[0] - dr) * haze
+        dg += (BEACH_HAZE.COLOR[1] - dg) * haze
+        db += (BEACH_HAZE.COLOR[2] - db) * haze
+        tmp.setRGB(
+          Math.min(1, dr * (AMB[0] + SUN[0] * ndc + HEMI * hemi)),
+          Math.min(1, dg * (AMB[1] + SUN[1] * ndc + HEMI * hemi)),
+          Math.min(1, db * (AMB[2] + SUN[2] * ndc + HEMI * hemi)),
+          SRGBColorSpace
+        )
+        colors[v * 3] = tmp.r
+        colors[v * 3 + 1] = tmp.g
+        colors[v * 3 + 2] = tmp.b
+      }
+      geo.setAttribute("color", new BufferAttribute(colors, 3))
+      // 搬到丛中心（几何体自带世界坐标偏移后合并，省掉逐 Mesh 的 transform）
+      geo.translate(cx, cy, cz)
+      geos.push(geo)
     }
+  }
+  /**
+   * 合并成单个 Mesh：144 个 Mesh 就是 144 个 draw call，移动端帧率会崩。
+   *
+   * `{ uv: true }` 是必需的 —— `mergeColored` 默认只搬 position/normal/color，
+   * 合并后 uv 会丢，`map` 直接失效（贴图采样到全 0 → 叶子变成贴图左上角
+   * 一个像素的纯色）。
+   */
+  const merged = mergeColored(geos, { uv: true })
+  const mesh = new Mesh(
+    merged,
+    new MeshBasicMaterial({
+      vertexColors: true,
+      toneMapped: false,
+      fog: false,
+      map: foliageTex,
+    })
+  )
+  mesh.name = "BeachShrubsMesh"
+  g.add(mesh)
+  return g
+}
+
+/**
+ * v1.3.88：沙滩签名物 —— 木栈道 + 冲浪板。
+ *
+ * ## 为什么要加
+ *
+ * 八场景审计的结论：beach 只有「沙 + 海 + 天」三个元素，没有一件
+ * 「人造物」，跟雪山的区分只靠色温 —— 辨识度缺口最大的户外场景。
+ *
+ * ## 为什么不是椰树 / 遮阳伞（都是踩过的坑）
+ *
+ * 椰树：树干入画、树冠永远不入画（见上方 v1.3.84l 的死结分析），已删。
+ * 遮阳伞：伞面 1.8~2.2m，d=5m 处画面顶边只有 1.10m —— 必然截顶，与
+ * 椰树同一类死结。**栈道贴地、冲浪板 ≤1.4m**，都压在可见窗口内，
+ * 不会被截断成「悬空的一截」。
+ *
+ * ## 落位（probe-occlusion.js 的可见带）
+ *
+ * 相机在 (-1.51, 0, 0.295) 朝 +X。落位经过两层约束（遮挡检测的球桌
+ * AABB 有模型空间 bug，第二轮用视线中点手算修正）：
+ *   ① 可见性：d 4~6m 处 0.9m 高 → 板顶仰角 < 画面上缘 9.45°；
+ *   ② 遮挡：视线中点必须脱离球桌 xy（x±1.65/y±0.93）—— |y|≥1.9
+ *     且 d≥4.2 才不被桌角挡。三板位 (3.6,±2.0)/(4.8,-2.0)/(5.6,1.9)
+ *     的视线中点 y ∈ ±0.95~1.0，全部擦着桌角外通过。
+ */
+function buildBeachProps(): Group {
+  const g = new Group()
+  g.name = "BeachProps"
+  const { AMB, SUN, GAMMA } = BEACH_SHADE
+  const L = BEACH_BAKE_SUN
+  const nA = noise2D(211)
+  const nB = noise2D(733)
+  const nC = noise2D(419)
+  const tmp = new Color()
+
+  // ── 冲浪板 ×3：压扁椭球 + 斜插沙中，橙白条纹按局部高度分段 ──
+  // （栈道已删：贴地平铺物在 ±0.5m 振幅的沙丘上必然半埋半悬，
+  //   掠射视角下只剩一条黑侧棱 —— 成本收益太差，不做。）
+
+  // ── 冲浪板 ×3：压扁椭球 + 斜插沙中，橙白条纹按局部高度分段 ──
+  const surfColors = [0xc4571f, 0x1f7fc4, 0xd69a26]
+  const surfSpots: Array<[number, number, number]> = [
+    [3.6, 2.0, 0.5],
+    [4.8, -2.0, 0.86],
+    [5.6, 1.9, 0.24],
+  ]
+  surfSpots.forEach(([sx, sy, roll], idx) => {
+    const r = Math.hypot(sx, sy)
+    const ang = Math.atan2(sy, sx)
+    const z = beachTerrainZ(r, ang, nA, nB, nC)
+    // 椭球压扁成板：1.44 长 × 0.35 宽 × 0.12 厚（长轴 = 局部 x）
+    const geo = new SphereGeometry(0.72, 14, 10)
+    const pos = geo.attributes.position
+    for (let v = 0; v < pos.count; v++) {
+      pos.setXYZ(v, pos.getX(v), pos.getY(v) * 0.24, pos.getZ(v) * 0.085)
+    }
+    /**
+     * 斜插姿态（第一版连错两次的教训）：
+     *   ① rotateX 转不动 x 长轴 → 板躺平；
+     *   ② rotateY(roll) 会把已立起的板掀翻（roll 大时近乎横躺），
+     *      视觉上「板飞在天上」。
+     * 正确次序：rotateZ 立起（板面正好朝 ±x = 面向相机）→
+     * rotateX 只做板内条纹角（不改变板的立姿）→ 上移 0.42 让下端沉沙。
+     * d 4.4~5.8 处板顶 1.14m，仰角 8.8° < 画面上缘 9.45°，完整入画。
+     */
+    geo.rotateZ(Math.PI / 2 - 0.32)
+    geo.rotateX(roll * 0.4)
+    geo.translate(0, 0, 0.3)
     geo.computeVertexNormals()
     const nrm = geo.attributes.normal
-    const colors = new Float32Array(pos.count * 3)
+    const cols = new Float32Array(pos.count * 3)
+    const cBody = new Color(surfColors[idx % surfColors.length])
+    const cStripe = new Color(0xf4f0e6)
+    const hz = new Color()
     for (let v = 0; v < pos.count; v++) {
-      const nx = nrm.getX(v)
-      const ny = nrm.getY(v)
-      const nz = nrm.getZ(v)
-      // 椰树干的环纹：按高度做深浅条纹
-      const t = (pos.getZ(v) + h / 2) / h
-      const band = 0.5 + 0.5 * Math.sin(t * 34)
-      tmp.copy(cLo).lerp(cHi, band * 0.6 + 0.2)
-      const nd = Math.max(0, nx * L[0] + ny * L[1] + nz * L[2])
+      // 条纹：沿板长轴（局部 y）按 sin 分段
+      const t = Math.sin(pos.getY(v) * 11 + idx * 1.7)
+      hz.copy(cBody).lerp(cStripe, t > 0.45 ? 0.85 : 0)
+      const nd = Math.max(
+        0,
+        nrm.getX(v) * L[0] + nrm.getY(v) * L[1] + nrm.getZ(v) * L[2]
+      )
       const ndc = Math.pow(nd, GAMMA)
-      let dr = SRGBToDisplay(tmp.r)
-      let dg = SRGBToDisplay(tmp.g)
-      let db = SRGBToDisplay(tmp.b)
-      const haze =
-        BEACH_HAZE.MAX * smoothstep(BEACH_HAZE.START, BEACH_HAZE.END, r)
-      dr += (BEACH_HAZE.COLOR[0] - dr) * haze
-      dg += (BEACH_HAZE.COLOR[1] - dg) * haze
-      db += (BEACH_HAZE.COLOR[2] - db) * haze
+      const hemi = 0.5 + 0.5 * nrm.getZ(v)
+      // 背光面兜底 0.55：板面朝 -x 时 nd=0，无兜底就是黑色剪影
+      const lit = Math.max(
+        Math.max(AMB[0] + SUN[0] * ndc + 0.2 * hemi, 0.55),
+        Math.max(AMB[1] + SUN[1] * ndc + 0.2 * hemi, 0.55)
+      )
       tmp.setRGB(
-        Math.min(1, dr * (AMB[0] + SUN[0] * ndc)),
-        Math.min(1, dg * (AMB[1] + SUN[1] * ndc)),
-        Math.min(1, db * (AMB[2] + SUN[2] * ndc)),
+        Math.min(1, SRGBToDisplay(hz.r) * lit),
+        Math.min(1, SRGBToDisplay(hz.g) * lit),
+        Math.min(1, SRGBToDisplay(hz.b) * lit),
         SRGBColorSpace
       )
-      colors[v * 3] = tmp.r
-      colors[v * 3 + 1] = tmp.g
-      colors[v * 3 + 2] = tmp.b
+      cols[v * 3] = tmp.r
+      cols[v * 3 + 1] = tmp.g
+      cols[v * 3 + 2] = tmp.b
     }
-    geo.setAttribute("color", new BufferAttribute(colors, 3))
-    geo.rotateX(Math.PI / 2) // CylinderGeometry 沿 Y 轴 → 转到 Z-up
+    geo.setAttribute("color", new BufferAttribute(cols, 3))
     const m = new Mesh(
       geo,
       new MeshBasicMaterial({ vertexColors: true, toneMapped: false, fog: false })
     )
-    m.position.set(
-      Math.cos(ang) * r,
-      Math.sin(ang) * r,
-      beachFloorZ(r) + h / 2 - 0.05
-    )
+    // 几何已在局部坐标立起（中心 z+0.42、下端 -0.3 沉沙），落位即贴沙面
+    m.position.set(sx, sy, z)
+    m.name = `Surfboard${idx}`
     g.add(m)
-  }
+  })
+
   return g
 }
 
@@ -2137,13 +3111,32 @@ export function buildBeach(): Group {
   g.name = "Beach"
   g.add(
     buildSkyDome(
-      BEACH_HORIZON_HEX, // 地平线：淡蓝白（海天一色）
-      0x7cc4e8, // 中段浅蓝
+      /**
+       * v1.3.84i：地平线改暖金 —— 晴日海景的「霞光带」。
+       *
+       * 原来三点全是蓝白（0xe8f4fa / 0x7cc4e8 / 0x2f8fd0），海天之间只有
+       * 一条同色硬渐变，画面顶部很平。改成「地平线暖白 → 中段浅青 → 天顶
+       * 湛蓝」后，可见的 2° 天空里能读出一条暖冷过渡 —— 这正是真实海景
+       * 最抓眼的一笔（低空阳光散射偏暖、高空偏冷）。
+       */
+      0xfdf3dc, // 地平线：暖白（日光散射）
+      0x9fd6ea, // 中段浅青
       0x2f8fd0, // 天顶湛蓝
       110,
-      BEACH_HORIZON_HEX, // 下半球与 haze 同色 → 海面外缘无缝
+      /**
+       * 下半球色必须 = haze 目标色（0.9098,0.9569,0.9804 ≈ 0xe8f4fa）。
+       * 海面 r→60 淡到满值 haze 后与下半球严丝合缝，换成暖金会在海平线
+       * 外缘露出一圈色差，所以这里保持冷白不动。
+       */
+      BEACH_HORIZON_HEX,
       false, // toneMapped=false：跳过 ACES，保住饱和度
-      [0.012, 0.05]
+      /**
+       * stops 从 [0.012, 0.05] 收到 [0.008, 0.034]。
+       * aim 顶边只有 +2.07°，可见天空的 z/radius 上限约 0.036 —— 原停靠点
+       * 让「暖白→浅青」的过渡只走到一半就被截断，暖色带几乎看不见。
+       * 收窄后暖白→浅青→湛蓝三段全部落在可见区间内。
+       */
+      [0.008, 0.034]
     )
   )
   // 沙丘地形分 2 环：近景密、远景疏
@@ -2157,286 +3150,41 @@ export function buildBeach(): Group {
       seedA: 211, seedB: 733, seedC: 419,
     },
   ]
-  for (const b of bands) g.add(buildTerrainBand(b, BEACH_STYLE))
+  /**
+   * v1.3.84j：给两条地形带挂沙地细节贴图。
+   *
+   * 顶点色已经带有完整的沙丘明暗，这里只是补「沙粒感」这一层高频细节 ——
+   * 没有它，近距离的沙面是大片平滑渐变，一眼能看出是程序化平面。
+   *
+   * 两条环带用的贴图不同（近环是单粒沙、外环是风纹），因此必须**各自
+   * 预建一张**（`sand` / `sandFar`），不能在同一个 Texture 上改 repeat ——
+   * repeat 是贴图自身的属性，共用会让后设的覆盖先设的；也不能 clone()，
+   * 因为 `disposeEnvGroup()` 不 dispose map，clone 之间共享 image，
+   * 一旦释放就是连坐。
+   *
+   * RingGeometry 自带 uv，且整条环带的 uv 只覆盖 [0,1] 方形的四条边 → uv 域
+   * 利用率很低，所以贴图必须靠 repeat 铺开：多次平铺后采样点会散布到整张
+   * 贴图上，细节密度才够。重复次数按「视觉上沙粒约 2~4cm」估：近环
+   * （外径 5m）取 6、外环（外径 20m）取 4，两块屏幕上的纹理尺度才接近。
+   */
+  const beachBand = (
+    kind: "sand" | "sandFar",
+    repeat: number
+  ): TerrainStyle => {
+    const tex = getBeachTexture(kind)
+    // repeat 是共享 Texture 的属性，同 kind 只能设一次；两条带用不同 kind
+    tex.repeat.set(repeat, repeat)
+    return { ...BEACH_STYLE, map: () => tex }
+  }
+  g.add(buildTerrainBand(bands[0], beachBand("sand", 6)))
+  g.add(buildTerrainBand(bands[1], beachBand("sandFar", 4)))
   g.add(buildBeachSea())
   g.add(buildBeachRocks())
-  g.add(buildBeachPalms())
+  g.add(buildBeachShrubs())
+  g.add(buildBeachProps())
   return g
 }
 
-// ══════════════════════════════════════════════════════════════════════
-// 原始森林（v1.3.63 步 4）
-//
-// 设计完全由相机几何决定（见文件顶部实测表）：
-//   - aim 可见窗口 z ∈ [0.295 − 0.087·d, 0.295 + 0.0354·d]，
-//     d=20m 处只能看到 1.0m 高、d=60m 处才 2.4m。
-//   - 真实树高 10m 的树冠要 d ≥ 282m 才进画 —— **所以不做树冠**，
-//     做了 90% 的顶点永不入画，纯浪费。
-// 于是森林 = 起伏林地 + 树干柱廊 + 强绿雾。竖屏 fov 50.19（顶边 +8.77°）
-// 能比横屏多看到一截树干，正好强化「林中」的包围感。
-// ══════════════════════════════════════════════════════════════════════
-
-const FOREST_TERRAIN = {
-  /** 球桌所在的林间空地半径 */
-  R0: 4.0,
-  /** 地面缓降斜率：林地比雪山平得多（0.082 → 0.03） */
-  FLOOR_SLOPE: 0.03,
-  /** 起伏振幅：树根隆起与小土丘，量级只有雪山的 1/4 */
-  AMP_K: 0.03,
-  RAMP0: 4.2,
-  RAMP1: 16,
-  /** 地形外缘 */
-  OUTER: 70,
-  SKIN: 0.012,
-}
-
-const FOREST_NOISE = {
-  /** 特征尺度约 9m —— 介于雪山的 17m 与沙滩的 7m 之间 */
-  K: 0.11,
-  OCT: 4,
-  DET_F: 3.4,
-  DET_OCT: 3,
-  /** 落叶/苔藓的细碎质感 */
-  MICRO_F: 8.5,
-  MICRO_OCT: 3,
-  MICRO_AMP: 0.022,
-  AZ_SCALE: 1.4,
-  AZ_OCT: 3,
-  AZ_LO: 0.3,
-  AZ_HI: 0.7,
-  AZ_MIN: 0.45,
-  AZ_SPAN: 0.9,
-  AZ_DRIFT: 0.008,
-}
-
-/**
- * 林下光照：树冠滤过的漫射光，几乎没有直射。
- * 环境光压到 0.26（比沙滩 0.42 低得多）、太阳 0.5、GAMMA 1.15 ——
- * 林下本就阴暗，压暗才能出「原始森林」的幽深感。
- */
-const FOREST_SHADE = {
-  AMB: [0.26, 0.30, 0.27],
-  SUN: [0.52, 0.55, 0.42],
-  GAMMA: 1.15,
-}
-
-/** 假想太阳：仰角 30°（林间斜射光斑），方位与场景平行光一致 */
-const FOREST_BAKE_SUN = [0.748, -0.499, 0.5]
-
-/** 天穹：树冠间隙透出的光 —— 地平线雾绿、天顶深绿 */
-const FOREST_HORIZON_HEX = 0xa8bd8a
-const FOREST_MID_HEX = 0x74a06a
-const FOREST_ZENITH_HEX = 0x2f5a4a
-/**
- * 0xa8bd8a 的显示空间分量。
- *
- * 地平线偏「黄绿」、天顶偏「青绿」是刻意的：全绿系会让画面顶部只有
- * 一两个色相桶，看起来就是一堵没有层次的绿墙。拉开 45° 的色相差后
- * 竖屏（顶边 +8.77°，能看到更多天空）才有「林隙透光」的层次。
- */
-const FOREST_HAZE_COLOR = [0.659, 0.741, 0.541]
-
-/**
- * 强绿雾：START 18 / END 62 / MAX 1.0。
- *
- * MAX 必须到 1.0 —— 森林地面很平（FLOOR_SLOPE 0.03），地形外缘 r=70 处
- * 的高度只降到 −2.2m，仍在 aim 可见窗口内，雾不到满值就会露出「世界
- * 尽头」的硬边。把 END 压在 62（早于 OUTER 70）让最后 8m 全是纯雾色，
- * 与天穹下半球严丝合缝。
- *
- * 近景 18m 内完全不加雾，保住林地的明暗层次。
- */
-const FOREST_HAZE = {
-  START: 18,
-  END: 62,
-  MAX: 1.0,
-  COLOR: FOREST_HAZE_COLOR,
-}
-
-function forestFloorZ(r: number): number {
-  const base = GROUND_Z - FOREST_TERRAIN.SKIN
-  return r <= FOREST_TERRAIN.R0
-    ? base
-    : base - FOREST_TERRAIN.FLOOR_SLOPE * (r - FOREST_TERRAIN.R0)
-}
-
-function forestAmpAt(r: number, ang: number, nC: Noise2D): number {
-  const k = FOREST_TERRAIN.AMP_K
-  const grow = smoothstep(FOREST_TERRAIN.RAMP0, FOREST_TERRAIN.RAMP1, r)
-  const u = Math.cos(ang) * FOREST_NOISE.AZ_SCALE + r * FOREST_NOISE.AZ_DRIFT + 55.3
-  const v = Math.sin(ang) * FOREST_NOISE.AZ_SCALE - r * FOREST_NOISE.AZ_DRIFT * 0.7 + 12.8
-  const n = fbm2D(nC, u, v, FOREST_NOISE.AZ_OCT)
-  const mask =
-    FOREST_NOISE.AZ_MIN +
-    FOREST_NOISE.AZ_SPAN *
-      smoothstep(FOREST_NOISE.AZ_LO, FOREST_NOISE.AZ_HI, n)
-  return k * r * grow * mask
-}
-
-function forestTerrainZ(
-  r: number,
-  ang: number,
-  nA: Noise2D,
-  nB: Noise2D,
-  nC: Noise2D
-): number {
-  const k = FOREST_NOISE.K
-  const u = Math.cos(ang) * r * k + 61.4
-  const v = Math.sin(ang) * r * k + 7.2
-  // 圆润起伏（不用 ridged）：林地是缓坡土丘，不是山脊
-  const f = fbm2D(nA, u, v, FOREST_NOISE.OCT)
-  const det = fbm2D(nB, u * FOREST_NOISE.DET_F, v * FOREST_NOISE.DET_F, FOREST_NOISE.DET_OCT)
-  const h = Math.min(1, Math.max(0, f * 0.7 + det * 0.3))
-  const micro =
-    (fbm2D(nB, u * FOREST_NOISE.MICRO_F + 4.4, v * FOREST_NOISE.MICRO_F + 1.9, FOREST_NOISE.MICRO_OCT) -
-      0.5) *
-    FOREST_NOISE.MICRO_AMP *
-    h
-  return forestFloorZ(r) + forestAmpAt(r, ang, nC) * h + micro
-}
-
-// 林地调色板
-const FOREST_C_MOSS = new Color(0x4a6b3a) // 苔藓（丘顶/干燥）
-const FOREST_C_SOIL = new Color(0x3a2c1e) // 腐殖土（谷底/阴湿）
-const FOREST_C_LEAF = new Color(0x6b5330) // 落叶
-
-const FOREST_STYLE: TerrainStyle = {
-  floorZ: forestFloorZ,
-  ampAt: forestAmpAt,
-  heightZ: forestTerrainZ,
-  shade: FOREST_SHADE,
-  bakeSun: FOREST_BAKE_SUN,
-  haze: FOREST_HAZE,
-  hazeAfterShade: true,
-  ampFloor: 0.02,
-  hTFallback: 0.6,
-  name: "ForestTerrain",
-  albedo(out, ctx) {
-    const { hT } = ctx
-    // 谷底腐殖土 → 丘顶苔藓，中间过渡带混落叶
-    out.copy(FOREST_C_SOIL).lerp(FOREST_C_MOSS, smoothstep(0.1, 0.9, hT))
-    const leaf = 1 - Math.abs(hT - 0.45) / 0.45
-    if (leaf > 0) out.lerp(FOREST_C_LEAF, Math.max(0, leaf) * 0.35)
-  },
-}
-
-/**
- * 树干柱廊（合并成单个 Mesh）。
- *
- * 只在 r ≥ 3.6 布点：俯视相机视野半径只有 0.94m~1.68m，球桌之外基本
- * 看不见东西，所以柱子不会遮挡俯视；aim 视角水平半角 18.37°，d > 11m
- * 起才看得见 r=3.6 的柱子，正好构成中景柱廊。
- *
- * 树高给到 5~9m（真实高度），但入画的永远只有最下面那一截 —— 竖屏
- * fov 50.19 能多看到 1~2m，横屏则更少。这点「看不到」正是纵深感来源。
- */
-function buildForestTrunks(): Mesh {
-  const rng = makeSeededRng(6607)
-  const geos: BufferGeometry[] = []
-  const cBarkLo = new Color(0x3d2f20)
-  const cBarkHi = new Color(0x6b5a3e)
-  const cMossy = new Color(0x55663f)
-  const tmp = new Color()
-  const COUNT = 150
-
-  for (let i = 0; i < COUNT; i++) {
-    // 平方根分布：近处稀疏、远处密集，避免近处柱子糊成一片
-    const t = (i + rng() * 0.8) / COUNT
-    const r = 3.6 + Math.sqrt(t) * (FOREST_TERRAIN.OUTER - 6)
-    const ang = rng() * Math.PI * 2
-    const h = 5 + rng() * 4
-    const rad = 0.09 + rng() * 0.13
-    const g = new CylinderGeometry(rad * 0.7, rad, h, 6, 1)
-    // 弯曲：顶端偏移，破掉「电线杆」感
-    const leanX = (rng() - 0.5) * 0.7
-    const leanY = (rng() - 0.5) * 0.7
-    const pos = g.attributes.position
-    for (let v = 0; v < pos.count; v++) {
-      const tv = (pos.getZ(v) + h / 2) / h
-      const bend = tv * tv
-      pos.setXYZ(
-        v,
-        pos.getX(v) + leanX * bend,
-        pos.getY(v) + leanY * bend,
-        pos.getZ(v)
-      )
-    }
-    g.rotateX(Math.PI / 2) // CylinderGeometry 沿 Y 轴 → 转到 Z-up
-    const cx = Math.cos(ang) * r
-    const cy = Math.sin(ang) * r
-    const zRoot = forestFloorZ(r) - 0.1
-    g.translate(cx, cy, zRoot + h / 2)
-
-    // 每棵树的色调：苔藓覆盖程度不同
-    const mossy = rng()
-    bakeVertices(
-      g,
-      FOREST_SHADE,
-      FOREST_BAKE_SUN,
-      (out, nz, i) => {
-        // 相对高度：0 = 根部，1 = 顶端
-        const t = Math.min(
-          1,
-          Math.max(0, (g.attributes.position.getZ(i) - zRoot) / h)
-        )
-        tmp.copy(cBarkLo).lerp(cBarkHi, 0.3 + 0.5 * Math.max(0, nz))
-        if (mossy > 0.45) tmp.lerp(cMossy, (mossy - 0.45) * 1.2)
-        // 根部更暗：林下根部几乎受不到光（虽然只有最下面一截入画）
-        tmp.multiplyScalar(0.7 + 0.3 * t)
-        out.copy(tmp)
-      },
-      (rgb) => {
-        const haze =
-          FOREST_HAZE.MAX *
-          smoothstep(FOREST_HAZE.START, FOREST_HAZE.END, r)
-        rgb[0] += (FOREST_HAZE.COLOR[0] - rgb[0]) * haze
-        rgb[1] += (FOREST_HAZE.COLOR[1] - rgb[1]) * haze
-        rgb[2] += (FOREST_HAZE.COLOR[2] - rgb[2]) * haze
-      }
-    )
-    geos.push(g)
-  }
-
-  const merged = mergeColored(geos)
-  const mesh = new Mesh(merged, envMaterial())
-  mesh.name = "ForestTrunks"
-  mesh.castShadow = false
-  mesh.receiveShadow = false
-  return mesh
-}
-
-export function buildForest(): Group {
-  const g = new Group()
-  g.name = "Forest"
-  g.add(
-    buildSkyDome(
-      FOREST_HORIZON_HEX, // 地平线：林间雾绿（偏黄）
-      FOREST_MID_HEX, // 中段
-      FOREST_ZENITH_HEX, // 天顶：树冠青绿
-      100,
-      FOREST_HORIZON_HEX, // 下半球与 haze 同色 → 地形外缘无缝
-      false,
-      [0.02, 0.09]
-    )
-  )
-  const bands: TerrainBand[] = [
-    {
-      innerR: 0.3, outerR: 6, thetaSegs: 224, phiSegs: 18,
-      seedA: 313, seedB: 877, seedC: 149,
-    },
-    {
-      innerR: 6, outerR: 24, thetaSegs: 224, phiSegs: 24,
-      seedA: 313, seedB: 877, seedC: 149,
-    },
-    {
-      innerR: 24, outerR: FOREST_TERRAIN.OUTER, thetaSegs: 224, phiSegs: 22,
-      seedA: 313, seedB: 877, seedC: 149,
-    },
-  ]
-  for (const b of bands) g.add(buildTerrainBand(b, FOREST_STYLE))
-  g.add(buildForestTrunks())
-  return g
-}
 
 // ══════════════════════════════════════════════════════════════════════
 //                室内场景（room / office / cybercafe）
@@ -2475,7 +3223,14 @@ const KEEPOUT_Y = 1.75
 
 interface IndoorLamp {
   pos: number[]
-  /** 距离 ≤ near 全亮，≥ far 只剩 floor —— 模拟吊灯的光池衰减 */
+  /**
+   * 距离 ≤ near 全亮，≥ far 只剩 floor —— 模拟吊灯的光池衰减。
+   *
+   * ⚠️ v1.3.85：`far` 必须收在**真实光池尺度**内（2~4m），否则 `att` 在
+   * 全房间都接近 1.0，衰减形同虚设 → 整面墙均匀受光 → 平涂色块。
+   * 旧值 room.far=10.5 / office=11.0 / cyber=11.0 都远超房间半宽，
+   * 这是「家具看起来像色块剪纸」的第一个成因。
+   */
   near: number
   far: number
   floor: number
@@ -2507,6 +3262,118 @@ function hexRGB(hex: number): [number, number, number] {
   return [((hex >> 16) & 255) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255]
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+ * v1.3.85：环境遮蔽（AO）—— 室内立体感的真正来源
+ *
+ * 【为什么需要】
+ * 此前 `bakeIndoor` 的光照项只与**法线方向**有关（N·L 和距离衰减）。
+ * 同一个盒面的所有顶点法线完全相同 → 算出同一个色值 → 整面一个颜色，
+ * 这就是家具像「色块剪纸」的根本原因。
+ *
+ * 【为什么细分没用（已验证）】
+ * 曾给 boxGeo 加 1~4 段面内细分，期望靠「顶点更多」出现渐变 ——
+ * 实测逐像素无差异。因为 N·L 只看法线方向，同面法线相同，细分后
+ * 每个顶点的光照值依旧相同。顶点数不是瓶颈，**光照模型才是**。
+ *
+ * 【AO 为什么有效】
+ * AO 取决于**顶点位置在世界中的空间关系**（周围有没有别的面挡着），
+ * 同面的不同顶点位置不同 → AO 不同 → 面内自然出现明暗渐变。
+ * 墙角、家具贴地处、物体相接处会自然变暗，立体感由此产生。
+ * ══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * 轻量 AO 采样器：把场景几何灌进一个 XY 空间网格，逐顶点向上半球
+ * 打若干条射线，统计被挡比例。
+ *
+ * 选择「向上半球」而非全球：室内光主要来自上方吊灯与顶棚反射，
+ * 顶点上方被遮挡才是视觉上「暗」的主因。这既是物理近似，也能把
+ * 采样数压到很低（8 条/顶点），保证构建耗时可控。
+/**
+ * 室内环境遮蔽（AO）上下文 —— v1.3.85。
+ *
+ * 【为什么需要 AO】
+ * `bakeIndoor` 的光照项只与**法线方向**有关（`N·L` 与到灯的距离衰减）。
+ * 同一个盒面的所有顶点法线完全相同 → 算出同一个色值 → 整面一个颜色。
+ * 这就是家具像「色块剪纸」、画面像平涂的根本原因。
+ *
+ * 【为什么「加细分」没用（已实测否定）】
+ * 曾给 boxGeo 加 1~4 段面内细分，期望顶点更多就有渐变 —— 实测逐像素
+ * 无差异。因为 N·L 只看法线方向，同面法线相同，细分后每个顶点算出的
+ * 光照值依旧相同。**瓶颈不是顶点数，是光照模型。**
+ *
+ * 【AO 为什么能解决】
+ * AO 取决于**顶点位置**（离墙多近、上方是否被家具压住），与法线无关。
+ * 同一面的不同顶点位置不同 → 遮蔽率不同 → 面内自然出现明暗渐变。
+ * 墙角、家具贴地处、物体相接处自然变暗，立体感由此而来。
+ *
+ * 【实现选择：解析式而非光线投射】
+ * 曾写过一个基于空间网格 + Möller–Trumbore 射线求交的采样器（约 170 行），
+ * 但它要求「先收集全场景几何、再统一烘焙」，与现有流式构建顺序冲突，
+ * 反而引入了脆弱的两遍耦合。改为**解析式**：直接按「顶点与房间六面体
+ * 的贴近度」算遮蔽。房间是规整长方体，这个近似与真实 AO 高度吻合，
+ * 且零顺序依赖、零额外内存。
+ */
+interface AoCtx {
+  /** 房间半宽（X 方向，到墙面距离） */
+  hx: number
+  /** 房间半长（Y 方向） */
+  hy: number
+  /** 地板高度 */
+  floorZ: number
+  /**
+   * 遮蔽影响范围（米）。顶点离墙面/地板在这个距离内开始变暗，
+   * 越近越暗 —— 这就是「墙角发暗」的物理来源。
+   */
+  reach: number
+  /** 遮蔽强度 0~1 */
+  strength: number
+  /** 纵向遮蔽：顶棚对家具上沿的压暗（0 = 关闭） */
+  ceilBias: number
+}
+
+/**
+ * 解析式遮蔽率 0~1（0 = 开阔、1 = 完全贴角）。
+ *
+ * 三个来源相加后 clamp：
+ *   1. 侧向贴墙：min(离四面墙的距离) 越小越暗；
+ *   2. 贴地：离地板越近越暗（物体与地面的接触阴影）；
+ *   3. 纵向：越靠近顶棚越暗（顶棚对高处家具的压暗）。
+ *
+ * ⚠️ 与法线无关 —— 这正是它能为「同一个面」产生渐变的原因。
+ */
+function aoFactor(px: number, py: number, pz: number, nz: number, ao: AoCtx): number {
+  // 朝上的面豁免：地板/桌面朝上，上方开阔本就不该被遮蔽。
+  // 强行压暗会让地面出现脏斑。
+  const expose = 1 - Math.max(0, nz)
+  if (expose <= 0) return 0
+
+  // 1. 侧向贴墙
+  const dx = ao.hx - Math.abs(px)
+  const dy = ao.hy - Math.abs(py)
+  const dWall = Math.min(dx, dy)
+  const wallO = 1 - smoothstep(0, ao.reach, dWall)
+
+  // 2. 贴地（只对非朝下的面生效，朝下的面由 bounce 项补偿）
+  const dFloor = pz - ao.floorZ
+  const floorO = 1 - smoothstep(0, ao.reach * 0.7, dFloor)
+
+  // 3. 纵向（靠近顶棚）
+  const ceilO = ao.ceilBias > 0 ? smoothstep(1.6, 2.85, pz) * ao.ceilBias : 0
+
+  const o = Math.max(0, Math.min(1, wallO + floorO + ceilO))
+  return o * ao.strength * expose
+}
+
+/** 各室内场景共用的 AO 参数（reach 按房间尺度 12×8×3 取值） */
+const INDOOR_AO: AoCtx = {
+  hx: 6,
+  hy: 4,
+  floorZ: -0.207,
+  reach: 1.0,
+  strength: 0.55,
+  ceilBias: 0.15,
+}
+
 /**
  * 给一个几何体烘焙室内光照。
  *
@@ -2515,12 +3382,17 @@ function hexRGB(hex: number): [number, number, number] {
  *   1. 光源是**吊灯点光**而非平行光 —— 平行光打在水平地面上处处一样亮，
  *      室内会平得像一张贴图；点光才能形成「桌边亮、墙根暗」的光池。
  *   2. 多一项地面反弹光，家具下沿不至于死黑。
+ *
+ * v1.3.85 新增第 3 项：**环境遮蔽（AO）**。这是室内立体感的真正来源 ——
+ * 详见 AoCtx 的注释。`ao` 缺省（undefined）时行为与改造前**逐像素
+ * 一致**，保证范围外场景不受影响。
  */
 function bakeIndoor(
   geo: BufferGeometry,
   pal: IndoorPalette,
   albedo: (out: Color, p: Vector3, i: number) => void,
-  post?: (rgb: number[], p: Vector3, i: number) => void
+  post?: (rgb: number[], p: Vector3, i: number) => void,
+  ao?: AoCtx
 ): void {
   geo.computeVertexNormals()
   const pos = geo.attributes.position
@@ -2534,9 +3406,24 @@ function bakeIndoor(
   for (let i = 0; i < n; i++) {
     P.fromBufferAttribute(pos, i)
     albedo(tmp, P, i)
-    const nx = nrm.getX(i)
-    const ny = nrm.getY(i)
-    const nz = nrm.getZ(i)
+    /**
+     * v1.3.85：法线 NaN 兜底（照抄 bakeVertices 的同名处理）。
+     *
+     * `computeVertexNormals()` 对退化三角形会算出 0 长度法线 → NaN。
+     * 此前 `MeshBasicMaterial` 不用法线，NaN 只污染顶点色且被
+     * `Math.min(1, Math.max(0, NaN))` 的 NaN 传播掩盖；**换成 PBR 后
+     * 法线直接进 `dot(N, L)`，NaN 会让整个三角形黑掉或闪白**。
+     * 这里失效时退化为「朝上」（室内墙面/地面出现退化面时是合理近似）。
+     */
+    let nx = nrm.getX(i)
+    let ny = nrm.getY(i)
+    let nz = nrm.getZ(i)
+    if (!Number.isFinite(nx) || !Number.isFinite(ny) || !Number.isFinite(nz)) {
+      nx = 0
+      ny = 0
+      nz = 1
+      nrm.setXYZ(i, nx, ny, nz)
+    }
     let lr = AMB[0]
     let lg = AMB[1]
     let lb = AMB[2]
@@ -2557,6 +3444,26 @@ function bakeIndoor(
     lr += bounce[0] * up
     lg += bounce[1] * up
     lb += bounce[2] * up
+
+    /**
+     * v1.3.85：环境遮蔽（AO）—— 室内立体感的来源。
+     *
+     * 此前光照项只与**法线方向**有关（N·L），同一盒面的顶点法线全同 →
+     * 整面一个色值 → 家具像色块剪纸。AO 取决于**顶点位置的空间关系**
+     * （上方有没有别的面挡着），同面不同位置 → 遮蔽率不同 → 面内出现
+     * 渐变。墙角、家具贴地处、物体相接处自然变暗。
+     *
+     * 只对**非朝上**的面生效：朝上的面（地板/桌面）上方开阔，本就不该
+     * 被遮蔽，强行压暗会让地面出现脏斑。`1 - max(0,nz)` 在水平面上为 1、
+     * 在朝上的面上为 0，正好实现这个豁免。
+     */
+    if (ao) {
+      const k = 1 - aoFactor(P.x, P.y, P.z, nz, ao)
+      lr *= k
+      lg *= k
+      lb *= k
+    }
+
     rgb[0] = SRGBToDisplay(tmp.r) * lr
     rgb[1] = SRGBToDisplay(tmp.g) * lg
     rgb[2] = SRGBToDisplay(tmp.b) * lb
@@ -2583,6 +3490,18 @@ function bakeIndoor(
 
 /** 直立盒子：X=宽 Y=长 Z=高，原点在**底面**中心（方便直接按地板高度摆放） */
 function boxGeo(w: number, l: number, h: number): BufferGeometry {
+  /**
+   * v1.3.85：细分尝试已回退。
+   *
+   * 曾按尺寸给盒子加 1~4 段面内细分，期望靠「顶点更多 → 面内出现光照
+   * 渐变」来消除色块感。**实测无效**（room_free_subdiv.png 与
+   * room_free_pbr.png 逐像素无差异）。
+   *
+   * 原因：`bakeIndoor` 的 `nd` 只与**法线方向**有关（`N·L`），而同一个
+   * 盒面的所有顶点法线完全相同 —— 细分后每个顶点算出的 `ndc` 仍是同一个
+   * 值，面内自然没有渐变。顶点数不是瓶颈，**光照模型才是**。
+   * 保留 1 段以免白白增加顶点数。
+   */
   const g = new BoxGeometry(w, l, h)
   g.translate(0, 0, h / 2)
   return g
@@ -2611,7 +3530,11 @@ function blobGeo(r: number, sy: number, sz: number, seg = 8): BufferGeometry {
  */
 class Props {
   private geos: BufferGeometry[] = []
-  constructor(private pal: IndoorPalette) {}
+  constructor(
+    private pal: IndoorPalette,
+    /** v1.3.85：AO 上下文（缺省时不计算遮蔽，行为与改造前一致） */
+    private ao?: AoCtx
+  ) {}
 
   add(
     g: BufferGeometry,
@@ -2642,7 +3565,8 @@ class Props {
       g,
       this.pal,
       (out, _p, _i) => fn(out),
-      post ? (rgb, p, _i) => post(rgb, p) : undefined
+      post ? (rgb, p, _i) => post(rgb, p) : undefined,
+      this.ao
     )
     const ni = g.index ? g.toNonIndexed() : g
     if (ni !== g) g.dispose()
@@ -2651,7 +3575,7 @@ class Props {
   }
 
   mesh(name: string): Mesh {
-    const m = new Mesh(mergeColored(this.geos), envMaterial())
+    const m = new Mesh(mergeColored(this.geos), envMaterial({ roughness: 0.9 }))
     m.name = name
     m.castShadow = false
     m.receiveShadow = false
@@ -2688,14 +3612,58 @@ function emissiveMix(hex: number, w: number) {
  * 更抗锯齿：瞄准视角下地面是极端掠射，远处一行像素跨好几块地砖，贴图必然
  * 摩尔纹，顶点插值只是渐变成一片中间色。
  */
-function buildIndoorFloor(pal: IndoorPalette): Mesh {
+function buildIndoorFloor(
+  pal: IndoorPalette,
+  /**
+   * v1.3.84l：可选细节贴图。
+   *
+   * 与沙滩地形带同一套机制（见 `TerrainStyle.map`）：顶点色已是烘焙好的
+   * 最终显示色，贴图只当细节层，**必须接近白**（明度 ≥0.8，见
+   * `interiortexturefactory.ts` 的铁律）。
+   *
+   * 默认 null —— 不传就是原来的行为，其余调用点（含将来的新场景）不受影响。
+   *
+   * `repeat` 由调用方按平面实际尺寸设置：`PlaneGeometry(12, 8, …)` 的 uv
+   * 是线性铺满 [0,1] 的，所以 `repeat = 尺寸 / 期望周期`。注意 `repeat`
+   * 是**贴图自身**的属性，不同 repeat 必须各自预建一张，**不得 clone**。
+   */
+  map?: Texture | null,
+  /**
+   * v1.3.85：AO 上下文。传入时地板几何会被注册为**遮挡体**（供上方家具
+   * 计算遮蔽），同时地板自身也走 AO 烘焙 —— 但地板法线朝上，`expose=0`
+   * 会把它豁免掉，所以地板的观感不受影响。
+   */
+  ao?: AoCtx
+): Mesh {
   const geo = new PlaneGeometry(ROOM_HX * 2, ROOM_HY * 2, 150, 100)
   // PlaneGeometry 默认就在 XY 平面、法线 +Z —— Z-up 世界里这正是地板，无需旋转
   geo.translate(0, 0, ROOM_FLOOR_Z)
-  bakeIndoor(geo, pal, (out, P) =>
-    pal.floor(out, P.x, P.y, Math.sqrt(P.x * P.x + P.y * P.y))
+  // 注册为遮挡体必须在烘焙**之前**（此时 geo 已是最终世界坐标）
+  
+  bakeIndoor(
+    geo,
+    pal,
+    (out, P) => pal.floor(out, P.x, P.y, Math.sqrt(P.x * P.x + P.y * P.y)),
+    undefined,
+    ao
   )
-  const m = new Mesh(geo, envMaterial())
+  const m = new Mesh(
+    geo,
+    // v1.3.85：换成受光材质，与墙/顶棚/家具走同一条 PBR 路径。
+    // 此前这里是独立的 MeshBasicMaterial —— 若不改，会出现「墙受光、地面
+    // 不受光」的割裂：地面亮度与墙面脱节，且在 NoToneMapping 下差异直接
+    // 暴露（地面比墙面亮一档）。
+    // `map` 是贴图细节层，在 PBR 的 map_fragment 里同样走 sRGB→linear，
+    // 与 basic 行为一致，无需特殊处理。
+    new MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.92,
+      metalness: 0,
+      toneMapped: false,
+      fog: false,
+      ...(map ? { map } : {}),
+    })
+  )
   m.name = "IndoorFloor"
   return m
 }
@@ -2706,7 +3674,10 @@ function buildIndoorFloor(pal: IndoorPalette): Mesh {
  * 只把竖向 26 段里的一半压在 0.5m 以下（真正入画的地方），更高的部分
  * 在两种相机下都不入画，细分纯属浪费。
  */
-function buildIndoorWalls(pal: IndoorPalette): Mesh {
+function buildIndoorWalls(
+  pal: IndoorPalette,
+  ao?: AoCtx
+): Mesh {
   const H = INDOOR_CEIL_Z - ROOM_FLOOR_Z
   const ax = new Vector3()
   const ay = new Vector3(0, 0, 1)
@@ -2734,14 +3705,18 @@ function buildIndoorWalls(pal: IndoorPalette): Mesh {
       w.onX ? 0 : w.sign * ROOM_HY,
       ROOM_FLOOR_Z + H / 2
     )
-    bakeIndoor(g, pal, (out, P) =>
-      pal.wall(out, P.z - ROOM_FLOOR_Z, w.onX ? P.y : P.x, w.onX)
-    )
     const ni = g.index ? g.toNonIndexed() : g
     if (ni !== g) g.dispose()
+    bakeIndoor(
+      ni,
+      pal,
+      (out, P) => pal.wall(out, P.z - ROOM_FLOOR_Z, w.onX ? P.y : P.x, w.onX),
+      undefined,
+      ao
+    )
     geos.push(ni)
   }
-  const m = new Mesh(mergeColored(geos), envMaterial())
+  const m = new Mesh(mergeColored(geos), envMaterial({ roughness: 0.95 }))
   m.name = "IndoorWalls"
   return m
 }
@@ -2754,7 +3729,7 @@ function buildIndoorCeiling(pal: IndoorPalette): Group {
   geo.rotateX(Math.PI) // 法线 +Z → −Z，朝下
   geo.translate(0, 0, INDOOR_CEIL_Z)
   bakeIndoor(geo, pal, (out, P) => pal.ceil(out, P.x, P.y))
-  const m = new Mesh(geo, envMaterial())
+  const m = new Mesh(geo, envMaterial({ roughness: 1.0 }))
   m.name = "Ceiling"
   g.add(m)
   return g
@@ -2809,6 +3784,29 @@ function addPlant(
       (out: Color) => out.setHex(leafHex).offsetHSL(0, 0, dl)
     )
   }
+}
+
+/**
+ * v1.3.84l：按「期望的世界尺寸周期」取一张已配好 repeat 的地面贴图。
+ *
+ * 地板平面是 `PlaneGeometry(ROOM_HX*2, ROOM_HY*2)`（12×8m），uv 线性铺满
+ * [0,1]，所以 `repeat = 平面尺寸 / 期望周期`。
+ *
+ * ⚠️ `repeat` 挂在**共享的** Texture 上，同 kind 只能设一次 —— 三个场景
+ * 用不同 kind（room=wood / office=carpet / cyber=stone），所以不会互相覆盖。
+ * 若将来两个场景要共用同一 kind 但不同 repeat，必须**各建一张独立贴图**，
+ * 不能用同一张改 repeat，更不能 clone（见 interiortexturefactory 的注释）。
+ *
+ * @param kind    贴图种类
+ * @param period  期望的贴图平铺周期（米/次）
+ */
+function floorTex(
+  kind: "carpet" | "wood" | "stone" | "concrete",
+  period: number
+): Texture {
+  const t = getInteriorTexture(kind)
+  t.repeat.set((ROOM_HX * 2) / period, (ROOM_HY * 2) / period)
+  return t
 }
 
 // ───────────────────────── room：居家台球房 ─────────────────────────
@@ -2880,7 +3878,21 @@ const ROOM_PAL: IndoorPalette = {
   AMB: [0.30, 0.285, 0.255],
   SUN: [0.88, 0.82, 0.71],
   GAMMA: 1.25,
-  lamps: [{ pos: [0, 0, 2.32], near: 1.5, far: 10.5, floor: 0.30 }],
+  /**
+   * v1.3.84l：补第二盏「窗光」。
+   *
+   * 原来只有一盏吊灯（暖光，位于球桌正上方），两面侧墙亮度几乎一样 ——
+   * 画面读不出「进深方向」。加一盏位于 −X 侧的冷光（模拟窗光/落地灯）
+   * 之后：近墙偏暖、远墙偏冷，同一块地面从右到左有一条自然的亮暗过渡，
+   * 房间立刻有了方向感。
+   *
+   * 位置 (−3.6, −1.6, 2.10) 落在 room 的落地灯（−3.20, 2.90）附近，
+   * 与那件道具呼应，不会显得是凭空多出来的光。
+   */
+  lamps: [
+    { pos: [0, 0, 2.32], near: 1.5, far: 10.5, floor: 0.30 },
+    { pos: [-3.6, -1.6, 2.10], near: 1.2, far: 8.0, floor: 0.16 },
+  ],
   bounce: [0.10, 0.088, 0.075],
   haze: { color: [0.30, 0.25, 0.21], start: 3.5, end: 10.5, max: 0.34 },
   floor: roomFloor,
@@ -2891,10 +3903,11 @@ const ROOM_PAL: IndoorPalette = {
 function buildRoom(): Group {
   const g = new Group()
   g.name = "Room"
-  g.add(buildIndoorFloor(ROOM_PAL))
-  g.add(buildIndoorWalls(ROOM_PAL))
+  // 橡木地板：贴图周期 0.55m（比板宽 0.24m 大，让细木纹落在板面内部）
+  g.add(buildIndoorFloor(ROOM_PAL, floorTex("wood", 0.55), INDOOR_AO))
+  g.add(buildIndoorWalls(ROOM_PAL, INDOOR_AO))
   g.add(buildIndoorCeiling(ROOM_PAL))
-  const p = new Props(ROOM_PAL)
+  const p = new Props(ROOM_PAL, INDOOR_AO)
 
   // 沙发（贴 +Y 墙）
   p.add(boxGeo(2.30, 0.92, 0.42), 0, 3.32, 0, 0, 0x54626f)
@@ -2964,6 +3977,9 @@ function buildRoom(): Group {
   addPlant(p, 4.60, 2.40, 0x8a5a44, 0x356f42, 1.1)
 
   g.add(p.mesh("RoomProps"))
+
+  // 第二遍：把家具几何灌进 AO 采样器后统一烘焙
+
   return g
 }
 
@@ -2997,20 +4013,51 @@ function officeFloor(out: Color, x: number, y: number, r: number): void {
 
 const OF_SKIRT = new Color(0x8f979f)
 const OF_GLASS = new Color(0x7fa8bd)
+/** v1.3.84l：玻璃的「反射天光」上沿色 —— 比玻璃本体亮，做出竖向渐变 */
+const OF_GLASS_TOP = new Color(0xa8c8d8)
+/** v1.3.84l：隔断后面透出来的「对面空间」色（微亮、偏中性） */
+const OF_BEYOND = new Color(0x93a3ac)
 const OF_MULLION = new Color(0xb6bcc2)
 const OF_PANEL = new Color(0xa9b0b7)
 const OF_UPPER = new Color(0xd7dce0)
 
-/** 玻璃隔断：下沿 0.5m 是玻璃（瞄准视角唯一能看到的墙面部分） */
-function officeWall(out: Color, s: number, u: number): void {
+/**
+ * 玻璃隔断：下沿 0.5m 是玻璃（瞄准视角唯一能看到的墙面部分）。
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ * v1.3.84l：给玻璃补「透视感」
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * 原来玻璃区（s < 0.5）是一块**纯色** `0x7fa8bd`（只加了竖梃）。问题不在于
+ * 颜色不对，而在于它读起来像「磨砂塑料板」而不是玻璃 —— 玻璃之所以是玻璃，
+ * 靠的是「能看到/猜到后面有东西」。这里补三层信息：
+ *
+ *   1. **竖向渐变** —— 玻璃是靠反射天光变亮的，越靠上反射角越大、越亮。
+ *      由上沿 `OF_GLASS_TOP` 向中段 `OF_GLASS` 过渡，玻璃立刻有了「面」。
+ *   2. **横向分格线** —— 只加竖梃（每 1.5m 一道）会像一排竖条；补一道
+ *      0.42 处的横梃后变成「上下两块玻璃」，这是办公隔断最常见的做法。
+ *   3. **对面空间的微亮底** —— 在玻璃下沿压一层 `OF_BEYOND`，模拟隔断那头
+ *      的地面反光。哪怕是纯色，也让「后面有空间」这件事有了依据。
+ *
+ * 全部是着色函数改动，零几何风险。
+ */
+function officeWall(out: Color, s: number, u: number, _onX: boolean): void {
   if (s < 0.10) {
     out.copy(OF_SKIRT)
     return
   }
   if (s < 0.50) {
-    out.copy(OF_GLASS)
-    const t = Math.abs(((u / 1.5) % 1) - 0.5) * 2
-    out.lerp(OF_MULLION, (1 - smoothstep(0.6, 0.95, t)) * 0.8)
+    // 玻璃带：0.10~0.50 映射到 t ∈ [0,1]（下沿→上沿）
+    const t = smoothstep(0.10, 0.50, s)
+    out.copy(OF_GLASS).lerp(OF_GLASS_TOP, t)
+    // 对面空间：靠下沿最明显（那里能看到对面的地面），向上迅速衰减
+    out.lerp(OF_BEYOND, (1 - smoothstep(0.0, 0.45, t)) * 0.34)
+    // 竖梃：每 1.5m 一道
+    const tv = Math.abs(((u / 1.5) % 1) - 0.5) * 2
+    out.lerp(OF_MULLION, (1 - smoothstep(0.6, 0.95, tv)) * 0.8)
+    // 横梃：在 t = 0.42 处一道（把玻璃分成上下两块）
+    const th = Math.abs(t - 0.42) / 0.42
+    out.lerp(OF_MULLION, (1 - smoothstep(0.85, 1.0, th)) * 0.7)
     out.offsetHSL(0, 0, (hash2(Math.round(u * 4), Math.round(s * 10)) - 0.5) * 0.05)
     return
   }
@@ -3044,10 +4091,12 @@ const OFFICE_PAL: IndoorPalette = {
 function buildOffice(): Group {
   const g = new Group()
   g.name = "Office"
-  g.add(buildIndoorFloor(OFFICE_PAL))
+  // 方块地毯：贴图周期 0.60m —— 与 officeFloor 的砖块尺寸（T = 0.6）对齐，
+  // 这样贴图的绒面颗粒正好落在每一块地毯内部，不会横跨砖缝
+  g.add(buildIndoorFloor(OFFICE_PAL, floorTex("carpet", 0.6)))
   g.add(buildIndoorWalls(OFFICE_PAL))
   g.add(buildIndoorCeiling(OFFICE_PAL))
-  const p = new Props(OFFICE_PAL)
+  const p = new Props(OFFICE_PAL, INDOOR_AO)
 
   /** 办公桌 + 挡板。桌面 0.77m，只有桌腿与挡板入画 —— 这是刻意的 */
   const desk = (x: number, y: number, ry: number) => {
@@ -3062,11 +4111,76 @@ function buildOffice(): Group {
   desk(-2.90, -2.55, -1)
   desk(2.90, -2.55, -1)
 
+  /**
+   * v1.3.88：显示器（底座 + 支架 + 亮屏）—— 办公室的黄金特征物。
+   *
+   * ## 为什么要加
+   *
+   * 实测可见性（probe-visible.js，aim 机位相机 z=0.295、v1.3.85 抬注视点后）：
+   * 桌子 (±2.9, ±2.55) 距相机 5.1m，可见上边界 **1.12m** —— 0.72m 的桌面
+   * 完整入画。旧注释「只有桌腿与挡板入画」是 R*2 注视点时代的结论，早已
+   * 过时。桌子在画面里却空无一物，是 office 看起来像仓库的直接原因。
+   *
+   * ## 尺寸约束（同样来自实测）
+   *
+   * 外壳顶 = 0.74（底座顶）+ 0.10（支架）+ 0.30（外壳高）= 1.14m，
+   * 比上限 1.12 只出 0.02 —— 顶边被裁掉一条细缝，肉眼无感，换来的是
+   * 接近真实 24" 显示器的比例（0.48m 宽）。
+   *
+   * 屏幕朝椅子（faceTo），从相机方向看屏幕面与视线的夹角约 60°，
+   * 亮着的屏幕正面可辨 —— 一眼读出「有人在用的办公室」。
+   */
+  const monitor = (x: number, y: number, faceTo: number) => {
+    p.add(boxGeo(0.24, 0.16, 0.02), x, y, 0.77, 0, 0x31363d)
+    p.add(boxGeo(0.05, 0.04, 0.10), x, y, 0.79, 0, 0x31363d)
+    p.add(boxGeo(0.48, 0.035, 0.30), x, y, 0.84, 0, 0x22262c)
+    p.add(
+      boxGeo(0.44, 0.012, 0.26),
+      x,
+      y + faceTo * 0.024,
+      0.85,
+      0,
+      0x000000,
+      emissive(0xaebfd4, 0.9)
+    )
+  }
+  // 屏幕朝各自的椅子（±y 相向）：y=+2.55 桌的椅子在 -y 侧，faceTo=-1
+  monitor(-2.90, 2.72, -1)
+  monitor(2.90, 2.72, -1)
+  monitor(-2.90, -2.72, 1)
+  monitor(2.90, -2.72, 1)
+
   // 办公椅：五爪底座 + 气压柱，低视角下最有辨识度
   addChair(p, -2.90, 1.80, 0.4, 0x3f454d, 0x2f343a)
   addChair(p, 2.90, 1.80, -0.4, 0x3f454d, 0x2f343a)
   addChair(p, -2.90, -1.80, 2.4, 0x3f454d, 0x2f343a)
   addChair(p, 2.90, -1.80, -2.4, 0x3f454d, 0x2f343a)
+
+  /**
+   * v1.3.88：近景大件 —— **画面中上带（py 35~220）的主体**。
+   *
+   * 遮挡普查（probe-occlusion.js）的两个决定性结论：
+   *   ① 画面下半（py>240）永远被球桌占据 —— 环境物只能活在 py<240；
+   *   ② 体量 ∝ 近×高：x=2.35 处 1.1m 高的物体投影贯穿 py 35~160，
+   *     是画面里最大的单件体量；x=3.3 的同物体缩到 py 10~105 还贴顶。
+   *
+   * 所以「远处桌子上的显示器」注定是小点缀，近景矮高件才是主角：
+   * 复印机 (2.35, 0.65)（桌角 1.65 之外 0.7m，不挡球也不进禁区）、
+   * 饮水机 (-2.35, 0.7) 对称、纸箱堆 (2.6, -0.9)。三者连成一道
+   * 「办公室纵深」，与远景的桌椅/白板分层。
+   */
+  // 复印机：机身 + 顶部进纸器 + 出纸斜面 + 绿色指示灯
+  p.add(boxGeo(0.62, 0.66, 0.98), 2.35, 0.65, 0, 0.06, 0xd6d9dc)
+  p.add(boxGeo(0.52, 0.50, 0.16), 2.35, 0.65, 0.98, 0.06, 0xb9bec4)
+  p.add(boxGeo(0.30, 0.34, 0.10), 2.31, 0.69, 1.14, 0.06, 0x9aa0a6)
+  p.add(boxGeo(0.46, 0.012, 0.20), 2.03, 0.67, 0.52, 0, 0x000000, emissive(0x9fc86a, 0.5))
+  // 近景纸箱堆（右中带）
+  p.add(boxGeo(0.55, 0.42, 0.38), 2.60, -0.90, 0, 0.35, 0xb08a63)
+  p.add(boxGeo(0.48, 0.36, 0.32), 2.60, -0.90, 0.38, 0.5, 0xa07c58)
+  p.add(boxGeo(0.52, 0.40, 0.34), 3.05, -0.70, 0, -0.4, 0xa8825c)
+  // 近景饮水机（左中带）：机身 + 水桶
+  p.add(boxGeo(0.36, 0.36, 1.00), -2.35, 0.70, 0, 0, 0xdfe3e6)
+  p.add(cylGeo(0.15, 0.13, 0.45, 12), -2.35, 0.70, 1.00, 0, 0x9fd4e8)
 
   // 文件柜（贴 ±X 墙），抽屉缝靠顶点色横带做出来
   for (const sx of [-1, 1]) {
@@ -3098,6 +4212,22 @@ function buildOffice(): Group {
   p.add(cylGeo(0.14, 0.11, 0.30, 10), -4.60, 3.30, 0, 0, 0x4a5058)
   p.add(cylGeo(0.14, 0.11, 0.30, 10), 4.60, -3.30, 0, 0, 0x4a5058)
 
+  /**
+   * v1.3.88：白板（贴 +X 墙，相机可见侧）。
+   *
+   * 相机朝 +X 看，-X 墙在背后完全浪费；+X 墙上文件柜 (5.68, 1.90) 与
+   * 饮水机 (5.30, 3.30) 之间偏下的 y=-1.2 是空位。板面 0.55~1.45m ——
+   * d≈7.5 处可见上边界 1.52m，整块板完整入画。白板是「办公室」最直白的
+   * 符号之一，与显示器（桌上）配合，一眼读出场景身份。
+   */
+  p.add(boxGeo(0.05, 1.70, 0.90), 5.93, -1.20, 0.55, 0, 0xf2f4f0)
+  p.add(boxGeo(0.06, 1.74, 0.05), 5.92, -1.20, 0.53, 0, 0x8a8f96)
+  p.add(boxGeo(0.06, 1.74, 0.05), 5.92, -1.20, 1.45, 0, 0x8a8f96)
+  // 板面上的马克笔迹痕（几条淡色横带，顶点色画，远看像写过字的板）
+  p.add(boxGeo(0.005, 0.9, 0.035), 5.90, -0.80, 1.02, 0, 0x4a6a8a)
+  p.add(boxGeo(0.005, 1.2, 0.035), 5.90, -1.30, 0.92, 0, 0x8a4a4a)
+  p.add(boxGeo(0.005, 0.7, 0.035), 5.90, -1.00, 0.80, 0, 0x4a7a5a)
+
   // 绿植 ×2（办公室里唯一的高饱和色，顺带给画面补一个绿相）
   addPlant(p, -5.30, 3.10, 0x9aa0a6, 0x2f7d46)
   addPlant(p, 5.30, -1.20, 0x9aa0a6, 0x357f4a, 0.9)
@@ -3112,6 +4242,8 @@ const CY_TILE = new Color(0x2a2f38)
 const CY_GROUT = new Color(0x11141a)
 const CY_CYAN = 0x1fd8ff
 const CY_MAGENTA = 0xff3ea5
+/** v1.3.84l：第三个灯效色 —— 冷白。三色循环比两色交替更碎、更不规律 */
+const CY_WHITE = 0xd8e8f0
 
 /**
  * 深色地砖 + 发光地缝。
@@ -3133,6 +4265,18 @@ function cyberFloor(out: Color, x: number, y: number, r: number): void {
 /**
  * 地面发光缝：每 3 条横缝里挑 1 条，颜色按 x 分段在青/品红之间交替。
  * 用 smoothstep 做软边（顶点间距 0.08m，硬边会闪）。
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ * v1.3.84l：加「呼吸」—— 让灯带不再是等亮直线
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * 原实现是同一条缝上**亮度完全一致**的一根亮线，整片地面 20 多条缝
+ * 完全等亮 —— 合成感很强，像画上去的。真实的 LED 灯带会因供电、老化、
+ * 反射角度差异而逐段不同亮。这里叠两条沿 x 的正弦（频率不同、相位错开），
+ * 让同一根缝在不同位置有 0.62~1.0 的亮度浮动，且**相邻缝之间不同步**。
+ *
+ * 关键是「相邻缝不同步」：相位里带上了 `row`，所以第 3、6、9 条缝
+ * 的明暗分布各不相同，视觉上就不会读成一组平行线。
  */
 function cyberFloorGlow(out: number[], x: number, y: number): void {
   const T = 0.55
@@ -3142,7 +4286,12 @@ function cyberFloorGlow(out: number[], x: number, y: number): void {
   const w = 1 - smoothstep(0.012, 0.062, d)
   if (w <= 0) return
   const seg = Math.floor((x + 6) / 2.2) % 2
-  emissiveMix(seg === 0 ? CY_CYAN : CY_MAGENTA, w * 0.85)(out)
+  // 呼吸：两条不同频率的正弦，相位随 row 偏移 → 相邻缝明暗错开
+  const breath =
+    0.62 +
+    0.24 * Math.sin(x * 0.85 + row * 1.7) +
+    0.14 * Math.sin(x * 2.3 - row * 0.9)
+  emissiveMix(seg === 0 ? CY_CYAN : CY_MAGENTA, w * 0.85 * breath)(out)
 }
 
 const CY_SKIRT = new Color(0x101318)
@@ -3166,13 +4315,27 @@ function cyberWall(out: Color, s: number, u: number): void {
   out.copy(CY_UPPER)
 }
 
-/** 墙根横向灯带（0.10~0.19m）+ 竖向灯槽发光：墙面唯一入画的部分 */
+/**
+ * 墙根横向灯带（0.10~0.19m）+ 竖向灯槽发光：墙面唯一入画的部分。
+ *
+ * v1.3.84l：灯带改为**段状**（每 2m 一段，段间留 0.18m 暗口），并在段内
+ * 叠一条正弦亮度起伏。原实现是环房间一整圈连续等亮的线，那是「发光条」，
+ * 不是「LED 灯带」——真实灯带由一米一米拼接而成，接口处必然有暗口，
+ * 供电端也更亮。补上这层不均匀后，墙根从「一条亮线」变成「一串灯」，
+ * 且因为暗口位置固定，反而强化了房间的尺度感。
+ */
 function cyberWallGlow(out: number[], s: number, u: number): void {
   if (s >= 0.095 && s <= 0.20) {
     const band =
       smoothstep(0.095, 0.125, s) * (1 - smoothstep(0.165, 0.20, s))
+    // 段状：2m 一段，段间 0.18m 暗口
+    const segU = ((u + 6) % 2.0 + 2.0) % 2.0
+    const gap = smoothstep(0.0, 0.10, segU) * (1 - smoothstep(1.82, 1.92, segU))
+    if (gap <= 0) return
     const seg = Math.floor((u + 6) / 1.5) % 2
-    emissiveMix(seg === 0 ? CY_CYAN : CY_MAGENTA, band * 0.9)(out)
+    // 段内亮度起伏：让每段不是等亮
+    const breath = 0.80 + 0.20 * Math.sin(u * 1.9)
+    emissiveMix(seg === 0 ? CY_CYAN : CY_MAGENTA, band * 0.9 * gap * breath)(out)
     return
   }
   if (s > 0.20 && s < 1.05) {
@@ -3209,7 +4372,22 @@ function buildCybercafe(): Group {
     (out, P) => cyberFloor(out, P.x, P.y, Math.sqrt(P.x * P.x + P.y * P.y)),
     (rgb, P) => cyberFloorGlow(rgb, P.x, P.y)
   )
-  const fm = new Mesh(floorGeo, envMaterial())
+  const fm = new Mesh(
+    floorGeo,
+    // v1.3.85：同 buildIndoorFloor —— 换受光材质，避免与 CyberWalls 割裂
+    new MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.92,
+      metalness: 0,
+      toneMapped: false,
+      fog: false,
+      // v1.3.84l：深色地砖的哑光颗粒。周期 0.55m —— 与 cyberFloor 的
+      // 砖块尺寸（T = 0.55）对齐，颗粒落在每块砖内部而不横跨砖缝。
+      // 注意：这张贴图的明度仍是 ≥0.8 的「细节层」，砖的深色来自顶点色
+      // （CY_TILE = 0x2a2f38），不受贴图影响。
+      map: floorTex("stone", 0.55),
+    })
+  )
   fm.name = "CyberFloor"
   g.add(fm)
 
@@ -3249,12 +4427,12 @@ function buildCybercafe(): Group {
     if (ni !== geo) geo.dispose()
     wgeos.push(ni)
   }
-  const wm = new Mesh(mergeColored(wgeos), envMaterial())
+  const wm = new Mesh(mergeColored(wgeos), envMaterial({ roughness: 0.9 }))
   wm.name = "CyberWalls"
   g.add(wm)
   g.add(buildIndoorCeiling(CYBER_PAL))
 
-  const p = new Props(CYBER_PAL)
+  const p = new Props(CYBER_PAL, INDOOR_AO)
   // 两排电脑桌（沿 ±Y），每排 9 个机箱位
   for (const sy of [1, -1]) {
     const dy = sy * 2.55
@@ -3263,7 +4441,23 @@ function buildCybercafe(): Group {
     for (let i = 0; i < 9; i++) {
       const x = -4.6 + i * 1.15
       p.add(boxGeo(0.20, 0.44, 0.46), x, dy - sy * 0.06, 0, 0, 0x14181e)
-      // 侧透板（朝向过道）：这排发光机箱是网咖画面里最主要的内容
+      /**
+       * 侧透板（朝向过道）：这排发光机箱是网咖画面里最主要的内容。
+       *
+       * v1.3.84l：由「两色硬切 + 全等亮」改为「三档亮度」。
+       *
+       * 原来只有 `i % 2` 决定青或品红、亮度完全一致 —— 18 个机箱看起来像
+       * 一排同款灯箱。真实机房里每台机器的 RGB 灯效亮度、颜色都不同：
+       *   ① 色相：`i % 3` 让青/品红/冷白三色循环，比两色交替更碎；
+       *   ② 亮度：三档 0.62 / 0.82 / 1.0，按 `(i * 7) % 3` 打散，避免
+       *      与色相同步（否则会变成「亮的一定是青色」这种规律）；
+       *   ③ 两排之间再错开一档（`sy > 0` 时索引 +4），左右两排不会镜像
+       *      对称 —— 对称是「一眼看出是程序生成」的最强信号。
+       */
+      const hue = i % 3
+      const bright = [0.62, 0.82, 1.0][(i * 7 + (sy > 0 ? 4 : 0)) % 3]
+      const ledColor =
+        hue === 0 ? CY_CYAN : hue === 1 ? CY_MAGENTA : CY_WHITE
       p.add(
         boxGeo(0.20, 0.012, 0.38),
         x,
@@ -3271,9 +4465,34 @@ function buildCybercafe(): Group {
         0.04,
         0,
         0x000000,
-        emissive(i % 2 === 0 ? CY_CYAN : CY_MAGENTA)
+        emissive(ledColor, bright)
       )
       addChair(p, x, dy - sy * 0.62, (i % 2 ? 0.3 : -0.3), 0x2b3038, 0x22262c)
+      /**
+       * v1.3.88：亮屏显示器 —— 网咖真正的黄金特征物。
+       *
+       * 机箱灯带只有 0.04~0.42m 高，在画面下缘一小条；隔着 5m 的相机
+       * （d=4~6 处可见上边界 0.94~1.28m）里，**发光的屏幕**才是网咖
+       * 一眼可辨的符号。屏幕挂在隔断背板前（背板 dy+sy*0.72）、面朝
+       * 过道的椅子（-sy 方向），底座坐在桌面（0.79）上，屏幕中心 0.95m、
+       * 顶 1.13m —— 正好压在 d=5 的上边界 1.10 附近，顶边裁掉细缝无感。
+       *
+       * 屏幕色与同位机箱的 LED 同色（bright 压到 0.55）—— 真实网咖的
+       * RGB 氛围里屏幕显示内容本就被灯光染色，同色还能让「机位 ↔ 屏幕」
+       * 读成一组。
+       */
+      p.add(boxGeo(0.22, 0.15, 0.02), x, dy - sy * 0.10, 0.79, 0, 0x1a1e24)
+      p.add(boxGeo(0.05, 0.04, 0.09), x, dy - sy * 0.10, 0.81, 0, 0x1a1e24)
+      p.add(boxGeo(0.46, 0.035, 0.28), x, dy - sy * 0.10, 0.85, 0, 0x14171c)
+      p.add(
+        boxGeo(0.42, 0.012, 0.24),
+        x,
+        dy - sy * 0.122,
+        0.86,
+        0,
+        0x000000,
+        emissive(ledColor, bright * 0.55)
+      )
     }
     // 隔断背板
     p.add(boxGeo(10.4, 0.04, 0.95), 0, dy + sy * 0.72, 0, 0, 0x1a1e25)
@@ -3287,20 +4506,96 @@ function buildCybercafe(): Group {
   p.add(boxGeo(0.012, 2.30, 0.06), 5.24, 2.20, 0.92, 0, 0x000000, emissive(0xffb457))
   addPlant(p, 5.45, -2.60, 0x2c3138, 0x2c6b52, 0.95)
 
+  /**
+   * v1.3.88：近景 RGB 灯柱 —— 画面中上带（py 150~210）的网咖签名。
+   *
+   * 遮挡普查（probe-occlusion.js）：画面下半被球桌占死，近景（x 1.8~2.8、
+   * |y|≤1.4）贴地物投在 py 150~220 —— 画面正中。机箱排（y=±2.55）投影
+   * 贴顶（py≈35~50），只有灯带在画面下缘一小条。过道两侧的立式灯柱
+   * （0.55m 高、三段变色）把「网咖 RGB」直接怼进玩家视野正中。
+   * (±2.3, ±1.2)：|x|>2.2 在禁区外，y=±1.2 不会穿球桌（半宽 0.93+库边）。
+   */
+  const lampPost = (x: number, y: number, seed: number) => {
+    p.add(boxGeo(0.16, 0.16, 0.05), x, y, 0, 0, 0x14171c)
+    p.add(boxGeo(0.09, 0.09, 0.50), x, y, 0.05, 0, 0x1c2128)
+    // 三段发光：青 → 品红 → 冷白，按 seed 错开（两侧柱子不同步）
+    const segs = [CY_CYAN, CY_MAGENTA, CY_WHITE]
+    for (let s = 0; s < 3; s++) {
+      p.add(
+        boxGeo(0.095, 0.095, 0.14),
+        x,
+        y,
+        0.08 + s * 0.15,
+        0,
+        0x000000,
+        emissive(segs[(s + seed) % 3], 0.85)
+      )
+    }
+  }
+  lampPost(2.30, 1.20, 0)
+  lampPost(-2.30, -1.20, 1)
+
   g.add(p.mesh("CyberProps"))
   return g
 }
 
 /** 室内三件套的统一入口 */
 export function buildIndoorScene(sceneId: string): Group | null {
+  let g: Group | null
   switch (sceneId) {
     case "room":
-      return buildRoom()
+      g = buildRoom()
+      break
     case "office":
-      return buildOffice()
+      g = buildOffice()
+      break
     case "cybercafe":
-      return buildCybercafe()
+      g = buildCybercafe()
+      break
     default:
       return null
   }
+  applyIndoorShadows(g)
+  return g
 }
+
+/**
+ * v1.3.86：给室内环境的所有构件开启阴影参与。
+ *
+ * ## 为什么必须开
+ *
+ * 此前室内环境每个 Mesh 都是 `castShadow = false` + `receiveShadow = false`。
+ * 后果是**球桌不会在地面留下阴影**、家具不会在地面留下阴影、地面也不接收
+ * 任何阴影 —— 画面因此缺失最重要的空间纵深线索：**接地感**。桌子看起来是
+ * 「飘」在地面上的，所有物件都像贴片。这是用户反馈「还是以前版本糟糕的
+ * 情况」「像 2d 场景」的关键成因之一（另一条是光照 90% 由环境光主导）。
+ *
+ * ## 为什么要在这里统一设置，而不是逐个 Mesh 改
+ *
+ * 室内三件套由 `buildRoom/buildOffice/buildCybercafe` 三个函数各自拼装，
+ * 内部另有 `IndoorBuilder.mesh()`、`buildIndoorFloor/Walls/Ceiling` 等多个
+ * 出口。逐个改要动 5~6 处，且**将来新增室内场景极易漏**。这里在唯一出口
+ * 上递归一次，覆盖全部既有与未来构件。
+ *
+ * ## 例外：地面与天花板只「接收」不「投影」
+ *
+ * - **地面**（`IndoorFloor`）：不投影。地面法线朝上、自身就在最底部，
+ *   投影只会给自己投出无意义的自阴影（shadow acne 的主要来源）。
+ * - **天花板**（`Ceiling`）：不投影。它在所有物体上方，向下投影会把整个
+ *   房间罩在阴影里（方向光从上方来，天花板正好挡住），画面会直接变黑。
+ *
+ * 这两类都**接收**阴影（天花板接收不到实际光源方向的投影，但显式打开
+ * 不影响正确性，且保持语义一致）。
+ */
+function applyIndoorShadows(g: Group) {
+  g.traverse((o) => {
+    const m = o as Mesh
+    if (!(m as unknown as { isMesh?: boolean }).isMesh) return
+    const n = m.name || ""
+    const isFloor = n === "IndoorFloor"
+    const isCeiling = n === "Ceiling"
+    m.receiveShadow = true
+    m.castShadow = !(isFloor || isCeiling)
+  })
+}
+

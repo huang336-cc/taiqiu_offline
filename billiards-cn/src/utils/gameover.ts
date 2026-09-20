@@ -31,4 +31,24 @@ export const gameOverButtons = {
     const next = botMode ? this.continueSeries : this.newGame
     return next + " " + this.viewReplay + " " + this.saveReplay + " " + this.lobby
   },
+
+  /**
+   * v1.3.83：局域网对战的结算按钮组 —— 首个按钮用「继续对战」。
+   *
+   * 局域网也是连续对局（打完一局能接着开下一局，局比分累计），语义与
+   * 人机对战的 `continueSeries` 完全一致，故复用同一按钮（同一个
+   * `reload` 动作，走 restartGame 重载并保留 ?lan=/?peer= 参数）。
+   * 此前局域网走 `forMode()` 无参 → 显示「再来一局」，与用户的说法不一致。
+   */
+  forLan(): string {
+    return (
+      this.continueSeries +
+      " " +
+      this.viewReplay +
+      " " +
+      this.saveReplay +
+      " " +
+      this.lobby
+    )
+  },
 }

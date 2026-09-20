@@ -52,13 +52,6 @@ function build(sceneId: string): CanvasTexture {
       for (let y = 0; y < H; y += 26) ctx.fillRect(0, y + (y % 52 ? 6 : 0), W, 6)
       ctx.globalAlpha = 1
       break
-    case "forest":
-      // 树干竖纹
-      ctx.globalAlpha = 0.18
-      ctx.fillStyle = "#0c1a0c"
-      for (let x = 30; x < W; x += 70) ctx.fillRect(x, 0, 26, H)
-      ctx.globalAlpha = 1
-      break
     case "snow":
       // 雪点
       ctx.fillStyle = "rgba(255,255,255,0.5)"

@@ -122,6 +122,8 @@ export class AimInputs {
     this.cueBallTriggerElement?.addEventListener("click", this.toggleCueBallPopup)
     id("cueballPopup")?.addEventListener("click", this.onPopupClick)
     document.addEventListener("click", this.onDocClick)
+    // v1.3.76：点/滑主界面先收起打点面板，且本次手势不改瞄准（捕获阶段优先）
+    document.addEventListener("pointerdown", this.onMainAreaPointerDown, true)
     // v1.2.5：弹窗打开期间，视口尺寸变化（旋转/软键盘）时 JS 重定位，避免溢出
     window.addEventListener("resize", this.repositionIfOpen)
     window.addEventListener("orientationchange", this.repositionIfOpen)
@@ -316,6 +318,78 @@ export class AimInputs {
   isCueBallPopupOpen(): boolean {
     const popup = id("cueballPopup") as HTMLElement | null
     return !!popup && !popup.hidden
+  }
+
+  /**
+   * v1.3.76：收起白球击球点面板。
+   * @returns 原本是否处于展开态（调用方可据此判断「这次点击是不是用来关面板的」）
+   */
+  closeCueBallPopup(): boolean {
+    const popup = id("cueballPopup") as HTMLElement | null
+    if (!popup || popup.hidden) return false
+    popup.hidden = true
+    this.cueBallTriggerElement?.setAttribute("aria-expanded", "false")
+    this.autoClosedAt = performance.now()
+    return true
+  }
+
+  /**
+   * v1.3.76：本次手势是否应完全屏蔽瞄准（仅「手指还按着」这一段）。
+   *
+   * 用户点击/滑动主界面只是为了把展开的打点面板收起来，不该顺带把瞄准
+   * 角度也转跑（旧行为：面板虽然不响应，但画布拖拽照样改角度，
+   * 等于「关面板 = 白瞄一次」）。用于画布拖拽这条路径。
+   */
+  isAimSuppressed(): boolean {
+    return this.aimSuppressed
+  }
+
+  /**
+   * v1.3.76：点球对准（tap）用的宽松版。
+   * tap 是在 pointerup **之后**才派发的，那时 `aimSuppressed` 已经复位，
+   * 因此额外给一个 350ms 的冷却窗口，覆盖「这一次关面板的点击」。
+   * 只影响点球对准，不影响拖拽 —— 玩家关完面板想立刻拖屏瞄准不受影响。
+   */
+  isAimTapSuppressed(): boolean {
+    return this.aimSuppressed || performance.now() - this.autoClosedAt < 350
+  }
+
+  /** 手势期间屏蔽瞄准（pointerdown 置位，pointerup 复位） */
+  private aimSuppressed = false
+  /** 最近一次「点主界面自动收起面板」的时刻 */
+  private autoClosedAt = -1e9
+
+  /**
+   * v1.3.76：主界面（3D 画布 / 球桌）上的按下 —— 先把展开的打点面板收起来，
+   * 并且**整段手势都不改瞄准角度**，收起之后的下一次手势才恢复瞄准。
+   *
+   * 挂在 document 的捕获阶段，保证早于 interact.js（画布拖拽）与
+   * drawing.ts（点球对准）拿到事件；命中主界面时直接掐断冒泡，
+   * 让这两条瞄准路径本次根本收不到事件。
+   */
+  private onMainAreaPointerDown = (e: Event) => {
+    if (!this.isCueBallPopupOpen()) return
+    const t = e.target as HTMLElement | null
+    const popup = id("cueballPopup") as HTMLElement | null
+    if (t && popup?.contains(t)) return
+    if (t && this.cueBallTriggerElement?.contains(t)) return
+    // 面板外的任何位置都收起面板（力度条 / 击球按钮等同样适用）
+    this.closeCueBallPopup()
+    this.aimSuppressed = true
+    window.addEventListener("pointerup", this.onMainAreaPointerUp, true)
+    window.addEventListener("pointercancel", this.onMainAreaPointerUp, true)
+    // 只有落在 3D 主界面（#viewP1 内的画布）才掐断冒泡：
+    // 其它 UI（按钮 / 滑条）仍要正常响应这一次点击。
+    const view = id("viewP1")
+    if (view && t && view.contains(t)) {
+      e.stopPropagation()
+    }
+  }
+
+  private onMainAreaPointerUp = () => {
+    this.aimSuppressed = false
+    window.removeEventListener("pointerup", this.onMainAreaPointerUp, true)
+    window.removeEventListener("pointercancel", this.onMainAreaPointerUp, true)
   }
 
   /** item 1：标记「正在瞄准」开始（按住滑条）。 */

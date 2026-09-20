@@ -2,15 +2,20 @@ package com.tailuge.billiards.cn;
 
 import android.webkit.JavascriptInterface;
 
+import java.io.File;
+import java.io.FileWriter;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
 import java.net.Socket;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * v1.3.65：局域网对战 JSBridge。
@@ -35,8 +40,156 @@ public class LanBridge {
     /** v1.3.73：probePeer 的 TCP 连接超时（毫秒） */
     private static final int PROBE_TIMEOUT_MS = 3000;
 
+    /**
+     * v1.3.80：probePeer 用的握手 Key（合法的 16 字节 base64）。
+     * 固定值即可 —— 探测不在意服务端算出的 Accept 是否正确，只在意它是否
+     * 按 WebSocket 协议回应（101 / 普通 HTTP / 无响应 / 乱码）。
+     */
+    private static final String WS_PROBE_KEY = "dGhlIHNhbXBsZSBub25jZQ==";
+
+    /** v1.3.79：局域网诊断日志文件名（落在 App 私有外部目录） */
+    private static final String LOG_FILE = "lan-diag.log";
+    /** v1.3.79：日志文件上限，超过就从头覆盖，避免无限增长 */
+    private static final long LOG_MAX_BYTES = 64 * 1024;
+
     private final MainActivity activity;
     private final LanServer server;
+
+    /**
+     * v1.3.81：原生 WebSocket **客户端**（客机侧用它连主机，不再依赖 WebView
+     * 的 new WebSocket()）。详见 NativeWsClient 的类注释。
+     */
+    private volatile NativeWsClient wsClient;
+
+    /**
+     * v1.3.81：启动原生 WebSocket 客户端连接。**异步**，结果经 __lanEvent 通知：
+     *   {"k":"wsopen"}              握手成功，可以开始发消息
+     *   {"k":"wsmsg","d":"..."}     收到一条文本消息
+     *   {"k":"wsclose","reason":".."} 连接结束（失败或对方断开）
+     *
+     * 为什么把客机连接也搬到 Java 侧：真机诊断已收敛到唯一结论 —— 同一台手机、
+     * 同一目标、同一时刻，原生 Socket 能完整完成 WebSocket 握手（probePeer 返回
+     * ok:101），而 WebView 自己的 new WebSocket() 始终 1006（连 TCP 都没建立）。
+     * 即问题在 Android WebView 的 Chromium 网络栈，不在网络与服务端。既然原生
+     * 通路已被证明可用，就直接用它承载对局消息，彻底绕开 WebView 网络栈。
+     *
+     * @param host 对方 IP（或 127.0.0.1 自连）
+     * @param port 对方端口
+     */
+    @JavascriptInterface
+    public void wsConnect(final String host, final int port) {
+        final String h = host == null ? "" : host.trim();
+        final int p = (port <= 0 || port > 65535) ? 24816 : port;
+        // 先停掉旧连接，避免重复回调
+        closeWsClient();
+        final NativeWsClient client = new NativeWsClient(new NativeWsClient.Listener() {
+            @Override
+            public void onOpen() {
+                emit("{\"k\":\"wsopen\"}");
+            }
+
+            @Override
+            public void onMessage(String text) {
+                emit("{\"k\":\"wsmsg\",\"d\":\"" + jsEscape(text) + "\"}");
+            }
+
+            @Override
+            public void onClose(String reason) {
+                emit("{\"k\":\"wsclose\",\"reason\":\"" + jsEscape(reason) + "\"}");
+            }
+
+            @Override
+            public void onLog(String line) {
+                try {
+                    diagLog("wsclient: " + line);
+                } catch (Throwable ignored) {}
+                emit("{\"k\":\"log\",\"line\":\"" + jsEscape(line) + "\"}");
+            }
+        });
+        wsClient = client;
+        client.connect(h, p);
+    }
+
+    /** v1.3.81：经原生通道发一条文本消息。返回是否发出。 */
+    @JavascriptInterface
+    public boolean wsSend(String text) {
+        NativeWsClient c = wsClient;
+        if (c == null) return false;
+        return c.sendText(text);
+    }
+
+    /** v1.3.81：关闭原生通道连接。 */
+    @JavascriptInterface
+    public void wsClose() {
+        closeWsClient();
+    }
+
+    /** v1.3.81：原生通道是否已连接。 */
+    @JavascriptInterface
+    public boolean wsConnected() {
+        NativeWsClient c = wsClient;
+        return c != null && c.isConnected();
+    }
+
+    private void closeWsClient() {
+        NativeWsClient c = wsClient;
+        wsClient = null;
+        if (c != null) {
+            try { c.close(); } catch (Throwable ignored) {}
+        }
+    }
+
+    /**
+     * v1.3.79：把一条局域网诊断记录**同时**写到 logcat 和 App 私有目录下的
+     * lan-diag.log，并把结果回读给页面。
+     *
+     * 为什么要落盘：真机上连接失败时，页面弹窗能显示的日志条数有限、用户也
+     * 未必愿意逐字敲；而 adb logcat 需要用户会连电脑。写文件后，用户在手机
+     * 「文件管理 → Android/data/com.tailuge.billiards.cn/files/」里就能把整份
+     * 现场直接发出来，一次定位。
+     *
+     * 路径：getExternalFilesDir(null)/lan-diag.log（无需存储权限，卸载即清）。
+     *
+     * @return 日志文件的绝对路径；写失败时返回错误描述（不会抛异常）
+     */
+    @JavascriptInterface
+    public String diagLog(String line) {
+        String text = line == null ? "" : line;
+        String stamp = new SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US)
+            .format(new Date());
+        String entry = "[" + stamp + "] " + text;
+        android.util.Log.d("BilliardsLan", entry);
+        File dir = null;
+        try {
+            dir = activity.getExternalFilesDir(null);
+        } catch (Throwable ignored) {
+            // 外部存储不可用时退回内部私有目录
+        }
+        if (dir == null) {
+            try {
+                dir = activity.getFilesDir();
+            } catch (Throwable t) {
+                return "error:no dir " + t.getMessage();
+            }
+        }
+        if (dir == null) return "error:no dir";
+        File f = new File(dir, LOG_FILE);
+        try {
+            if (f.exists() && f.length() > LOG_MAX_BYTES) {
+                // 简单轮转：超限就重写（保留本行即可，避免文件无限增长）
+                FileWriter reset = new FileWriter(f, false);
+                reset.write(entry + "\n");
+                reset.close();
+            } else {
+                FileWriter w = new FileWriter(f, true);
+                w.write(entry + "\n");
+                w.close();
+            }
+            return f.getAbsolutePath();
+        } catch (Throwable t) {
+            return "error:" + t.getClass().getSimpleName() + " " + t.getMessage();
+        }
+    }
 
     public LanBridge(MainActivity activity) {
         this.activity = activity;
@@ -75,6 +228,14 @@ public class LanBridge {
 
             @Override
             public void onLog(String line) {
+                // v1.3.79：服务端诊断日志双写 —— ① 落文件（主）② 推给页面
+                // （辅）。以前只推页面，而页面 onStatus 没有 log 分支，等于全
+                // 丢了；现在即使页面不处理，文件里也有完整现场。
+                try {
+                    diagLog("server: " + line);
+                } catch (Throwable ignored) {
+                    // 日志写失败绝不能影响服务端
+                }
                 emit("{\"k\":\"log\",\"line\":\"" + jsEscape(line) + "\"}");
             }
         });
@@ -193,16 +354,29 @@ public class LanBridge {
      *   b) 网络层是通的，只是 App 内明文流量被系统策略拦了（见 Manifest 的
      *      usesCleartextTraffic 注释）
      *
-     * 这里用**原生 Socket** 直连对方端口：原生 Socket 不走 HTTP 栈，不受
-     * cleartext / mixed content 策略限制，因此它能把上述两种情况分开 ——
-     *   ok       → 网络通，问题在 App/WebView 侧（引导升级 App）
-     *   timeout  → IP 不可达或对方没建房（引导检查 IP 与建房状态）
-     *   refused  → 主机在线但端口没监听（引导对方重进房间）
+     * v1.3.80 重要升级：旧实现只判断 `s.connect()` 是否成功就返回 ok ——
+     * **这个探测太浅，会给出误导性的 ok**。TCP 三次握手由内核的 listen
+     * backlog 完成，只要端口有人在听（哪怕那个程序根本不是我们的服务、
+     * 哪怕它收到数据后立刻关闭），connect 都会成功。真机上已经出现
+     * 「probePeer 报 ok，但 WebSocket 报 1006」的矛盾组合，正是被它误导。
+     *
+     * 现在改为**发一次真实的 RFC6455 握手请求并读回响应**，用对端的实际反应
+     * 定论（见下方返回码）。这是唯一能区分「端口被别的程序占了」「对端是
+     * 我们的服务但握手被吞了」「对端压根不是 WebSocket」的方法。
+     *
+     * 返回码（v1.3.80 扩展）：
+     *   ok:101       对端回了 101 Switching Protocols → 服务端完全正常，
+     *                问题在 WebView 侧（混合内容/策略），或客机代码路径
+     *   ok:http:<行> 对端回的是普通 HTTP 响应（非 101）→ **端口被别的程序占用**
+     *   ok:silent    连上了但对端读完握手请求后**一个字节都不回** →
+     *                典型的「对端 accept 了但没有服务在处理」（服务端线程
+     *                卡死 / 不在运行 / 被系统冻结）
+     *   ok:garbage   对端回了非 HTTP 的字节 → 不是 WebSocket 服务
+     *   refused      端口没人监听（主机没建房，或端口被顺延了）
+     *   timeout      连不上（IP 错 / 不在同一网段）
      *
      * 同步阻塞：由 JSBridge 线程（JavaBridge）调用，不在主线程，最多阻塞
-     * timeoutMs 毫秒，不会 ANR。
-     *
-     * @return "ok" | "timeout" | "refused:<msg>" | "error:<msg>"
+     * 约 PROBE_TIMEOUT_MS 毫秒，不会 ANR。
      */
     @JavascriptInterface
     public String probePeer(String host, int port) {
@@ -212,9 +386,40 @@ public class LanBridge {
         Socket s = new Socket();
         try {
             s.connect(new InetSocketAddress(h, port), PROBE_TIMEOUT_MS);
-            boolean connected = s.isConnected();
-            try { s.close(); } catch (Throwable ignored) {}
-            return connected ? "ok" : "error:not connected";
+            if (!s.isConnected()) return "error:not connected";
+            // v1.3.80：发标准握手请求，用对端的实际反应定论
+            s.setSoTimeout(PROBE_TIMEOUT_MS);
+            java.io.OutputStream out = s.getOutputStream();
+            // 一个固定的、符合 RFC6455 的握手请求（key 是合法的 16 字节 base64）
+            String req = "GET / HTTP/1.1\r\n"
+                + "Host: " + h + ":" + port + "\r\n"
+                + "Upgrade: websocket\r\n"
+                + "Connection: Upgrade\r\n"
+                + "Sec-WebSocket-Key: " + WS_PROBE_KEY + "\r\n"
+                + "Sec-WebSocket-Version: 13\r\n"
+                + "\r\n";
+            out.write(req.getBytes("UTF-8"));
+            out.flush();
+            // 读响应（只读第一段，足够判断）
+            byte[] buf = new byte[256];
+            int n;
+            try {
+                n = s.getInputStream().read(buf);
+            } catch (java.net.SocketTimeoutException te) {
+                // 连上了但从不应答 —— 这正是「端口有人但不干活」的特征
+                return "ok:silent";
+            }
+            if (n <= 0) return "ok:silent";
+            String resp = new String(buf, 0, n, "UTF-8");
+            if (resp.startsWith("HTTP/1.1 101") || resp.startsWith("HTTP/1.0 101")) {
+                return "ok:101";
+            }
+            if (resp.startsWith("HTTP/")) {
+                int nl = resp.indexOf("\r\n");
+                String firstLine = nl > 0 ? resp.substring(0, nl) : resp;
+                return "ok:http:" + firstLine;
+            }
+            return "ok:garbage";
         } catch (java.net.ConnectException e) {
             // Connection refused：主机在线但端口没人监听
             return "refused:" + (e.getMessage() == null ? "" : e.getMessage());

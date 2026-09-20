@@ -93,11 +93,14 @@ export function resetSeries(): void {
 }
 
 /**
- * 结算面板上展示的那一行文案，例如「系列赛　你 2 : 1 电脑」。
- * 不在人机对战模式下（或一局都没打）时返回空串，调用方直接跳过即可。
+ * 结算面板上展示的那一行文案，例如「局比分　你 2 : 1 对手」。
+ * 不在连续对局模式下（或一局都没打）时返回空串，调用方直接跳过即可。
+ *
+ * v1.3.83：称呼从「系列赛」改为「局比分」—— 局域网对战也走这条累计，而
+ * 「系列赛」在用户看来更像人机专用的赛制名；「局比分」对两种模式都准确。
  */
 export function seriesText(rule: string, opponentLabel = "电脑"): string {
   const s = getSeries(rule)
   if (s.you === 0 && s.cpu === 0) return ""
-  return `系列赛　你 ${s.you} : ${s.cpu} ${opponentLabel}`
+  return `局比分　你 ${s.you} : ${s.cpu} ${opponentLabel}`
 }

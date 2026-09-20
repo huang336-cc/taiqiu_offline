@@ -853,7 +853,12 @@ if (this.camTopDown) {
 // 相机每帧以 0.12 系数平滑飞向该机位；出杆后不做「锁机位」、也不「追袋口」。
 // 旧版的 forceMove(aim)（fraction=1 瞬间摆位）与 cueTrack 稀释、进球后微调
 // 会令镜头每杆跳切、并随进球乱飞，观感不如这种稳定的平滑跟随。
-cam.setReplayFrame(focus)
+// v1.3.76：把本杆出杆方向一并交给相机 —— 跟随机位要沿**出杆方向**站在母球
+// 后上方，而不是沿「母球 → 袋口」。后者实测平均偏 7.8°、P90 17.3°、极端切球
+// 偏 68.3°（tools/harness/replayyaw.ts，600 杆采样），用袋口方向摆机位会让
+// 画面里的击球方向和玩家实际打的方向对不上（用户反馈「回放模式下摄像头方向
+// 应与出杆方向一致」）。传入 aim.angle 后这部分误差为 0。
+cam.setReplayFrame(focus, (aim as { angle?: number } | undefined)?.angle)
 }
 
 /**

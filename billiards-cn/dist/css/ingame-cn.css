@@ -365,6 +365,16 @@ body.lod-low .hitButton {
   background: rgba(255, 255, 255, 0.55);
   border-radius: 1px;
   pointer-events: none;
+  transition: opacity 0.12s linear;
+}
+
+/* v1.3.76：旋钮离开中心后淡出中央基准刻线。
+   静止时刻线正好被旋钮压住、看不出来；旋钮一滑到条子两端，刻线（细白竖条）
+   与旋钮（金色方块）就变成屏幕上并排的两根竖指示线，玩家分不清哪一根才是
+   当前瞄准位置。这里让刻线随旋钮离位而隐藏，保证任何时刻画面上只有一根
+   位置指示；松手归中后（类被移除）刻线自动淡回。 */
+.aim-angle-bar.aim-off-center .aim-angle-center {
+  opacity: 0;
 }
 
 input[type="range"].aim-angle-slider {

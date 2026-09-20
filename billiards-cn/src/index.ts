@@ -4,6 +4,7 @@ import { getCanvas } from "./utils/dom"
 import { VERSION } from "./utils/version"
 import { Settings } from "./utils/settings"
 import { PocketGeometry } from "./view/pocketgeometry"
+import { restartGame as restartMatch } from "./view/notification"
 
 customElements.define("angle-input", AngleInput)
 
@@ -148,12 +149,13 @@ function setupOverlayControls(browserContainer: BrowserContainer) {
           },
           0,
           {
-            "confirm-restart": () => globalThis.location.reload(),
+            // v1.3.76：与结算面板「继续对战」共用同一套确定性重开
+            "confirm-restart": () => restartMatch(),
             "cancel-restart": () => c.notification.clear(),
           }
         )
       } else {
-        globalThis.location.reload()
+        restartMatch()
       }
     }
   }

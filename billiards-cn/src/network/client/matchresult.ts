@@ -47,10 +47,15 @@ export class MatchResultHelper {
     // 「再来一局」走 location.reload()，URL 上的 ?bot=&ruletype= 参数原样带回，
     // 所以同一玩法连打会自动累加；换玩法或退回主菜单时清零（见 series.ts）。
     // 注意这里必须在 notifyEndState 之前记，否则面板读到的是上一局的比分。
+    //
+    // v1.3.83：判据从 `isBotMode()` 换成 `isSeriesMode()` —— 局域网对战同样
+    // 「打完一局能接着开下一局」，此前被排除在外，导致局比分既不记也不显示
+    // （用户反馈第 1 条）。局域网对手名用 Session.opponentName（initLanMode
+    // 里设为「对手」）。
     let seriesLine = ""
-    if (Session.isBotMode()) {
+    if (Session.isSeriesMode()) {
       recordResult(rulename, amIWinner)
-      seriesLine = seriesText(rulename)
+      seriesLine = seriesText(rulename, this.seriesOpponentLabel())
     }
     const finalSubtext = seriesLine
       ? subtext
@@ -63,6 +68,18 @@ export class MatchResultHelper {
     const result = this.createMatchResult(rulename, session, amIWinner)
 
     return new End(container, result)
+  }
+
+  /**
+   * v1.3.83：系列赛行末尾的对手称呼。
+   *
+   * 人机对战用比分栏同款的名字（含难度，如「电脑(专业)」，由 Session.opponentName
+   * 在 BrowserContainer 里写入）；局域网对战的人是对面那位玩家，叫「电脑」显然
+   * 不对，统一叫「对手」（initLanMode 也把 opponentName 设为「对手」）。
+   */
+  private static seriesOpponentLabel(): string {
+    if (!Session.isBotMode()) return "对手"
+    return Session.getInstance().opponentName ?? "电脑"
   }
 
   private static determineWinner(
@@ -274,7 +291,18 @@ export class MatchResultHelper {
     return gameOverButtons.forMode(Session.isBotMode())
   }
 
+  /**
+   * v1.3.83：局域网对战（远端对手）的结算按钮。
+   *
+   * 此前一律调 `forMode()` 无参 → 首个按钮是「再来一局」。但局域网同样是
+   * 连续对局，局比分会在本局结算时累加，按钮语义与「继续对战」完全一致
+   * （用户反馈里也一直称之为「继续对战」）。现按模式分派：人机沿用 forMode
+   * 的结果，局域网走新的 forLan()。
+   */
   private static getRemoteGameOverButtons(): string {
+    if (Session.isSeriesMode() && !Session.isBotMode()) {
+      return gameOverButtons.forLan()
+    }
     return gameOverButtons.forMode()
   }
 

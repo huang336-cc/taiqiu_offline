@@ -6,24 +6,31 @@
  *   - 继续游戏   → 关闭弹窗，什么都不做
  *   - 返回主菜单 → 清零系列赛比分并 location.href 跳回 menu.html
  *
- * 该脚本由 dist/index.html 通过 <script> 引入（webpack 不处理 dist/，
+ * 该脚本由 dist/play.html 通过 <script> 引入（webpack 不处理 dist/，
  * 所以下次 build 不会被覆盖）。
  *
  * 注：纯 JS 实现，不依赖任何第三方库；同时监听 popstate 以防某些
  * WebView 版本直接走 history.go(-1)。
  *
- * v1.3.75：
- *  1) 主题统一 —— 此前弹窗是深绿灰 #1f2a26 + 橙色 #d84315，与游戏内主菜单 /
- *     比分栏 / 底部栏的金棕木纹完全不是一个体系。现改为同一套「金棕木纹」：
- *     木纹渐变底 (#6b4a22 → #4a3014) + 金边 (#c89534) + 奶油金字 (#f3d79a)，
- *     与 dist/css/scoreboard-v2.css 的 --sc-wood-1 / --sc-wood-2 / --sc-gold 一致。
- *  2) 排版修复 —— 旧版 panel 用 min-width:280px + max-width:84vw 且按钮固定
- *     min-width:96px、靠 justify-content:center 排布，横屏长文案下按钮会挤到
- *     右侧甚至被裁掉半个字。现改为：面板定宽 min(520px, 86vw)、三段式层级
- *     （标题 / 正文 / 按钮行），按钮行两个等宽按钮 flex:1 1 0 + min-width:0，
- *     文字 nowrap 不截断、两端留白不贴边。
- *  3) 系列赛提示 —— 返回主菜单会清零「系列赛 你 X : Y 电脑」的累计，
- *     弹窗里显式读出当前比分并提示，确认时才真正清 localStorage。
+ * v1.3.75：主题统一为「金棕木纹」+ 三段式层级 + 系列赛清零提示。
+ *
+ * v1.3.76：把 inset/min()/gap 换成老 WebView 兼容写法（方向没找对）。
+ *
+ * v1.3.77：真正的根因找到了 —— **类名撞车**。此前面板用
+ * className="panel"，而游戏自身 css（index.css / bottombar-v2.css /
+ * ingame-cn.css）里 .panel 是「底部操作栏」的样式：display:flex;
+ * flex-direction:row; height:70px; align-items:flex-end; position:relative。
+ * 我们的规则从没声明过这些属性，于是它们全部漏进弹窗：
+ * 面板被横排 + 压扁成 70px 高 —— 标题逐字竖排、正文/提示/按钮挤成
+ * 一条横带（用户三次反馈的「排版错误」全是它，任何内核都会乱）。
+ * 桌面 chromium 上已 100% 复现并验证。
+ * 修复（三重防御）：
+ *   1) 弹窗内所有元素改用 bc 前缀专属类名（.bcpanel/.bctitle/...），
+ *      不再使用 panel/h3/p 等会被全局规则命中的类名与裸元素样式；
+ *   2) 每条规则显式写全 display/position/float/height/width 等关键属性
+ *      （height:auto;float:none;position:static...），把可能的污染维度堵死；
+ *   3) 遮罩与面板的尺寸/位置由 JS 用 innerWidth/innerHeight 以像素内联，
+ *      不再依赖 vw/%/flex 的居中与铺屏（保留 fixed + 居中作为无 JS 时的兜底）。
  */
 ;(function () {
   "use strict"
@@ -56,65 +63,98 @@
     var s = document.createElement("style")
     s.id = STYLE_ID
     s.textContent = [
+      /* 遮罩：显式四边（不用 inset），宽高由 JS 再按像素补一道保险 */
       "#" + BACKDROP_ID + "{",
-      "  position:fixed;inset:0;background:rgba(0,0,0,0.6);",
-      "  display:flex;align-items:center;justify-content:center;",
-      "  z-index:99999;backdrop-filter:blur(3px);",
-      "  -webkit-backdrop-filter:blur(3px);",
+      "  position:fixed;top:0;right:0;bottom:0;left:0;",
+      "  width:100%;height:100%;",
+      "  background:rgba(0,0,0,0.6);",
+      "  z-index:99999;",
       "  -webkit-tap-highlight-color:transparent;",
       "  padding:16px;box-sizing:border-box;",
+      "  -webkit-text-size-adjust:100%;text-size-adjust:100%;",
+      /* v1.3.77：不再用 flex 居中。JS 直接像素定位面板，这里只留背景与层级 */
       "}",
-      /* 面板：金棕木纹，与比分栏 / 主菜单卡片同款 */
-      "#" + BACKDROP_ID + " .panel{",
+      /* 面板：专属类名，避开游戏自身 .panel（底部操作栏）的全部样式。
+         关键属性显式写全：块级流、高度自适应、不浮动、不伸缩 —— 任何全局
+         规则都改不动它的布局骨架。装饰（金棕木纹/金边）沿用同款主题。 */
+      "#" + BACKDROP_ID + " .bcpanel{",
+      "  display:block;position:relative;float:none;",
       "  box-sizing:border-box;",
-      "  width:min(520px,86vw);max-width:86vw;",
+      "  width:86vw;max-width:520px;min-width:0;",
+      "  height:auto;min-height:0;max-height:none;",
+      "  margin:0 auto;", /* 块级 + 定宽 + auto 边距 = 水平居中（无 flex 依赖） */
+      "  top:0;right:0;bottom:0;left:0;",
+      "  background:#5a3c1b;",
+      "  background:-webkit-linear-gradient(top,#6b4a22 0%,#4a3014 100%);",
       "  background:linear-gradient(180deg,#6b4a22 0%,#4a3014 100%);",
       "  border:1.5px solid #c89534;border-radius:14px;",
       "  box-shadow:0 12px 32px rgba(0,0,0,0.55),inset 0 1px 0 rgba(255,225,160,0.18);",
       "  color:#f3d79a;padding:18px 20px 16px;text-align:center;",
-      "  font-family:system-ui,-apple-system,'Segoe UI',sans-serif;",
+      "  font-family:system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;",
+      "  -webkit-text-size-adjust:100%;text-size-adjust:100%;",
       "}",
-      /* 标题：金色，层级最高 */
-      "#" + BACKDROP_ID + " h3{",
-      "  margin:0 0 10px;font-size:18px;line-height:1.35;font-weight:700;",
+      /* 标题 / 正文 / 系列赛提示：全部专属类名 + 块级流 + 宽度自适应，
+         不用 h3/p 裸元素选择器，防止被任何针对裸元素的全局规则波及 */
+      "#" + BACKDROP_ID + " .bctitle{",
+      "  display:block;margin:0 0 10px;padding:0;",
+      "  font-size:18px;line-height:1.35;font-weight:700;",
       "  color:#e7b14b;letter-spacing:0.5px;",
       "  text-shadow:0 1px 2px rgba(0,0,0,0.6);",
+      "  white-space:normal;word-break:break-word;",
       "}",
-      /* 正文：两行，主提示 + 系列赛弱提示 */
-      "#" + BACKDROP_ID + " p{margin:0 0 6px;font-size:14px;line-height:1.6;color:#f3d79a;}",
-      "#" + BACKDROP_ID + " .series{",
-      "  margin:0 0 16px;font-size:13px;line-height:1.5;",
+      "#" + BACKDROP_ID + " .bctext{",
+      "  display:block;margin:0 0 6px;padding:0;",
+      "  font-size:14px;line-height:1.6;color:#f3d79a;",
+      "  white-space:normal;word-break:break-word;",
+      "}",
+      "#" + BACKDROP_ID + " .bcseries{",
+      "  display:block;margin:0 0 16px;padding:0;",
+      "  font-size:13px;line-height:1.5;",
       "  color:rgba(243,215,154,0.78);",
+      "  white-space:normal;word-break:break-word;",
       "}",
-      "#" + BACKDROP_ID + " .series b{color:#e7b14b;font-weight:700;}",
-      /* 按钮行：两个等宽按钮，不贴边、不截断 */
-      "#" + BACKDROP_ID + " .actions{",
-      "  display:flex;gap:12px;justify-content:center;align-items:stretch;",
+      "#" + BACKDROP_ID + " .bcseries b{color:#e7b14b;font-weight:700;}",
+      /* 按钮行：text-align 居中 + inline-block 按钮（CSS2.1，全内核兼容）。
+         font-size:0 消除 inline-block 之间的空隙，按钮内再单独设字号 */
+      "#" + BACKDROP_ID + " .bcactions{",
+      "  display:block;position:static;float:none;",
+      "  margin:0;padding:0;text-align:center;",
+      "  font-size:0;line-height:0;height:auto;width:auto;",
+      "  white-space:nowrap;",
       "}",
-      "#" + BACKDROP_ID + " button{",
-      "  flex:1 1 0;min-width:0;max-width:200px;",
-      "  border-radius:10px;padding:11px 8px;",
-      "  font-size:15px;font-weight:600;line-height:1.2;",
+      "#" + BACKDROP_ID + " button.bcbtn{",
+      "  display:inline-block;vertical-align:middle;",
+      "  position:static;float:none;clear:none;",
+      "  box-sizing:border-box;",
+      "  width:200px;max-width:44%;min-width:0;height:auto;min-height:0;",
+      "  margin:0 5px;padding:11px 8px;",
+      "  font-family:inherit;font-size:15px;line-height:1.2;font-weight:600;",
+      "  letter-spacing:normal;text-indent:0;",
       "  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;",
-      "  cursor:pointer;font-family:inherit;",
-      "  border:1px solid #c89534;",
+      "  cursor:pointer;text-align:center;text-decoration:none;",
+      "  border:1px solid #c89534;border-radius:10px;",
+      "  -webkit-text-size-adjust:100%;text-size-adjust:100%;",
       "}",
-      "#" + BACKDROP_ID + " .secondary{",
+      "#" + BACKDROP_ID + " .bcbtn.secondary{",
+      "  background:#7a5730;",
+      "  background:-webkit-linear-gradient(top,#7a5730 0%,#54371a 100%);",
       "  background:linear-gradient(180deg,#7a5730 0%,#54371a 100%);",
       "  color:#f7e6bb;",
       "}",
-      "#" + BACKDROP_ID + " .danger{",
+      "#" + BACKDROP_ID + " .bcbtn.danger{",
+      "  background:#8e2f22;",
+      "  background:-webkit-linear-gradient(top,#8e2f22 0%,#5f1d14 100%);",
       "  background:linear-gradient(180deg,#8e2f22 0%,#5f1d14 100%);",
       "  color:#ffd9c2;border-color:#e0a06a;",
       "}",
-      "#" + BACKDROP_ID + " button:active{opacity:0.82;transform:translateY(1px);}",
-      /* 横屏矮屏：收紧纵向留白，避免弹窗高度溢出 */
+      "#" + BACKDROP_ID + " button.bcbtn:active{opacity:0.82;}",
+      /* 横屏矮屏：收紧纵向留白与字号，避免弹窗高度溢出 */
       "@media (max-height:480px){",
-      "  #" + BACKDROP_ID + " .panel{padding:14px 16px 12px;}",
-      "  #" + BACKDROP_ID + " h3{font-size:16px;margin-bottom:8px;}",
-      "  #" + BACKDROP_ID + " p{font-size:13px;margin-bottom:4px;}",
-      "  #" + BACKDROP_ID + " .series{margin-bottom:12px;font-size:12px;}",
-      "  #" + BACKDROP_ID + " button{padding:9px 8px;font-size:14px;}",
+      "  #" + BACKDROP_ID + " .bcpanel{padding:12px 14px 10px;}",
+      "  #" + BACKDROP_ID + " .bctitle{font-size:16px;margin-bottom:6px;}",
+      "  #" + BACKDROP_ID + " .bctext{font-size:13px;margin-bottom:4px;}",
+      "  #" + BACKDROP_ID + " .bcseries{margin-bottom:10px;font-size:12px;}",
+      "  #" + BACKDROP_ID + " button.bcbtn{padding:8px 8px;font-size:14px;}",
       "}",
     ].join("")
     document.head.appendChild(s)
@@ -123,7 +163,47 @@
   function removeDialog() {
     var bd = document.getElementById(BACKDROP_ID)
     if (bd && bd.parentNode) bd.parentNode.removeChild(bd)
+    window.removeEventListener("resize", onViewportChange, false)
     state = null
+  }
+
+  /** v1.3.77：视口变化（转屏/出键盘）时重新按像素摆放弹窗 */
+  function onViewportChange() {
+    var bd = document.getElementById(BACKDROP_ID)
+    if (!bd) return
+    var panel = bd.firstChild
+    placePanel(bd, panel)
+  }
+
+  /**
+   * v1.3.77：按视口像素摆放弹窗 —— 不再依赖 flex/vw/% 做居中与铺屏。
+   * 遮罩宽高 = 视口像素；面板定宽（520 与视口取小）、水平居中（auto 边距），
+   * 垂直位置在渲染后量高再定（视口中心）。
+   */
+  function placePanel(bd, panel) {
+    var vw = window.innerWidth || document.documentElement.clientWidth || 360
+    var vh = window.innerHeight || document.documentElement.clientHeight || 640
+    // 遮罩铺满视口（像素兜底，防 % 失效）
+    bd.style.width = vw + "px"
+    bd.style.height = vh + "px"
+    // 面板定宽
+    var W = Math.max(240, Math.min(520, vw - 32))
+    panel.style.width = W + "px"
+    // 高度要等内容排完 —— 下一帧量高再垂直居中
+    setTimeout(function () {
+      var h = panel.offsetHeight || 0
+      var top = Math.max(12, Math.round((vh - h) / 2))
+      // 矮横屏时略偏上一点，视觉更稳
+      if (vh < 480) top = Math.max(8, Math.round((vh - h) / 2) - 10)
+      panel.style.marginTop = top + "px"
+    }, 0)
+  }
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag)
+    if (cls) n.className = cls
+    if (text != null) n.textContent = text
+    return n
   }
 
   function showDialog() {
@@ -131,30 +211,22 @@
     ensureStyle()
     if (document.getElementById(BACKDROP_ID)) return
 
-    var bd = document.createElement("div")
+    var bd = el("div")
     bd.id = BACKDROP_ID
     bd.setAttribute("role", "dialog")
     bd.addEventListener("click", function (e) {
       // 点空白处等同"继续游戏"
       if (e.target === bd) removeDialog()
     })
-    var panel = document.createElement("div")
-    panel.className = "panel"
-    var h = document.createElement("h3")
-    h.textContent = "返回主菜单？"
-    var p = document.createElement("p")
-    p.textContent = "本局进度将不会保存，确认要返回主菜单吗？"
+    var panel = el("div", "bcpanel")
+    var title = el("div", "bctitle", "返回主菜单？")
+    var text = el("div", "bctext", "本局进度将不会保存，确认要返回主菜单吗？")
 
-    var actions = document.createElement("div")
-    actions.className = "actions"
-    var btnStay = document.createElement("button")
-    btnStay.className = "secondary"
+    var actions = el("div", "bcactions")
+    var btnStay = el("button", "bcbtn secondary", "继续游戏")
     btnStay.type = "button"
-    btnStay.textContent = "继续游戏"
-    var btnExit = document.createElement("button")
-    btnExit.className = "danger"
+    var btnExit = el("button", "bcbtn danger", "返回主菜单")
     btnExit.type = "button"
-    btnExit.textContent = "返回主菜单"
     btnStay.addEventListener("click", removeDialog)
     btnExit.addEventListener("click", function () {
       // 标记已确认，避免被 popstate 拦截再次弹窗
@@ -174,21 +246,21 @@
     })
     actions.appendChild(btnStay)
     actions.appendChild(btnExit)
-    panel.appendChild(h)
-    panel.appendChild(p)
+    panel.appendChild(title)
+    panel.appendChild(text)
     var line = seriesLine()
     if (line) {
-      var sp = document.createElement("p")
-      sp.className = "series"
+      var sp = el("div", "bcseries")
       sp.appendChild(document.createTextNode("返回后系列赛比分将清零："))
-      var b = document.createElement("b")
-      b.textContent = line
-      sp.appendChild(b)
+      sp.appendChild(el("b", null, line))
       panel.appendChild(sp)
     }
     panel.appendChild(actions)
     bd.appendChild(panel)
     document.body.appendChild(bd)
+    // v1.3.77：像素级摆放（遮罩铺屏 + 面板居中），并跟踪转屏
+    placePanel(bd, panel)
+    window.addEventListener("resize", onViewportChange, false)
     state = { dialog: bd }
     // 自动聚焦到"继续游戏"，按 Enter 直接继续
     setTimeout(function () {

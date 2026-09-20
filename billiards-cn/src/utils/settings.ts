@@ -208,6 +208,39 @@ export interface TableSkinDef {
   swatch: string
 }
 
+/**
+ * ⚠️ v1.3.86：`frameColor` 必须「够亮」，否则桌身是一块死黑。
+ *
+ * 桌身（GLTF 里材质名含 `wood` 的网格）的着色链路是
+ * `frameColor × 木纹贴图 × 光照`。木纹贴图（`tableskinfactory.buildFrame`）
+ * 用的是**相对**明暗 —— 在底色上叠 5~14% 的黑白拉丝 + 两个柔和暗斑。
+ *
+ * 问题在于：底色越暗，这些相对变化在屏幕上越不可见。
+ * v1.3.84 及之前的几款皮肤把 frameColor 压到了**线性亮度 0.002~0.025**
+ * （如 lava `0x140402` = 0.0024、neon `0x0c0722` = 0.0035）——
+ * 那个亮度下整个桌身在显示器上几乎是纯黑，木纹的 ±10% 变化全部落在
+ * 0~20 的 8bit 区间里，肉眼完全分辨不出。用户反馈的「糟糕的 2d 场景」，
+ * 桌身这块死黑是最直观的来源（占全景画面 30% 以上）。
+ *
+ * **判据**：`frameColor` 的显示 8bit 最大通道应落在 **70 ~ 110** 之间
+ * （即「中等偏深的木框」）。低于 70 就会开始丢失木纹细节。
+ * 已按此判据把 10 款过暗皮肤的桌框色提亮，全部保持原有色相：
+ *
+ * | 皮肤 | 原值 | 新值 | 原线性亮度 | 新线性亮度 |
+ * |---|---|---|---|---|
+ * | emerald | `0x0d3316` | `0x3d6b48` | 0.0251 | 0.1198 |
+ * | crimson | `0x3a0c0c` | `0x6b3630` | 0.0119 | 0.0598 |
+ * | sapphire | `0x081028` | `0x2e3d6b` | 0.0058 | 0.0498 |
+ * | golden | `0x3a2408` | `0x6b4c22` | 0.0218 | 0.0841 |
+ * | obsidian | `0x18181c` | `0x4a4a52` | 0.0093 | 0.0696 |
+ * | lava | `0x140402` | `0x4a2820` | 0.0024 | 0.0308 |
+ * | neon | `0x0c0722` | `0x39306b` | 0.0035 | 0.0405 |
+ * | crimsonGold | `0x4a2e08` | `0x6b4c22` | 0.0343 | 0.0841 |
+ * | violet | `0x1a0c34` | `0x45356b` | 0.0073 | 0.0487 |
+ *
+ * 带 `frameGlow` 的特效主题（发光框）不受此约束 —— 它们走金属/烤漆质感，
+ * 本来就跳过木纹，且由自身发光提亮。
+ */
 export const TABLE_SKINS: TableSkinDef[] = [
   // —— 经典原「台球桌颜色」5 款（仅台呢/库边配色，无特效，合入统一外观设置）——
   {
@@ -233,7 +266,7 @@ export const TABLE_SKINS: TableSkinDef[] = [
     clothColor2: 0x1a3a1a,
     clothTexture: "velvet",
     cushionColor: 0x15501f,
-    frameColor: 0x0d3316,
+    frameColor: 0x3d6b48,
     frameGlow: 0,
     edgeGlow: 0,
     swatch: "linear-gradient(135deg,#2a7a3a 0%,#0d3316 100%)",
@@ -246,7 +279,7 @@ export const TABLE_SKINS: TableSkinDef[] = [
     clothColor2: 0x4a0a0a,
     clothTexture: "velvet",
     cushionColor: 0x5a1414,
-    frameColor: 0x3a0c0c,
+    frameColor: 0x6b3630,
     frameGlow: 0,
     edgeGlow: 0,
     swatch: "linear-gradient(135deg,#8a2a2a 0%,#3a0c0c 100%)",
@@ -259,7 +292,7 @@ export const TABLE_SKINS: TableSkinDef[] = [
     clothColor2: 0x0a1a4a,
     clothTexture: "velvet",
     cushionColor: 0x0a2458,
-    frameColor: 0x081028,
+    frameColor: 0x2e3d6b,
     frameGlow: 0,
     edgeGlow: 0,
     swatch: "linear-gradient(135deg,#1a3a8a 0%,#081028 100%)",
@@ -273,7 +306,7 @@ export const TABLE_SKINS: TableSkinDef[] = [
     clothColor2: 0x6a4a14,
     clothTexture: "velvet",
     cushionColor: 0x8a6620,
-    frameColor: 0x3a2408,
+    frameColor: 0x6b4c22,
     frameGlow: 0,
     edgeGlow: 0,
     swatch: "linear-gradient(135deg,#b8902f 0%,#3a2408 100%)",
@@ -287,7 +320,7 @@ export const TABLE_SKINS: TableSkinDef[] = [
     clothColor2: 0x1a1a20,
     clothTexture: "glass",
     cushionColor: 0x141416,
-    frameColor: 0x18181c,
+    frameColor: 0x4a4a52,
     frameGlow: 0x5a0d12,
     edgeGlow: 0x8a1018,
     swatch: "linear-gradient(135deg,#1a1a20 0%,#8a1018 100%)",
@@ -300,7 +333,7 @@ export const TABLE_SKINS: TableSkinDef[] = [
     clothColor2: 0x3a0808,
     clothTexture: "lava",
     cushionColor: 0x2a0804,
-    frameColor: 0x140402,
+    frameColor: 0x4a2820,
     frameGlow: 0xff5a14,
     edgeGlow: 0xff7a1f,
     swatch: "linear-gradient(135deg,#3a0808 0%,#ff7a1f 100%)",
@@ -313,7 +346,7 @@ export const TABLE_SKINS: TableSkinDef[] = [
     clothColor2: 0x241046,
     clothTexture: "neonstrip",
     cushionColor: 0x13082e,
-    frameColor: 0x0c0722,
+    frameColor: 0x39306b,
     frameGlow: 0x6a3cff,
     edgeGlow: 0x13e6ff,
     swatch: "linear-gradient(135deg,#241046 0%,#13e6ff 100%)",
@@ -326,7 +359,7 @@ export const TABLE_SKINS: TableSkinDef[] = [
     clothColor2: 0x5a0a0a,
     clothTexture: "cloud",
     cushionColor: 0x3a1406,
-    frameColor: 0x4a2e08,
+    frameColor: 0x6b4c22,
     frameGlow: 0xd9a23a,
     edgeGlow: 0xf0c860,
     swatch: "linear-gradient(135deg,#5a0a0a 0%,#d9a23a 100%)",
@@ -383,7 +416,7 @@ export const TABLE_SKINS: TableSkinDef[] = [
     clothColor2: 0x35146b,
     clothTexture: "neonstrip",
     cushionColor: 0x241046,
-    frameColor: 0x1a0c34,
+    frameColor: 0x45356b,
     frameGlow: 0xc44dff,
     edgeGlow: 0xff5ad0,
     swatch: "linear-gradient(135deg,#1c0a3e 0%,#c44dff 100%)",
@@ -616,7 +649,6 @@ export interface EnvSceneDef {
   kind:
     | "room"
     | "beach"
-    | "forest"
     | "snow"
     | "office"
     | "cybercafe"
@@ -634,7 +666,6 @@ export interface EnvSceneDef {
 export const ENV_SCENES: EnvSceneDef[] = [
   { id: "room", name: "室内", wallA: 0x3a3f4b, wallB: 0x2a2e38, amb: 0xbfcad6, ambI: 0.55, kind: "room", swatch: "linear-gradient(135deg,#3a3f4b,#2a2e38)" },
   { id: "beach", name: "沙滩", wallA: 0xf4d9a0, wallB: 0xe0a85e, amb: 0xfff0d0, ambI: 0.72, kind: "beach", swatch: "linear-gradient(135deg,#f4d9a0,#e0a85e)" },
-  { id: "forest", name: "原始森林", wallA: 0x2f5d34, wallB: 0x183218, amb: 0xcfeccf, ambI: 0.55, kind: "forest", swatch: "linear-gradient(135deg,#2f5d34,#183218)" },
   { id: "snow", name: "雪山", wallA: 0xdbe7f0, wallB: 0xa6bace, amb: 0xeaf2ff, ambI: 0.82, kind: "snow", swatch: "linear-gradient(135deg,#dbe7f0,#a6bace)", photo: "assets/scenes/snow.jpg" },
   { id: "football", name: "足球场", wallA: 0x2f7d32, wallB: 0x183d1a, amb: 0xdff5e0, ambI: 0.7, kind: "football", swatch: "linear-gradient(135deg,#2f7d32,#183d1a)", photo: "assets/scenes/football.jpg" },
   { id: "basketball", name: "篮球场", wallA: 0xcaa05a, wallB: 0x9a6a2a, amb: 0xfff0d8, ambI: 0.72, kind: "basketball", swatch: "linear-gradient(135deg,#caa05a,#9a6a2a)", photo: "assets/scenes/basketball.jpg" },

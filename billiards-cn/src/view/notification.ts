@@ -37,6 +37,45 @@ export interface NotificationData {
 
 export type NotificationActionHandlers = Record<string, () => void>
 
+/**
+ * v1.3.76：「再来一局 / 继续对战」的**确定性重开**。
+ *
+ * 原先直接 `location.reload()`，在真机上偶发「点完继续对战却直接退出游戏」：
+ *  1. reload 原样保留当前 URL。若 URL 上还挂着 `?state=` / `?replayId=`
+ *     （本页此前看过回放时会残留），重开后 BrowserContainer 会再次走进
+ *     回放分支；`?replayId=` 对应的 sessionStorage 数据在重载后已失效，
+ *     它会 **不由分说地自动跳回主菜单**（browsercontainer.ts 的兜底分支）——
+ *     这正是「没点返回却自己退出」的一种来源。
+ *  2. reload 会在历史栈上再叠一条记录，与返回键确认脚本的
+ *     pushState / popstate 兜底互相干扰，某些 WebView 上会触发一次意外的
+ *     后退导航。
+ *
+ * 改法：显式重建一个干净 URL（只丢回放相关参数，其余如 bot / ruletype /
+ * timer 全部保留），用 `location.replace` 而不是 `reload` —— 不新增历史
+ * 条目、不触发后退语义，并用一次性锁杜绝连点/双事件导致的重复导航。
+ */
+const RESTART_DROP_PARAMS = ["state", "replayId", "replay", "_r"]
+let restartPending = false
+
+export function restartGame(): void {
+  if (restartPending) return
+  restartPending = true
+  try {
+    const url = new URL(globalThis.location.href)
+    for (const key of [...url.searchParams.keys()]) {
+      if (RESTART_DROP_PARAMS.includes(key)) {
+        url.searchParams.delete(key)
+      }
+    }
+    url.searchParams.set("_r", String(Date.now()))
+    globalThis.location.replace(url.toString())
+    return
+  } catch (e) {
+    // 极老的 WebView 没有 URL 构造器 → 退回原来的 reload
+  }
+  globalThis.location.reload()
+}
+
 export class Notification {
   element: HTMLDivElement
   overlay: HTMLDivElement | null
@@ -52,6 +91,14 @@ export class Notification {
    // 可被外部强制清空（stickyKey=null）后强制关闭。
    */
   stickyKey: string | null = null
+
+  /**
+   * v1.3.76：结算面板（GameOver）当前是否在屏。
+   * 比赛已经结束后偶有「最后一杆同时判了犯规」的提示晚一步到达，
+   * 它会把结算面板整个替换掉——玩家看到的是「结算按钮凭空消失」，
+   * 观感等同自动退出。这里让结算面板在屏时直接忽略犯规提示。
+   */
+  private showingGameOver = false
 
   constructor() {
     this.overlay = id("notificationOverlay") as HTMLDivElement | null
@@ -101,6 +148,15 @@ export class Notification {
       // v1.3.67：sticky 提示也禁用触碰关闭（需要长驻到外部 dismiss）。
       this.touchDismiss =
         !data.sticky && !this.hasActionButtons(data)
+    }
+
+    // v1.3.76：结算面板在屏时不再被犯规提示冲掉（见 showingGameOver 注释）
+    if (
+      typeof data === "object" &&
+      data?.type === "Foul" &&
+      this.showingGameOver
+    ) {
+      return
     }
 
     // v1.3.67：粘性守卫 —— 如果当前有 sticky 提示在屏，且这次不是同 key 的
@@ -161,8 +217,14 @@ export class Notification {
   }
 
   /**
-   * v1.3.67：渲染 sticky 提示里的 detail 子块（如本机 IP + 复制按钮）。
+   * v1.3.67：渲染 sticky 提示里的 detail 子块（如本机 IP）。
    * 仅在 data.detail 存在时输出。value 转义避免被当 HTML 解析。
+   *
+   * v1.3.82：**移除「复制」按钮**（用户要求）。
+   * 局域网对战的房间地址现在在弹窗里直接展示为纯文本，用户手抄或直接念给
+   * 对方即可 —— 按钮既占地方，在小屏上还容易误触。历史上 v1.3.68 曾按
+   * value 是否匹配 `^[0-9a-zA-Z.:_-]{4,64}$` 来决定是否渲染该按钮，现整段删除；
+   * 对应的事件处理分支仍保留（见下方 copy-ip），避免旧页面残留按钮时点击报错。
    */
   private renderDetail(data: NotificationData): string {
     if (!data.detail || !data.detail.value) return ""
@@ -173,19 +235,11 @@ export class Notification {
     const hint = data.detail.hint
       ? `<div class="notification-detail-hint">${this.escapeHtml(data.detail.hint)}</div>`
       : ""
-    // v1.3.68：只有 value 是"可复制的机器数据"（如 IP 地址）时才给复制按钮；
-    // 「未连接 Wi-Fi」这类诊断文案复制了没用，反而误导。判定规则：纯 IP/主机名
-    // 字符（数字、点、冒号、字母、连字符）且长度在 4~64 之间。
-    const copyable = /^[0-9a-zA-Z.:_-]{4,64}$/.test(data.detail.value)
-    const copyBtn = copyable
-      ? `<button data-notification-action="copy-ip" class="notification-copy-btn" type="button">复制</button>`
-      : ""
     return `
       <div class="notification-detail">
         ${label}
         <div class="notification-detail-row">
           <span class="notification-detail-value">${value}</span>
-          ${copyBtn}
         </div>
         ${hint}
       </div>
@@ -283,6 +337,7 @@ export class Notification {
     this.element.innerHTML = content
     this.element.className = "" // Clear previous classes
     this.element.classList.add(...typeClass.split(" "))
+    this.showingGameOver = typeClass.includes("type-GameOver")
     this.element.style.display = "flex"
     if (this.overlay) {
       this.overlay.style.pointerEvents = "auto"
@@ -341,7 +396,9 @@ export class Notification {
         break
       case "reload":
       case "replay":
-        globalThis.location.reload()
+        // v1.3.76：走确定性重开（干净 URL + replace + 一次性锁），
+        // 不再裸调 location.reload()
+        restartGame()
         break
       case "menu":
       case "lobby":
@@ -401,6 +458,8 @@ export class Notification {
     }
     // v1.3.67：清掉 sticky 身份，避免影响后续提示判定
     this.stickyKey = null
+    // v1.3.76：结算面板已离屏，犯规提示恢复正常显示
+    this.showingGameOver = false
   }
 
   /**

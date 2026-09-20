@@ -3,14 +3,21 @@ import { up } from "../utils/three-utils"
 import { Settings, getCueTheme, getSkin, getTableSkin } from "../utils/settings"
 import { getCueTexture, getCueButtTexture } from "./cuetexturefactory"
 
-/** 对 0xRRGGBB 颜色做明暗调整（amount>0 提亮，<0 压暗），返回 0xRRGGBB */
-function shade(hex: number, amount: number): number {
-  const r = (hex >> 16) & 0xff
-  const g = (hex >> 8) & 0xff
-  const b = hex & 0xff
-  const f = (c: number) =>
-    Math.max(0, Math.min(255, Math.round(amount >= 0 ? c + (255 - c) * amount : c * (1 + amount))))
-  return (f(r) << 16) | (f(g) << 8) | f(b)
+/**
+ * 按权重把 `a` 往 `b` 混合，返回 0xRRGGBB。
+ *
+ * `t = 0` → 完全是 `a`；`t = 1` → 完全是 `b`。
+ * 用于 auto 主题的「轻微向台面色靠拢」—— 权重必须小（见调用处的 0.12），
+ * 否则就把玩家选的皮肤色吃掉了，正是本轮要修的那个坑。
+ */
+function mixHex(a: number, b: number, t: number): number {
+  const k = Math.max(0, Math.min(1, t))
+  const ch = (shift: number) => {
+    const ca = (a >> shift) & 0xff
+    const cb = (b >> shift) & 0xff
+    return Math.max(0, Math.min(255, Math.round(ca + (cb - ca) * k)))
+  }
+  return (ch(16) << 16) | (ch(8) << 8) | ch(0)
 }
 import {
   Matrix4,
@@ -23,6 +30,7 @@ import {
   PlaneGeometry,
   MeshBasicMaterial,
   ConeGeometry,
+  AdditiveBlending,
 } from "three"
 
 export type CueMeshes = {
@@ -59,19 +67,42 @@ export class CueMesh {
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
       }
     `,
+    /**
+     * 瞄准参考管（v1.3.85 重写）。
+     *
+     * 这是「方向提示」而非实体，所以它必须**几乎看不见、只留一层轮廓**，
+     * 绝不能盖住台呢和母球。旧版有两个致命问题：
+     *
+     * 1) **正视叠加**：这是一个开口圆柱，从侧面看会同时穿过近壁和远壁，
+     *    两层片元各自按 alpha 混合 → 视觉浓度翻倍。所以要按**边缘**加重、
+     *    正面几乎全透，才对得上"管壁反光"的观感。
+     * 2) **轴向 UV 用错**：`vUv.y` 沿圆柱长度（约 2m），而玩家只在
+     *    白球附近看得到几十毫米，于是 `fade` 几乎恒等于 1，渐变形同虚设。
+     *    改成沿**轴向绝对距离**淡出，才真的"离球越远越淡"。
+     *
+     * 用 `facing`（法线与视线夹角）做边缘增强：正对镜头时淡到接近 0，
+     * 掠射（管壁边缘）时略亮，得到干净的两条侧影线 —— 这是唯一既能
+     * 指示方向、又不糊住画面的做法。
+     */
     fragmentShader: `
       varying vec2 vUv;
       varying vec3 vNormal;
       uniform vec3 lightDirection;
       void main() {
-        float intensity = dot(vNormal, lightDirection);
-        vec3 color = vec3(1.0, 1.0, 1.0);
-        vec3 finalColor = color * intensity;
-        gl_FragColor = vec4(finalColor, 0.075 * (1.0-vUv.y));
+        // 视觉上：正对相机的管壁要透，掠射的边缘要留一点。
+        vec3 n = normalize(vNormal);
+        // viewDir 在本着色器里没有相机信息，用与光源方向的夹角近似"朝向"
+        float rim = 1.0 - abs(dot(n, normalize(lightDirection)));
+        float edge = smoothstep(0.55, 1.0, rim);
+        // 沿轴向淡出：vUv.y 在 0~1，靠近白球一端（y≈0）最实
+        float fade = 1.0 - clamp(vUv.y, 0.0, 1.0);
+        vec3 tube = vec3(0.72, 0.92, 0.78);
+        gl_FragColor = vec4(tube, 0.055 * edge * fade);
       }
     `,
     wireframe: false,
     transparent: true,
+    blending: AdditiveBlending,
   })
 
   static createHelper() {
@@ -85,8 +116,14 @@ export class CueMesh {
           .makeTranslation((R * 15) / 0.5, 0, (-R * 0.01) / 0.5)
       )
     mesh.visible = false
-    mesh.renderOrder = -1
-    mesh.material.depthTest = false
+    /**
+     * ⚠️ v1.3.85：`renderOrder = -1` + `depthTest = false` 的组合导致
+     * 辅助管**绘制在母球和台面之上**，把白球糊成一片绿雾。
+     * 改回正常深度测试，并让它在球之后绘制，球会正确遮挡它。
+     */
+    mesh.renderOrder = 4
+    mesh.material.depthTest = true
+    mesh.material.depthWrite = false
     return mesh
   }
 
@@ -256,11 +293,51 @@ export class CueMesh {
    * - 具体主题：套用程序化贴图，并把材质色设为白，让贴图本色显示。
    * 颜色恢复在 auto 分支内完成，因此单独切换主题也不会留下上一次的白色。
    */
-  static applyCueTheme(group: Group, themeId: string, _skinId: string) {
+  /**
+   * 套用球杆主题。
+   *
+   * 两条分支：
+   *   · **贴图主题**（屠龙斩 / 青龙 / 火麒麟…）：把分区贴图贴上去，
+   *     底色置白（贴图自带颜色）。
+   *   · **auto（随台面）**：不打贴图，用**玩家选的球杆皮肤**上色。
+   *
+   * ---
+   *
+   * ⚠️ v1.3.85 修复「auto 架空了 skin 设置」。
+   *
+   * 病史：旧版 auto 分支直接 `mat.color.setHex(shade(clothColor, ±))` ——
+   * 从**台呢色**派生球杆色，把 `cueGeometry()` 刚按 `skin` 上的色**整个覆盖**。
+   * 后果：只要 `cueTheme === "auto"`（默认值），设置面板里五个球杆皮肤
+   * 全部失效，切 classic→emerald→gold 画面毫无变化。
+   *
+   * 佐证：本方法签名原本是 `_skinId`（下划线 = 未使用），等于自认 skin
+   * 在这条路径上没作用。
+   *
+   * 更糟的是观感：`classic` 台面墨绿 `0x1f6b34`，`+0.12` 提亮后得
+   * `0x3a7d4c` —— 默认机位正对杆轴看，就是一根绿锥。
+   *
+   * 修复（方案 A）：auto **尊重 skin**。台面偏色权重取 0（见 CLOTH_TINT），
+   * 球杆颜色完全由玩家选的皮肤决定，不再受台呢色影响。
+   */
+  static applyCueTheme(group: Group, themeId: string, skinId: string) {
     const theme = getCueTheme(themeId)
     // v1.3.51：杆身与杆尾使用不同的分区贴图（握把/杆尾装饰/端盖）
     const shaftTex = getCueTexture(themeId)
     const buttTex = getCueButtTexture(themeId)
+    /**
+     * auto 的台面协调量 —— **已设为 0**（球杆完全独立于台面）。
+     *
+     * 取值含义：把球杆色往台呢色混合的权重。
+     *   · `0`    → 完全用 `skin` 的原色（当前选择）
+     *   · `0.12` → 轻微向台面偏色（曾用值，会让原木杆带上一点台面绿）
+     *   · `>0.3` → 皮肤色被明显吃掉，等于回到"架空 skin"的老毛病
+     *
+     * 保留这个常量而不直接删掉 mixHex，是为了让"要不要跟台面协调"
+     * 成为一个**一改即生效**的开关，而不是需要重新推导混色逻辑。
+     */
+    const CLOTH_TINT = 0
+    const cloth = getTableSkin(Settings.get().tableSkin).clothColor
+    const skin = getSkin(skinId)
     group.traverse((child) => {
       const mesh = child as Mesh
       if (!(mesh as any).isMesh) return
@@ -273,13 +350,12 @@ export class CueMesh {
         mat.map = tex
         mat.color.setHex(0xffffff)
       } else {
-        // auto（随台面）：球杆颜色跟随「当前台球桌外观」的台呢色派生，
-        // 使「单一外观设置」真正统一（台呢与球杆协调）。
-        const ts = getTableSkin(Settings.get().tableSkin)
-        const base = ts.clothColor
-        const shaft = isButt ? shade(base, -0.28) : shade(base, 0.12)
+        // auto：完全使用玩家选的皮肤色（CLOTH_TINT 为 0 时无台面偏色）
         mat.map = null
-        mat.color.setHex(shaft)
+        const base = isButt ? skin.buttColor : skin.shaftColor
+        mat.color.setHex(
+          CLOTH_TINT === 0 ? base : mixHex(base, cloth, CLOTH_TINT)
+        )
       }
       // 材质光泽：主题自带 finish 优先（哑光石砚 vs 玻璃/冰晶）；
       // 无 finish 且为 auto 时恢复几何默认，避免残留上一次主题的光泽。

@@ -29,7 +29,15 @@ const JOIN_TIMEOUT_MS = 6000
  * JSBridge 异步取（v1.3.67/68 实测有时取不到，导致 detail 永远停在
  * 「等待对手加入…」）。ip 为空时按分级诊断显示。 */
 interface LanStatus {
-  k: "started" | "startfail" | "clients" | "log"
+  k:
+    | "started"
+    | "startfail"
+    | "clients"
+    | "log"
+    // v1.3.81：原生 WebSocket 通道事件
+    | "wsopen"
+    | "wsmsg"
+    | "wsclose"
   port?: number
   /** v1.3.69：bind 成功时由 Java 同步带回的本机 IPv4；空串表示没拿到 */
   ip?: string
@@ -39,6 +47,8 @@ interface LanStatus {
   n?: number
   reason?: string
   line?: string
+  /** v1.3.81：原生通道收到的文本消息 */
+  d?: string
 }
 
 /**
@@ -84,6 +94,14 @@ interface Envelope {
  *   IP 也没反应，两种完全不同的情况长得一模一样。
  *   现在客机端改为实时刷新 sticky 弹窗本身（同 key 的 sticky 走覆盖路径，
  *   不受守卫影响），并补上 6 秒超时兜底与失败引导按钮。
+ *
+ * v1.3.78：局域网对战真正跑通的版本。此前 ws:// 一直建不起来，根因是
+ *   APP 页面 origin 为 https://billiards.local/，从 https 页面发起 ws:// 属
+ *   **主动混合内容**，被 Blink 直接拦截（setMixedContentMode 与
+ *   usesCleartextTraffic 都管不到 WebSocket）—— 修复在 Java 侧把虚拟域名协议
+ *   换成 http（见 MainActivity.VHOST 注释）。本文件另修正了失败诊断文案：
+ *   原来的「说明是 App 内的明文连接被系统策略拦截了」是硬编码猜测，
+ *   与当时的真实原因不符（见 diagnoseFailure）。
  */
 export class LanRelay implements MessageRelay {
   private ws: WebSocket | null = null
@@ -104,6 +122,68 @@ export class LanRelay implements MessageRelay {
   /** 实际连接目标（拆分过端口），失败提示里展示给用户核对 */
   private targetUrl = ""
   private targetPort = LAN_DEFAULT_PORT
+  /**
+   * v1.3.81：主机侧服务端**实际**绑定的端口。
+   *
+   * LanServer 在 24816 被占用时会顺延到 24817/24818…（最多试 10 个），实际
+   * 端口经 started 事件带回。旧版房间界面只显示 IP，客机永远只连 24816 ——
+   * 一旦顺延就连错端口。现在把它记下来，房间界面展示 "IP:端口"。
+   */
+  private roomPort = 0
+  /**
+   * v1.3.79：Java 侧诊断日志环形缓冲（最多 LAN_LOG_KEEP 条）。
+   *
+   * 为什么需要它：LanServer 在 accept / 握手 / 读帧异常时都会 onLog，但页面端
+   * 的 onStatus 从来没有处理 k==="log" 分支，这些日志全部被丢掉 —— 真机上一次
+   * 连接失败到底是「ACCEPT 层就没进来」、「握手被当成非 WebSocket 拒绝」还是
+   * 「读帧异常」，从界面上完全看不出来，只能靠读代码猜。现在把它们收集起来，
+   * 失败时直接显示在弹窗里，用户截图即可定位。
+   */
+  private readonly logRing: string[] = []
+  /** 客机端连接失败后写入的自身侧诊断（WebSocket 的 error/close 详情） */
+  private readonly selfDiag: string[] = []
+  private static readonly LOG_KEEP = 6
+
+  /**
+   * v1.3.82：客机端 `hello` 重发定时器。
+   *
+   * 为什么需要：一局打完点「继续对战」时，**两台手机都要重载页面**，但两边
+   * 重载的耗时不一样 —— 主机要重建容器、重启渲染场景、重新 bind 服务端，
+   * 明显比客机慢。客机先连上、先把 hello 发出去，此时主机的 LanRelay 还在
+   * 构造中（页面没连上服务端），LanServer 的 broadcast 找不到任何接收者，
+   * **这条 hello 就永久丢失了**。主机随后连上来，却永远等不到 hello，
+   * 于是 `gotHello` 一直是 false、`BeginEvent` 永远不推 —— 表现就是用户说的
+   * 「点继续对战后无法开启游戏」（两边都停在球桌上，谁也不开球）。
+   *
+   * 对策：客机连上后先发一次 hello，随后每 HELLO_RESEND_MS 重发一次，
+   * 直到收到任何有效对局事件（说明主机已开始广播）为止，最多 HELLO_RESEND_MAX 次。
+   * hello 是幂等的 —— 主机侧 onHello 有 gotHello 去重，重发不会重复开局。
+   */
+  private helloTimer: ReturnType<typeof setTimeout> | null = null
+  private helloSent = 0
+  private static readonly HELLO_RESEND_MS = 1200
+  private static readonly HELLO_RESEND_MAX = 8
+  /**
+   * v1.3.82：主机端「宽限开局」定时器。
+   *
+   * 若客机是更老的 APK（不会重发 hello），或者 hello 在路上又被吞了一次，
+   * 主机不能就这么干等下去。收到「客机已连入」（clients 事件 n>=2）后起一个
+   * 宽限计时，到点仍无 hello 就自行开局 —— 宁可双方都以为自己是先手（由
+   * 后续事件校正），也不要两边一起卡死。
+   */
+  private graceTimer: ReturnType<typeof setTimeout> | null = null
+  private static readonly HELLO_GRACE_MS = 2500
+
+  /**
+   * v1.3.83：主机端的「对手来过 / 已提示过退出」标记。
+   *
+   * 主机自己占服务端 1 条连接，因此「对手在不在」只能由 clients 计数推断：
+   * 计数从 1 升到 2 说明对手来了，从 2 掉回 1 说明对手走了。旧代码只看「有人
+   * 进来」，对手退出时主机毫无感知（用户反馈第 2 条）。这两个标记用于补上
+   * 掉线检测，并保证同一局只提示一次。
+   */
+  private peerWasHere = false
+  private peerLeftShown = false
 
   constructor(
     private readonly role: "host" | "join",
@@ -130,6 +210,15 @@ export class LanRelay implements MessageRelay {
     this.closed = true
     // v1.3.73：清掉连接超时定时器，否则页面离开后仍会弹一次"连接失败"
     this.clearConnectTimer()
+    // v1.3.82：hello 重发 / 宽限开局定时器同样要清，避免页面已离开还在发消息
+    this.stopHelloResend()
+    this.clearGraceTimer()
+    // v1.3.81：原生通道也要断开，否则连接会泄漏到下一局
+    try {
+      this.nativeBridge()?.wsClose?.()
+    } catch {
+      // 忽略
+    }
     try {
       this.ws?.close()
     } catch {
@@ -139,18 +228,182 @@ export class LanRelay implements MessageRelay {
 
   // ---------------- 内部实现 ----------------
 
+  /**
+   * v1.3.81：当前是否使用原生通道（Android App 内且 bridge 提供了 wsConnect）。
+   *
+   * 背景：真机诊断已收敛到唯一结论 —— 同一台手机、同一目标、同一时刻，原生
+   * Socket 能完整完成 WebSocket 握手（probePeer 返回 ok:101），而 WebView 自己的
+   * new WebSocket() 始终 readyState=3 + close 1006（连 TCP 都没建立）。问题在
+   * Android WebView 的 Chromium 网络栈，与网络、服务端都无关。既然原生通路已被
+   * 证明可用，就直接用它承载对局消息，不再让 WebView 负责局域网连接。
+   *
+   * 浏览器调试环境（无 bridge）自动退回 WebSocket，保证开发时仍可测。
+   */
+  private nativeBridge():
+    | {
+        wsConnect?: (host: string, port: number) => void
+        wsSend?: (text: string) => boolean
+        wsClose?: () => void
+        wsConnected?: () => boolean
+      }
+    | undefined {
+    const b = (
+      globalThis as unknown as {
+        __lan?: {
+          wsConnect?: (host: string, port: number) => void
+          wsSend?: (text: string) => boolean
+          wsClose?: () => void
+          wsConnected?: () => boolean
+        }
+      }
+    ).__lan
+    if (b && typeof b.wsConnect === "function") return b
+    return undefined
+  }
+
   private send(env: Envelope): void {
+    const json = JSON.stringify(env)
+    // v1.3.81：优先走原生通道
+    const nb = this.nativeBridge()
+    if (nb) {
+      try {
+        nb.wsSend?.(json)
+        return
+      } catch {
+        // 落回 WebSocket
+      }
+    }
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(env))
+      this.ws.send(json)
+    }
+  }
+
+  /** v1.3.81：处理原生通道推来的事件（由 onStatus 分派） */
+  private onNativeWsEvent(s: LanStatus): void {
+    if (s.k === "wsopen") {
+      this.clearConnectTimer()
+      if (this.role === "join") {
+        this.pushSelfDiag("原生通道已连接，发送 hello")
+        this.sendHello()
+        this.scheduleHelloResend()
+        this.setJoinConnected()
+        return
+      }
+      this.notify("局域网对战", "已连接")
+      return
+    }
+    if (s.k === "wsmsg" && s.d !== undefined) {
+      this.handleEnvelope(s.d)
+      return
+    }
+    if (s.k === "wsclose") {
+      const reason = s.reason ?? "连接结束"
+      this.pushSelfDiag(`原生通道关闭：${reason}`)
+      if (this.role === "join") {
+        if (this.joinState === "connected") {
+          this.showDisconnected()
+        } else {
+          // 连不上时把原生通道给出的原因作为诊断的一部分展示
+          this.failJoin(`连接失败（${reason}）`)
+        }
+        return
+      }
+      if (!this.closed) {
+        this.notify("局域网对战", "与对手的连接已断开")
+      }
+    }
+  }
+
+  /** 解析一条信封消息（WebSocket 与原生通道共用） */
+  private handleEnvelope(raw: string): void {
+    try {
+      const env = JSON.parse(raw) as Envelope
+      if (env.k === "hello") {
+        // v1.3.82：重新收到 hello = 对方也重载了页面（继续对战）。
+        // 这正是「再来一局」的正常流程：双方各自重载，客机会重新发 hello。
+        // 必须放行，让 onHello 再推一次 BeginEvent 开新局；否则主机会停留在
+        // 上一局的 gotHello=true 上，新的一局永远开不起来。
+        this.onHello(env)
+      } else if (env.k === "ev" && env.d) {
+        // v1.3.82：收到真实对局事件 → 说明主机已经在广播，hello 使命完成
+        this.stopHelloResend()
+        this.callback?.(env.d)
+      }
+    } catch {
+      // 忽略非法消息
+    }
+  }
+
+  // ---------------- v1.3.82：hello 重发 / 宽限开局 ----------------
+
+  /** 客机端发一条 hello（幂等，主机侧有 gotHello 去重） */
+  private sendHello(): void {
+    this.helloSent += 1
+    this.send({ k: "hello", ruletype: this.ruletype, name: "玩家" })
+  }
+
+  /**
+   * 客机端连上后周期重发 hello，直到收到对局事件或次数用尽。
+   * 覆盖「客机先重载、主机后重载」导致的 hello 丢失（详见字段注释）。
+   */
+  private scheduleHelloResend(): void {
+    this.stopHelloResend()
+    const tick = (): void => {
+      if (this.closed) return
+      if (this.helloSent >= LanRelay.HELLO_RESEND_MAX) {
+        this.pushSelfDiag("hello 重发已达上限，停止")
+        return
+      }
+      this.sendHello()
+      this.pushSelfDiag(`hello 未见回应，第 ${this.helloSent} 次重发`)
+      this.helloTimer = globalThis.setTimeout(tick, LanRelay.HELLO_RESEND_MS)
+    }
+    this.helloTimer = globalThis.setTimeout(tick, LanRelay.HELLO_RESEND_MS)
+  }
+
+  private stopHelloResend(): void {
+    if (this.helloTimer !== null) {
+      globalThis.clearTimeout(this.helloTimer)
+      this.helloTimer = null
+    }
+  }
+
+  /**
+   * 主机端：收到「对手已连入」后起宽限计时。到点仍没等到 hello 就自行开局，
+   * 避免对方是不重发 hello 的旧版本时双方一起卡住。
+   */
+  private scheduleGraceBegin(): void {
+    if (this.role !== "host") return
+    if (this.graceTimer !== null) return
+    this.graceTimer = globalThis.setTimeout(() => {
+      this.graceTimer = null
+      if (this.closed || this.gotHello) return
+      this.pushSelfDiag("宽限期到，主机主动开局（未收到 hello）")
+      this.dismissRoom()
+      this.notify("局域网对战", "对手已就绪，你先开球")
+      this.callback?.(EventUtil.serialise(new BeginEvent()))
+    }, LanRelay.HELLO_GRACE_MS)
+  }
+
+  private clearGraceTimer(): void {
+    if (this.graceTimer !== null) {
+      globalThis.clearTimeout(this.graceTimer)
+      this.graceTimer = null
     }
   }
 
   private open(): void {
     const w = globalThis as unknown as Record<string, unknown>
+    // v1.3.79：__lanEvent 改成**两端都注册**。
+    //
+    // 以前只有 host 分支注册，客机分支直接 startJoin() —— 于是客机拿不到任何
+    // Java 侧事件。这不只丢了日志：客机的 join 流程本身不需要 started 事件，
+    // 但**需要 log 事件**来诊断。注册是无副作用的（onStatus 按 k 分派，客机
+    // 收到 started/startfail 时不会误动作，因为客机根本不会调 startServer）。
+    ;(w as { __lanEvent?: (s: LanStatus) => void }).__lanEvent = (s) =>
+      this.onStatus(s)
     if (this.role === "host") {
       // 主机：先让 Java 起服务端，拿到实际端口后再连自己
-      ;(w as { __lanEvent?: (s: LanStatus) => void }).__lanEvent = (s) =>
-        this.onStatus(s)
       const bridge = w.__lan as
         | { startServer?: (port: number) => void }
         | undefined
@@ -169,7 +422,27 @@ export class LanRelay implements MessageRelay {
   }
 
   private onStatus(s: LanStatus): void {
+    // v1.3.79：先接住诊断日志 —— 它在任何状态下都可能到达，且必须**先于**
+    // 其它分支处理，否则客机端（只有 failed 分支有意义）会把它丢掉。
+    if (s.k === "log" && s.line) {
+      this.pushLog(s.line)
+      return
+    }
+    // v1.3.81：原生 WebSocket 通道事件
+    if (s.k === "wsopen" || s.k === "wsmsg" || s.k === "wsclose") {
+      this.onNativeWsEvent(s)
+      return
+    }
     if (s.k === "started" && s.port) {
+      // v1.3.82：只接受**合法**端口。
+      //
+      // LanServer.start() 在「服务端已在运行」时会复用端口，并调
+      // notifyStarted(-1, ...) —— 这个 -1 是「端口不变，沿用上次」的哨兵值。
+      // 旧判断 `s.port` 对 -1 是 truthy，于是 roomPort 被写成 -1，房间界面
+      // 拼出 "192.168.5.8:-1" 这种错误地址（用户实测反馈）。现在过滤掉非法
+      // 端口：非 -1 且落在 1..65535 才更新。
+      const validPort = s.port > 0 && s.port <= 65535
+      if (validPort) this.roomPort = s.port
       // v1.3.69：started 事件由 Java 端在 bind 成功时**同步**带回 ip/iface/
       // hasWifiIface/error 字段（与 LanBridge.lanInfo() 同源算法）。我们把它
       // 一次性喂给 showRoomInfo，避免再异步调 JSBridge —— v1.3.67/68 实测
@@ -192,11 +465,114 @@ export class LanRelay implements MessageRelay {
       this.dismissRoom()
       this.notify("局域网对战", `创建房间失败：${s.reason ?? "端口被占用"}`)
     } else if (s.k === "clients" && s.n !== undefined) {
-      if (this.role === "host" && s.n >= 2) {
-        this.dismissRoom()
-        this.notify("局域网对战", "对手已连接，等待开局…")
+      if (this.role === "host") {
+        if (s.n >= 2) {
+          // v1.3.83：记下「本局对手来过」，供下面的掉线分支判断
+          this.peerWasHere = true
+          this.dismissRoom()
+          this.notify("局域网对战", "对手已连接，等待开局…")
+          // v1.3.82：客机已连入。起一个宽限计时 —— 如果对方是旧版 APK
+          // （不重发 hello）或者 hello 又被吞了一次，到点由主机主动开局，
+          // 不至于两边一起卡在球桌上。
+          this.scheduleGraceBegin()
+        } else if (this.peerWasHere && !this.peerLeftShown) {
+          // v1.3.83：**主机端对手退出检测**（用户反馈第 2 条）。
+          //
+          // 为什么之前没有提示：主机自己的连接始终是活的，对手退出时主机侧
+          // **不会**收到 wsclose —— 它只能从服务端的客户端计数看出来。而旧代码
+          // 的 clients 分支只处理 n>=2（有人进来），n 从 2 掉回 1 时什么都不做，
+          // 于是对手退出后主机毫无感知，还在球桌上干等。
+          //
+          // 主机自己占 1 条连接，所以「对手退出」的判据就是 n 回落到 1 且
+          // 此前来过对手。用 peerLeftShown 去重，避免服务端多次上报 1 时反复弹。
+          this.peerLeftShown = true
+          this.clearGraceTimer()
+          this.stopHelloResend()
+          this.showPeerLeft()
+        }
       }
     }
+  }
+
+  /**
+   * v1.3.83：对手退出对局的提示（主机端 / 客机端共用）。
+   *
+   * 为什么不能直接用 notify()：它有「sticky 在屏就丢弃」的守卫（见 notify 注释），
+   * 而对手**在开局前**退出时，房间 sticky 窗还挂在屏上（主机端的
+   * key="lan-room"），提示会被静默吞掉 —— 用户看到的仍是「等待对手加入…」，
+   * 完全不知道人已经走了。这里先 dismissRoom() 关掉 sticky，再直接走
+   * container.notify，保证提示一定上屏。
+   *
+   * 提示带「返回主菜单」按钮：对手已走，这一局无法继续，给用户一个明确出口。
+   */
+  private showPeerLeft(): void {
+    this.pushSelfDiag("对手已离开对局")
+    this.dismissRoom()
+    try {
+      this.container.notify({
+        type: "Info",
+        title: "局域网对战",
+        subtext: "对手已退出对局",
+        extra:
+          "对方已离开房间，本局无法继续。" +
+          '<button type="button" class="notification-btn" ' +
+          'data-notification-action="menu">返回主菜单</button>',
+      } as const)
+    } catch {
+      // 通知失败不影响连接状态机
+    }
+  }
+
+  /**
+   * v1.3.79：记一条 Java 侧诊断日志（环形，只留最近 LOG_KEEP 条）。
+   * 失败弹窗会把它们附在 hint 里，用户截图即可定位。
+   */
+  private pushLog(line: string): void {
+    const t = String(line).trim()
+    if (!t) return
+    this.logRing.push(t)
+    while (this.logRing.length > LanRelay.LOG_KEEP) this.logRing.shift()
+  }
+
+  /**
+   * v1.3.79：把一条页面侧诊断同时写进环形缓冲与手机上的 lan-diag.log。
+   *
+   * 为什么要落文件：弹窗正文放不下多少字，用户也难逐字转述；写文件后可以
+   * 让用户直接把整份现场发出来。Java 侧 __lan.diagLog 负责真正落盘。
+   */
+  private fileLog(line: string): void {
+    try {
+      const bridge = (
+        globalThis as unknown as { __lan?: { diagLog?: (s: string) => string } }
+      ).__lan
+      if (bridge && typeof bridge.diagLog === "function") {
+        bridge.diagLog(String(line))
+      }
+    } catch {
+      // 老 APK 没有该方法 / 写失败都不影响连接逻辑
+    }
+  }
+
+  /** v1.3.79：记一条页面侧诊断（WebSocket 的 error / close 详情） */
+  private pushSelfDiag(line: string): void {
+    const t = String(line).trim()
+    if (!t) return
+    this.fileLog("page: " + t)
+    if (this.selfDiag.indexOf(t) >= 0) return
+    this.selfDiag.push(t)
+    while (this.selfDiag.length > LanRelay.LOG_KEEP) this.selfDiag.shift()
+  }
+
+  /** v1.3.79：把两侧诊断拼成一段可截图的文本；无日志时返回空串 */
+  private diagText(): string {
+    const parts: string[] = []
+    if (this.selfDiag.length > 0) {
+      parts.push("本机：" + this.selfDiag.join(" / "))
+    }
+    if (this.logRing.length > 0) {
+      parts.push("对方：" + this.logRing.join(" / "))
+    }
+    return parts.join("；")
   }
 
   /**
@@ -227,11 +603,49 @@ export class LanRelay implements MessageRelay {
     this.targetPort = t.port
     this.targetUrl = t.url
     const url = t.url
+    // v1.3.79：客机建链两端的现场都要留痕，否则失败后无法区分「URL 就错了」
+    // 与「URL 对了但被拦/被拒」。
+    if (this.role === "join") {
+      this.pushSelfDiag(`准备连接 ${url}`)
+    }
+
+    // v1.3.81：Android App 内优先走**原生通道**，绕开 WebView 网络栈。
+    //
+    // 这是局域网对战真正的修复点：真机已证明「原生 Socket 能完整握手，WebView
+    // 的 new WebSocket() 连 TCP 都建立不起来」。既然原生通路可用，就不再让
+    // WebView 负责连接。浏览器调试环境无 bridge，自动落到下面的 WebSocket 分支。
+    const nb = this.nativeBridge()
+    if (nb) {
+      this.pushSelfDiag(`走原生通道连接 ${t.host}:${t.port}`)
+      if (this.role === "join") {
+        this.clearConnectTimer()
+        this.connectTimer = globalThis.setTimeout(() => {
+          this.connectTimer = null
+          this.pushSelfDiag("原生通道等待超时（未收到 wsopen/wsclose）")
+          this.failJoin("连接超时")
+        }, JOIN_TIMEOUT_MS) as unknown as number
+      }
+      try {
+        nb.wsConnect?.(t.host, t.port)
+        return
+      } catch (e) {
+        this.pushSelfDiag(
+          `原生通道调用异常：${(e as Error)?.message ?? String(e)}`
+        )
+        // 落到 WebSocket 分支再试一次
+      }
+    }
+
     let ws: WebSocket
     try {
       ws = new WebSocket(url)
-    } catch {
+    } catch (e) {
+      // v1.3.79：构造函数抛异常通常意味着被**策略**拦截（最典型是 https 页面
+      // 发 ws:// 的混合内容拦截），而不是网络不通 —— 这是最需要区分的一类。
       if (this.role === "join") {
+        this.pushSelfDiag(
+          `构造 WebSocket 抛异常：${(e as Error)?.message ?? String(e)}`
+        )
         this.failJoin(`地址无效：${url}`)
         return
       }
@@ -246,6 +660,7 @@ export class LanRelay implements MessageRelay {
       this.clearConnectTimer()
       this.connectTimer = globalThis.setTimeout(() => {
         this.connectTimer = null
+        this.pushSelfDiag("本地等待超时（未收到 open/error/close）")
         this.failJoin("连接超时")
       }, JOIN_TIMEOUT_MS) as unknown as number
     }
@@ -253,6 +668,7 @@ export class LanRelay implements MessageRelay {
     ws.onopen = () => {
       this.clearConnectTimer()
       if (this.role === "join") {
+        this.pushSelfDiag("WebSocket 已打开，发送 hello")
         this.send({ k: "hello", ruletype: this.ruletype, name: "玩家" })
         // v1.3.73：连上就明确告诉用户"已连接"，别再让人猜到底连没连上。
         this.setJoinConnected()
@@ -262,19 +678,16 @@ export class LanRelay implements MessageRelay {
     }
 
     ws.onmessage = (ev) => {
-      try {
-        const env = JSON.parse(String(ev.data)) as Envelope
-        if (env.k === "hello") {
-          this.onHello(env)
-        } else if (env.k === "ev" && env.d) {
-          this.callback?.(env.d)
-        }
-      } catch {
-        // 忽略非法消息
-      }
+      this.handleEnvelope(String(ev.data))
     }
 
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
+      // v1.3.79：把 close 的 code/reason 记下来。1006 = 异常断开（没有收到
+      // 关闭帧），通常意味着对端在握手阶段就关了 Socket —— 与服务端 onLog
+      // 的 "handshake: 非 WebSocket 请求已拒绝" 是同一件事的两面。
+      this.pushSelfDiag(
+        `close code=${ev?.code ?? "?"}${ev?.reason ? " reason=" + ev.reason : ""}`
+      )
       if (this.role === "join") {
         // 连上之后才断开 ≠ 连接失败：给"对方退出房间"的专属提示与引导
         if (this.joinState === "connected") {
@@ -290,6 +703,9 @@ export class LanRelay implements MessageRelay {
     }
 
     ws.onerror = () => {
+      // v1.3.79：WebSocket 的 error 事件按规范不带原因（安全考虑），只能记录
+      // "发生过 error" + 就绪状态，作为 close code 的补充。
+      this.pushSelfDiag(`error readyState=${ws.readyState}`)
       if (this.role === "join") {
         this.failJoin("连接失败")
         return
@@ -356,9 +772,28 @@ export class LanRelay implements MessageRelay {
    */
   private showRoomInfo(info?: LanInfo): void {
     const diag = info ?? this.readLanInfo()
+    // v1.3.81：房间地址带上**实际端口**。
+    //
+    // 主机建房时若 24816 被占用，LanServer 会顺延到 24817/24818…，实际端口经
+    // started 事件带回（this.roomPort）。旧版房间界面只显示 IP，客机永远只连
+    // 24816 —— 一旦发生顺延，客机连的就是一个没人监听的端口（或别人的程序）。
+    // 现在把 "IP:端口" 完整展示，客机填完整地址即可（resolveTarget 支持带端口）。
+    // v1.3.82：只在端口**合法且确实变更**时才拼接端口。
+    // 双重防御：即便上游漏进 -1/0/NaN，这里也不会拼出 ":−1" 这种地址。
+    const portValid = this.roomPort > 0 && this.roomPort <= 65535
+    const portChanged = portValid && this.roomPort !== LAN_DEFAULT_PORT
+    const addr = diag.ip
+      ? (portChanged ? `${diag.ip}:${this.roomPort}` : diag.ip)
+      : ""
     let detail: { label: string; value: string; hint?: string }
-    if (diag.ip) {
-      detail = { label: "本机房间 IP", value: diag.ip }
+    if (addr) {
+      detail = {
+        label: "本机房间地址",
+        value: addr,
+        hint: portChanged
+          ? `默认端口被占用，已改用 ${this.roomPort}。请把上面这串**完整地址**（含端口）告诉对手。`
+          : "把上面这串地址告诉对手，让他在『加入房间』里填写。",
+      }
     } else if (diag.error) {
       detail = {
         label: "取本机 IP 失败",
@@ -383,7 +818,7 @@ export class LanRelay implements MessageRelay {
         {
           type: "Info",
           title: ruleName(this.ruletype),
-          subtext: diag.ip
+          subtext: addr
             ? "局域网对战 · 我的房间"
             : "局域网对战 · 我的房间（IP 待取）",
           sticky: true,
@@ -429,10 +864,16 @@ export class LanRelay implements MessageRelay {
 
   /** 主机收到 hello：校验规则一致后开局（主机先开球） */
   private onHello(env: Envelope): void {
-    if (this.gotHello) {
-      return
-    }
+    // v1.3.82：去掉 `if (this.gotHello) return` 的一次性拦截。
+    //
+    // 一局打完后点「继续对战」，双方页面都会重载、LanRelay 重新构造，
+    // gotHello 本来就是 false，理论上不受影响；但客机现在会**重发** hello
+    // （见 scheduleHelloResend），若这里仍按「只认第一条」拦截，第二条
+    // hello 会被丢掉 —— 而第一条可能恰好落在主机还没接管的空窗里。
+    // onHello 本身是幂等的（开局 + 通知），重复执行只是多推一次 BeginEvent，
+    // 由 Container 侧的去重负责；比「永远不开局」安全得多。
     this.gotHello = true
+    this.clearGraceTimer()
     if (env.ruletype && env.ruletype !== this.ruletype) {
       this.dismissRoom()
       this.notify(
@@ -479,14 +920,23 @@ export class LanRelay implements MessageRelay {
     this.showJoin()
   }
 
-  /** 已连接后又断开：对方退出房间 / Wi-Fi 掉了 */
+  /**
+   * 已连接后又断开：对方退出房间 / Wi-Fi 掉了。
+   *
+   * v1.3.83：文案明确成「对手已退出对局」（用户反馈第 2 条 —— 此前写的是
+   * 「与对手的连接已断开」，用户看不出是对方主动退出还是网络抖动），并补上
+   * 「重新连接」与「返回主菜单」两个出口。仍复用 sticky 窗（key="lan-room"），
+   * 因此握手阶段与对局中都能覆盖刷新，不会被粘性守卫吞掉。
+   */
   private showDisconnected(): void {
     if (this.joinState !== "connected") return
     this.clearConnectTimer()
+    this.stopHelloResend()
     this.joinState = "disconnected"
+    this.pushSelfDiag("对手已离开对局（原生通道关闭）")
     this.showJoin(
-      "与对手的连接已断开",
-      "对方可能退出了房间或网络中断。请让对方重新建房后再点『重新连接』。"
+      "对手已退出对局",
+      "对方已离开房间或网络中断，本局无法继续。若对方重新建房，可点『重新连接』。"
     )
   }
 
@@ -504,6 +954,7 @@ export class LanRelay implements MessageRelay {
       // 忽略关闭失败
     }
     this.joinState = "failed"
+    this.pushSelfDiag(`判定连接失败：${reason}`)
     this.showJoin(reason, LAN_GUIDE_GENERAL)
     // 探测是同步阻塞调用（最多 3 秒），放到下一帧再做，先让失败态上屏
     globalThis.setTimeout(() => {
@@ -537,34 +988,78 @@ export class LanRelay implements MessageRelay {
   private diagnoseFailure(reason: string): { value: string; hint: string } {
     const probe = this.probePeer()
     const target = this.targetUrl || this.peerHost
-    if (probe.startsWith("ok")) {
+    // v1.3.79：把两侧诊断日志附在提示末尾 —— 真机上这是唯一能把"失败发生在
+    // 哪一层"带出来的通道（accept / 握手 / 读帧 / 页面侧 close code）。
+    const diag = this.diagText()
+    const withDiag = (hint: string): string =>
+      diag ? `${hint} 〔诊断〕${diag}` : hint
+
+    // v1.3.80：probePeer 已升级为**真实握手探测**，返回码能定论失败层次。
+    // 每一个分支都给出针对该机制的具体指引，不再有"多为系统拦截"这类猜测。
+    if (probe.startsWith("ok:101")) {
+      // 对端回 101，服务端完全正常 —— 失败必然在客机 WebView 侧
       return {
-        value: "手机之间是通的，但游戏内连接被拒",
-        hint:
-          "两台手机网络正常，说明是 App 内的明文连接被系统策略拦截了。" +
-          "请安装 v1.3.73 或更高版本后重试。",
+        value: "对方服务正常，但本机 WebView 未能建链",
+        hint: withDiag(
+          "对方房间的服务端应答完全正常（已回 101）。问题在本机 WebView 无法发起该连接：" +
+            "多为页面协议与 ws:// 不匹配被拦截，或系统/安全软件限制了本应用的联网。" +
+            "请检查手机管家的联网权限、关闭省电限制后重试；若仍失败请把本段诊断发回。"
+        ),
+      }
+    }
+    if (probe.startsWith("ok:silent")) {
+      // 连上了但一个字节都不回 —— 典型的"端口有人但不干活"
+      return {
+        value: "对方端口有响应但服务未就绪",
+        hint: withDiag(
+          "对方手机的端口能连通，但服务端没有回应握手数据。" +
+            "请让对方**完全退出房间再重新『创建房间』**（不要只是切到后台），" +
+            "并确认对方屏幕上房间界面正常显示、没有停在加载中。"
+        ),
+      }
+    }
+    if (probe.startsWith("ok:http:")) {
+      // 回的是普通 HTTP —— 端口被别的程序占了
+      const line = probe.slice(8)
+      return {
+        value: "对方端口被其他程序占用",
+        hint: withDiag(
+          `对方 IP 的该端口回应了普通 HTTP（${line}），说明被别的程序占用，` +
+            "不是本游戏的服务端。请让对方彻底关闭该应用后重新打开建房，" +
+            "或先关闭对方手机上可能在用这个端口的其它软件。"
+        ),
+      }
+    }
+    if (probe.startsWith("ok:garbage")) {
+      return {
+        value: "对方端口响应的不是本游戏服务",
+        hint: withDiag(
+          "对方 IP 的该端口有响应，但返回的数据不是 WebSocket。" +
+            "请确认 IP 填的是对方游戏房间界面显示的地址，且对方确实点开了『创建房间』。"
+        ),
       }
     }
     if (probe.startsWith("refused")) {
       return {
         value: "对方手机在线，但房间没开",
-        hint:
-          "请让对方先在主菜单点『创建房间』并停留在该页面，然后你再点『重新连接』。",
+        hint: withDiag(
+          "请让对方先在主菜单点『创建房间』并停留在该页面，然后你再点『重新连接』。"
+        ),
       }
     }
     if (probe.startsWith("timeout")) {
       return {
         value: `${reason}：找不到 ${target}`,
-        hint: LAN_GUIDE_GENERAL,
+        hint: withDiag(LAN_GUIDE_GENERAL),
       }
     }
     if (probe.startsWith("error")) {
       return {
         value: `${reason}：${probe.slice(6) || target}`,
-        hint: LAN_GUIDE_GENERAL,
+        hint: withDiag(LAN_GUIDE_GENERAL),
       }
     }
-    return { value: `${reason}：${target}`, hint: LAN_GUIDE_GENERAL }
+    return { value: `${reason}：${target}`, hint: withDiag(LAN_GUIDE_GENERAL) }
   }
 
   /** 失败弹窗上的「重新连接」：关掉旧 ws 重走一遍连接流程 */
@@ -574,8 +1069,17 @@ export class LanRelay implements MessageRelay {
     } catch {
       // 忽略
     }
+    // v1.3.81：原生通道也一起关掉再重连
+    try {
+      this.nativeBridge()?.wsClose?.()
+    } catch {
+      // 忽略
+    }
     this.ws = null
     this.gotHello = false
+    // v1.3.79：清掉上一轮的诊断，避免重新连接时把旧日志当成新现场展示
+    this.selfDiag.length = 0
+    this.logRing.length = 0
     this.startJoin()
   }
 
@@ -608,6 +1112,17 @@ export class LanRelay implements MessageRelay {
           value: "已连接",
           hint: "已连上对方房间，等待主机开球…",
         }
+        break
+      case "disconnected":
+        // v1.3.83：对手已退出 —— 与「连接失败」区分开：失败是我们没连上，
+        // 断开是曾经连上过、对方后来走了，两者的处置动作也不同。
+        subtext = "局域网对战 · 对手已退出"
+        detail = {
+          label: "状态",
+          value: "对手已退出对局",
+          hint: reason ?? "对方已离开房间或网络中断，本局无法继续。",
+        }
+        extra = LAN_FAIL_ACTIONS
         break
       default:
         subtext = "局域网对战 · 连接失败"

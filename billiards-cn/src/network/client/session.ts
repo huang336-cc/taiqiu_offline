@@ -45,6 +45,30 @@ export class Session {
     return Session.getInstance().botMode
   }
 
+  /**
+   * v1.3.83：是否「连续对局」模式 —— 即一局打完后能直接开下一局、需要跨局
+   * 累计比分的情形。**人机对战**（?bot=）与**局域网对战**（?lan=host|join）
+   * 都属于这类。
+   *
+   * 为什么需要它：系列赛比分（`utils/series.ts`）与比分栏的「局比分」行此前
+   * 一律写成 `if (Session.isBotMode())`，于是局域网对战打完一局后既不记分、
+   * 比分栏也不显示（用户反馈第 1 条）。局域网同样需要知道「现在几比几」，
+   * 但它没有 botMode 标记，故补上这个更准确的判定。
+   *
+   * 局域网模式只能从 URL 参数识别（`?lan=host|join`），与
+   * browsercontainer.ts 的判据保持一致。
+   */
+  static isSeriesMode(): boolean {
+    if (Session.isBotMode()) return true
+    if (typeof globalThis.location === "undefined") return false
+    try {
+      const lan = new URLSearchParams(globalThis.location.search).get("lan")
+      return lan === "host" || lan === "join"
+    } catch {
+      return false
+    }
+  }
+
   static isExamMode(): boolean {
     return Session.getInstance().examMode
   }

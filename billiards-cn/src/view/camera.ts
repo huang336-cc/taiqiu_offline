@@ -74,6 +74,16 @@ export class Camera {
   replayFocus: Vector3[] | null = null
 
   /**
+   * v1.3.76：本杆的**出杆方向**（弧度，= aim.angle）。
+   * 由 Replay 在每杆摆机位时一并写入。回放跟随镜头的方位角必须用它，
+   * 而不是「白球 → 目标袋口」的方向。后者相对真实出杆角平均偏 7.8°、
+   * P90 偏 17.3°、极端切球能偏到 68°（tools/harness 实测 300 杆），
+   * 用袋口方向摆机位会让画面里的出杆方向与实际击球方向对不上
+   * （玩家看到球杆明明朝左、镜头却从右后方看过去）。为 null 时退回旧算法。
+   */
+  private replayShotAngle: number | null = null
+
+  /**
    * v1.3.58：回放机位锚点 —— 每一杆击球前算一次，出杆后锁定不再变。
    * 原先 replayFrameView 每帧都按 replayFocus 重新框定，焦点一变镜头就跟着
    * 大幅移动，观感是「镜头乱飞」。现在把框定结果冻结成锚点，只有 nudge
@@ -200,6 +210,39 @@ export class Camera {
     this.camera.lookAt(cx, cy, 0)
   }
 
+  /**
+   * v1.3.86：瞄准机位「注视点抬升」常量 —— 把房间拉进画面的**唯一有效杠杆**。
+   *
+   * 病史（这条是几十个版本「场景优化看不见」的总根因）：
+   *
+   * 瞄准机位的视线俯角满足
+   *     俯角 = atan( (height − lookLift) / distance )
+   * 而画面上缘的仰角满足（六点实测逐字吻合）
+   *     上缘仰角 = fov/2 − 俯角
+   *
+   * 旧值是 `lookLift = R*2`、`height = R*9`、`distance = R*24`，于是
+   *     俯角 = atan(0.295 − 0.066) / 0.786) ≈ 16.3°，fov/2 ≈ 25.1°
+   *     上缘仰角 ≈ +8.8°  —— 看似为正，但**画面里 68% 是台呢**。
+   *
+   * 原因是几何上的：相机只在台面上方 0.295 m 处平视，台呢是一个几乎
+   * 无限延伸的平面；上缘那 8.8° 的仰角只够看见台面「极远处」的收束带，
+   * 也就是环境在画面里只剩窄窄一条。实测 `aim` 机位台呢占比 68~69%。
+   *
+   * ⚠️ **抬高相机是反向的**：height 变大 → 俯角变大（比 fov 变大更快），
+   * 上缘反而更低。实测 height 从 R*9 升到 R*30，台呢占比 67.8% → **91.1%**，
+   * 画面退化成俯视平面图。所以「机位抬高」这条思路整体作废。
+   *
+   * 正解是把**注视点抬高**让视线变平。实测（room / office / cybercafe 三场景一致）：
+   *     lookLift  R*2 → 68%    R*4 → 61%    R*6 → 51%    R*8 → 41%
+   * 取 `R*6`：台呢从 68% 降到 51%，画面里同时保有「球桌质感」与
+   * 「可辨识的房间」（木地板、踢脚线、球杆架、置球、投影）。
+   *
+   * 取值依据：再往上（R*9 及以后）台呢跌破 40%，球桌开始像平面图而不是
+   * 一张桌子，失去台球游戏的主体感；R*6 是「room 可读 / 桌子仍是桌子」的
+   * 平衡点。
+   */
+  private static readonly AIM_LOOK_LIFT = R * 6
+
   aimView(aim: AimEvent, fraction = 0.08) {
     const h = this.height
     const pf = this.camera.aspect < 0.8 ? 3 : 1
@@ -218,10 +261,14 @@ export class Camera {
     this.camera.position.lerp(this.target, fraction)
     this.camera.position.z = h
     this.camera.up = up
-    // v1.1.42：注视点从 +1.5R 抬到 +2R —— 让相机略抬头，更多地看「正前方」
-    // （被击球、袋口）而不是白球脚下。配合 defaultDistance R*24 / height R*9，
-    // FOV 锥在白球前方 5–20R 的高度稳定包住桌面。
-    this.lookTarget.copy(aim.pos).addScaledVector(up, R * 2)
+    /**
+     * v1.3.86：注视点抬升从 `R*2` 提到 `AIM_LOOK_LIFT`（= R*6）。
+     *
+     * 旧注释（v1.1.42）说「抬到 +2R 让相机略抬头，更多地看正前方」——
+     * 意图是对的，但抬升量太小，视线仍然近乎贴着台呢平推，画面被台呢铺满。
+     * 详见 `AIM_LOOK_LIFT` 的完整推导与实测数据。
+     */
+    this.lookTarget.copy(aim.pos).addScaledVector(up, Camera.AIM_LOOK_LIFT)
     this.camera.lookAt(this.lookTarget)
   }
 
@@ -412,9 +459,12 @@ this.replayFrameView(aim, 1)
    * v1.2.6 #232：设定回放框定三点（白球 / 被击球 / 对应球袋），
    * 并把相机切到 replayFrameView 模式。每杆前由 Replay 调用。
    */
-setReplayFrame(points: Vector3[]) {
+setReplayFrame(points: Vector3[], shotAngle?: number | null) {
 if (!points || points.length === 0) return
 this.replayFocus = points
+// v1.3.76：记下本杆出杆方向，replayFrameView 摆机位时优先用它，
+// 保证「镜头在母球正后方、朝出杆方向看」，与玩家看到的击球方向一致。
+this.replayShotAngle = typeof shotAngle === "number" ? shotAngle : null
 // v1.3.58：每杆重新框定 = 丢弃旧锚点，让 replayFrameView 按新三点重建。
 // 配合紧随其后的 forceMove()，实现「下一杆击球时重新完整定位机位」。
 this.replayAnchor = null
@@ -429,6 +479,7 @@ this.updateCameraButtonClass("topview")
 clearReplayFrame() {
 this.replayFocus = null
 this.replayAnchor = null
+this.replayShotAngle = null
 this.resetReplayNudge()
 }
 
@@ -437,9 +488,10 @@ this.resetReplayNudge()
 * v1.3.58：焦点变化意味着重新框定，锚点一并作废重建，
 * 否则镜头会继续沿用旧机位、看上去像没生效。
 */
-updateReplayFocus(points: Vector3[]) {
+updateReplayFocus(points: Vector3[], shotAngle?: number | null) {
 if (!points || points.length === 0) return
 this.replayFocus = points
+this.replayShotAngle = typeof shotAngle === "number" ? shotAngle : null
 this.replayAnchor = null
 }
 
@@ -461,9 +513,18 @@ this.replayNudgeLookTarget.set(0, 0, 0)
 
 /**
 * v1.3.58：按三点（白球 / 被击球 / 目标袋口）算出本杆的机位锚点。
-* 逻辑与旧 replayFrameView 的框定完全一致，只是把结果固化下来：
+* 逻辑与旧 replayFrameView 的框定基本一致，只是把结果固化下来：
 * 注视中心 = 三点质心，距离 = 能框住三者包围圆的距离，
-* 方位角 = 白球→袋口方向，相机置于其反方向的后上方。
+* 方位角 = 出杆方向，相机置于其反方向的后上方。
+*
+* v1.3.76：方位角原来是「白球 → 目标袋口」。实测（tools/harness/replayyaw.ts，
+* 专业档 AI 随机散布 300 杆 + 贴库 300 杆）这条线相对真实出杆角平均偏 7.8°、
+* P90 偏 17.3°、极端切球能偏到 68.3°，镜头因此常常从侧面甚至斜前方看这一杆，
+* 画面里的球杆朝向和玩家实际击球方向对不上。改为三级优先：
+*   ① Replay 传进来的本杆出杆角 aim.angle（最准，实测误差 0.0°）；
+*   ② 退而求其次用「白球 → 被击球」方向（实测平均 2.2°，比「白球 → 袋口」好）；
+*   ③ 只有连被击球都没有时才回到旧的「白球 → 袋口」。
+* 视距仍按三点包围圆反算，所以换方位角不会把任何一点挤出画面。
 */
 private buildReplayAnchor(pts: Vector3[]) {
 const n = pts.length
@@ -487,9 +548,19 @@ const fitV = radius / Math.tan(fovV / 2)
 const fitH = radius / Math.tan(fovH / 2)
 const dist = Math.max(fitV, fitH) * 1.12
 
+// v1.3.76：方位角 = 出杆方向（见函数头注释的三级优先）
 let dirx = 0
 let diry = 1
-if (n >= 3) {
+if (typeof this.replayShotAngle === "number") {
+dirx = Math.cos(this.replayShotAngle)
+diry = Math.sin(this.replayShotAngle)
+} else if (n >= 2) {
+dirx = pts[1].x - pts[0].x
+diry = pts[1].y - pts[0].y
+const len = Math.hypot(dirx, diry) || 1
+dirx /= len
+diry /= len
+} else if (n >= 3) {
 dirx = pts[2].x - pts[0].x
 diry = pts[2].y - pts[0].y
 const len = Math.hypot(dirx, diry) || 1

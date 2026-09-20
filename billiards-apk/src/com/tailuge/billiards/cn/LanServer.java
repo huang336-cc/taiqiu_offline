@@ -48,6 +48,12 @@ public class LanServer {
     /** 单条消息上限：HIT 的 tablejson（含整桌球位）在十几 KB 量级，2MB 足够 */
     private static final int MAX_MESSAGE = 2 * 1024 * 1024;
     private static final int MAX_HANDSHAKE = 16 * 1024;
+    /**
+     * v1.3.80：握手阶段读超时（毫秒）。对端连上后若在此时间内不发握手数据，
+     * 判定为无效连接并关闭线程 —— 避免旧代码 in.read() 无限阻塞导致的线程泄漏。
+     * 正常 WebSocket 客户端会在 TCP 建立后立刻发握手头，5 秒绰绰有余。
+     */
+    private static final int HANDSHAKE_TIMEOUT_MS = 5000;
 
     private final Listener listener;
     private final Object lock = new Object();
@@ -127,6 +133,13 @@ public class LanServer {
         while (running) {
             try {
                 final Socket s = ss.accept();
+                // v1.3.79：TCP 建立即记一条，用于区分「连 TCP 都没进来」（网络层
+                // 问题）与「TCP 进来了但握手失败/无请求行」（应用层问题）。
+                if (listener != null) {
+                    listener.onLog("accept 新连接 来自 "
+                        + (s.getInetAddress() == null
+                            ? "?" : s.getInetAddress().getHostAddress()));
+                }
                 // 每个连接独立线程处理（握手 + 读循环）。
                 // 关键：不能用当前线程直接 handleConnection —— readLoop 会一直
                 // 阻塞在这个连接上，accept 线程就再也收不到第二个客户端
@@ -151,12 +164,20 @@ public class LanServer {
     private void handleConnection(Socket s) {
         try {
             s.setTcpNoDelay(true);
+            // v1.3.80：给握手阶段设读超时。旧代码没有超时，in.read() 会**无限期
+            // 阻塞** —— 若对端连上后不发任何数据（系统探测、安全软件的端口扫描、
+            // 或客户端进程被冻结），这个连接线程就永远挂着，既不报错也不关闭。
+            // 真机上「probePeer 报 ok 但 WebSocket 1006」很可能就是这个形态：
+            // 探测连上后被卡住的线程一直不理，客机等不到 101 只能异常关闭。
+            s.setSoTimeout(HANDSHAKE_TIMEOUT_MS);
             InputStream in = s.getInputStream();
             OutputStream out = s.getOutputStream();
             if (!performHandshake(in, out)) {
                 try { s.close(); } catch (IOException ignored) {}
                 return;
             }
+            // 握手完成，转入长连接：读循环不能有超时（否则空闲会被误断）
+            s.setSoTimeout(0);
             Client c = new Client();
             c.socket = s;
             c.in = in;
@@ -164,6 +185,10 @@ public class LanServer {
             synchronized (lock) { clients.add(c); }
             notifyCount();
             readLoop(c);
+        } catch (java.net.SocketTimeoutException e) {
+            // 握手超时：明确记一条，这是可诊断的重要信号
+            if (listener != null) listener.onLog("handshake 超时（对端未发握手数据）");
+            try { s.close(); } catch (IOException ignored) {}
         } catch (IOException e) {
             if (listener != null) listener.onLog("conn: " + e);
         }
@@ -176,10 +201,21 @@ public class LanServer {
         // 读到 \r\n\r\n（限制总量防恶意客户端）
         while (total < MAX_HANDSHAKE) {
             int n = in.read(buf, total, MAX_HANDSHAKE - total);
-            if (n < 0) return false;
+            if (n < 0) {
+                // v1.3.80：对端没发完就断开。记一条 —— 旧代码这里静默 return false，
+                // 真机上表现为「有 accept 日志、没有握手日志」，容易被误判成网络问题。
+                if (listener != null) {
+                    listener.onLog("handshake 对端提前断开（已收 " + total + " 字节）");
+                }
+                return false;
+            }
             total += n;
             String head = new String(buf, 0, total, "UTF-8");
             if (head.contains("\r\n\r\n")) break;
+        }
+        if (total == 0) {
+            if (listener != null) listener.onLog("handshake 未收到任何数据");
+            return false;
         }
         String head = new String(buf, 0, total, "UTF-8");
         String key = null;
@@ -191,6 +227,21 @@ public class LanServer {
             } else if (l.startsWith("upgrade:")) {
                 upgrade = l.contains("websocket");
             }
+        }
+        // v1.3.79：把收到的请求首行与关键头写进诊断日志。
+        //
+        // 客机报「端口可达但连不上」时，唯一能区分下面三种情况的证据就在这里：
+        //   a) 请求行是 "GET / HTTP/1.1" 且没有 Sec-WebSocket-Key
+        //      → 有别的程序（浏览器/系统预检）连进来了，不是我们的客户端
+        //   b) 完全没有日志                     → 客机的 SYN 根本没到（网络层）
+        //   c) 首行正常但 Upgrade 缺失           → WebView 发出的不是标准握手
+        if (listener != null) {
+            String firstLine = head;
+            int nl = head.indexOf("\r\n");
+            if (nl > 0) firstLine = head.substring(0, nl);
+            listener.onLog("handshake 收到: " + firstLine
+                + " | key=" + (key == null ? "无" : "有")
+                + " | upgrade=" + upgrade);
         }
         if (key == null || !upgrade) {
             if (listener != null) listener.onLog("handshake: 非 WebSocket 请求已拒绝");
@@ -204,6 +255,10 @@ public class LanServer {
             + "\r\n";
         out.write(resp.getBytes("UTF-8"));
         out.flush();
+        // v1.3.79：握手成功也记一条 —— 它与客机侧的 onopen 是一对证据。
+        // 若这里有日志而客机仍报连不上，说明问题在握手之后（帧层/页面层）；
+        // 若这里没有日志而客机报了失败，说明请求压根没到或不是 WebSocket。
+        if (listener != null) listener.onLog("handshake 成功: 已回 101");
         return true;
     }
 

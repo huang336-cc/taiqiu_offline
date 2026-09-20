@@ -168,20 +168,60 @@ export class Professional extends TheFarJaw {
     // 擦到目标球。ghost 法在贴球/球堆挤压等边界情形下仍可能给出打飞的方向
     // （见 MIN_GHOST_DISTANCE 注释），这里兜底：改为直击目标球心。
     // 直击最多打厚进不去，但绝不会空杆送对手自由球。
+    // v1.3.77：直击前先验证「直击方向」的首撞合法性 —— enumeratePlans 检查的
+    // 是母球→ghost 的线段，直击方向与 ghost 方向是两条不同的线，也可能被
+    // 对方球挡住；直击会被挡时转安全球/解球，绝不硬打出犯规的一杆。
     let finalHit = pocketHit
     const hitAngle = (pocketHit.tablejson?.aim as { angle?: number } | undefined)
       ?.angle
+    const legalTargets = new Set<Ball>(balls)
+    const directAngle = Math.atan2(
+      best.ball.pos.y - cue.pos.y,
+      best.ball.pos.x - cue.pos.x
+    )
+    /** 沿 angle 出杆，直线段预测的首撞是否合法（无球可撞 / 先撞本方球都算合法） */
+    const firstContactLegal = (angle: number): boolean => {
+      const fc = firstContactAlong(cue.pos, angle, context.table.balls, cue)
+      return !fc || legalTargets.has(fc.ball)
+    }
     if (
       typeof hitAngle === "number" &&
       rayMissDistance(cue.pos, hitAngle, best.ball.pos) > 1.9 * R
     ) {
-      finalHit = calculator.generateShot(
-        context.table,
-        this.profile.aimNoise,
-        jitterPower(power, this.profile.powerJitter),
-        best.ball.pos.clone(),
-        spin
-      )
+      if (firstContactLegal(directAngle)) {
+        finalHit = calculator.generateShot(
+          context.table,
+          this.profile.aimNoise,
+          jitterPower(power, this.profile.powerJitter),
+          best.ball.pos.clone(),
+          spin
+        )
+      } else {
+        return this.safetyOrFallback(context, calculator, cue, balls)
+      }
+    }
+
+    // v1.3.77：最终闸门 —— 用**含噪声后的实际出杆角**再验一次首撞。
+    // 前面所有遮挡检查都基于理想方向，这里对真正打出去的那个角度负责：
+    // 预测首撞若不在合法目标里（对方花色球 / 未清完时的黑8），改直击
+    // （直击方向合法且碰得到目标球时）或整体转安全球/解球。
+    const finalAngle = (
+      finalHit.tablejson?.aim as { angle?: number } | undefined
+    )?.angle
+    if (typeof finalAngle === "number" && !firstContactLegal(finalAngle)) {
+      const directReachable =
+        rayMissDistance(cue.pos, directAngle, best.ball.pos) <= 2 * R
+      if (directReachable && firstContactLegal(directAngle)) {
+        finalHit = calculator.generateShot(
+          context.table,
+          this.profile.aimNoise,
+          jitterPower(power, this.profile.powerJitter),
+          best.ball.pos.clone(),
+          spin
+        )
+      } else {
+        return this.safetyOrFallback(context, calculator, cue, balls)
+      }
     }
 
     const out: GameEvent[] = [
@@ -325,6 +365,14 @@ export class Professional extends TheFarJaw {
    * v1.3.65：候选池先做**视线畅通过滤**（对全桌球，含对方球与黑8）。
    * 被挡的球打出去首撞非本方球 = 直接犯规送自由球，比不进还糟；完全被挡死
    * 时才退回全量候选里最近的一颗（此时至少方向对，运气好能蹭到）。
+   *
+   * v1.3.77：畅通性检查改为沿**实际出杆方向**（ghost 瞄准点）。
+   * 旧版查「母球→球心」直线，而真正打出去的是 ghost 方向 —— 大切角时两条
+   * 线能差几十度，球心畅通不代表 ghost 路径畅通，实际出杆照样首撞对方球
+   * （用户反馈「被别的花色球挡住时还是会坚决犯规」的主因）。
+   * 全部直线被挡（snooker）时不再硬打 clearestBall，先试**一库解球**
+   * （tryKickShot）：镜像法反弹后首撞本方球，合法且体面；一库也解不到
+   * 的无解局才认命按「最畅通」硬打。
    */
   private safetyOrFallback(
     context: BotShotContext,
@@ -336,17 +384,24 @@ export class Professional extends TheFarJaw {
     const allBalls = context.table.balls.filter(
       (b) => b.onTable() && b !== cue
     )
+    const ghostAim = (b: Ball) => calculator.getAimPoint(cue.pos, b.pos)
     const open = balls.filter(
-      (b) => !lineBlocked(cue.pos, b.pos, allBalls, cue, b)
+      (b) => !lineBlocked(cue.pos, ghostAim(b), allBalls, cue, b)
     )
-    // v1.3.66：没有任何球视线完全畅通时，不无脑取最近的一颗（最近那颗往往
-    // 正被挡死、首撞错球直接犯规），而是挑「遮挡最轻」的一颗当 fallback，
-    // 尽量降低首撞错球送自由球的概率。
     let pool: Ball[]
     if (open.length > 0) {
       pool = open
     } else {
-      const cb = clearestBall(cue.pos, balls, allBalls, cue)
+      // v1.3.77：直线全被挡 → 一库解球优先，别再「坚决犯规」
+      const kick = this.tryKickShot(
+        context,
+        calculator,
+        cue,
+        balls,
+        allBalls
+      )
+      if (kick) return kick
+      const cb = clearestBall(cue.pos, balls, allBalls, cue, ghostAim)
       pool = cb ? [cb] : balls
     }
     const fallback = Respot.closest(cue, pool)
@@ -423,6 +478,134 @@ export class Professional extends TheFarJaw {
     )
     return [AimEvent.fromJson(hit.tablejson.aim), hit]
   }
+
+  /**
+   * v1.3.77：一库解球（kick shot）。
+   *
+   * 全部直线被挡（被对方球做了 snooker）时，不再硬打出首撞对方球的犯规杆，
+   * 而是用**镜像法**解一库：目标球关于某条库边做镜像，母球瞄准镜像点出杆 →
+   * 撞库反弹（入射角=反射角近似，不加旋转）后正好朝目标球去，首撞本方球。
+   *
+   * 可行性要求（全部满足才算一库解）：
+   *   1. 反弹点落在库边有效段内（到任一袋口的距离 > 2.1R，避免反弹点落进袋口）；
+   *   2. 母球→反弹点 段无遮挡（全桌视角，排除母球与目标球）；
+   *   3. 反弹点→目标球 段无遮挡（排除目标球）。
+   * 在所有「本方球 × 四条库」可行组合里取**总路程最短**的。
+   *
+   * 力度：沿 cue→库→球 总路程做物理反解，额外 ×1.35 补库边能量损失
+   * （库弹性约 0.75，等效距离 ÷0.75），夹在 [34R, 72R]。
+   *
+   * 返回 null 表示一库也解不到 —— 真无解局（极少），调用方按旧逻辑认命硬打。
+   */
+  private tryKickShot(
+    context: BotShotContext,
+    calculator: AimCalculator,
+    cue: Ball,
+    balls: Ball[],
+    allBalls: Ball[]
+  ): GameEvent[] | null {
+    const X = TableGeometry.X
+    const Y = TableGeometry.Y
+    const pockets = calculator.pockets
+    let bestMirror: Vector3 | null = null
+    let bestTarget: Ball | null = null
+    let bestTotal = Infinity
+    let bestD1 = 0
+    let bestD2 = 0
+
+    for (const b of balls) {
+      // 四条库的镜像点与反弹点
+      const candidates: { mirror: Vector3; bounce: Vector3 | null }[] = [
+        {
+          mirror: new Vector3(2 * X - b.pos.x, b.pos.y, 0),
+          bounce: null,
+        },
+        {
+          mirror: new Vector3(-2 * X - b.pos.x, b.pos.y, 0),
+          bounce: null,
+        },
+        {
+          mirror: new Vector3(b.pos.x, 2 * Y - b.pos.y, 0),
+          bounce: null,
+        },
+        {
+          mirror: new Vector3(b.pos.x, -2 * Y - b.pos.y, 0),
+          bounce: null,
+        },
+      ]
+      for (const c of candidates) {
+        const mx = c.mirror.x
+        const my = c.mirror.y
+        // 母球→镜像点 与库边的交点 = 反弹点
+        let bounce: Vector3 | null
+        if (my === b.pos.y) {
+          // x 库镜像：交点 x = ±X
+          const plane = mx > 0 ? X : -X
+          const denom = mx - cue.pos.x
+          if (Math.abs(denom) < 1e-6) continue
+          const t = (plane - cue.pos.x) / denom
+          if (t <= 0) continue
+          const by = cue.pos.y + t * (my - cue.pos.y)
+          bounce = new Vector3(plane, by, 0)
+        } else {
+          // y 库镜像：交点 y = ±Y
+          const plane = my > 0 ? Y : -Y
+          const denom = my - cue.pos.y
+          if (Math.abs(denom) < 1e-6) continue
+          const t = (plane - cue.pos.y) / denom
+          if (t <= 0) continue
+          const bx = cue.pos.x + t * (mx - cue.pos.x)
+          bounce = new Vector3(bx, plane, 0)
+        }
+        // 反弹点须离袋口足够远（别把反弹点选在袋口里）
+        let nearPocket = false
+        for (const pk of pockets) {
+          if (bounce.distanceTo(pk) < 2.1 * R) {
+            nearPocket = true
+            break
+          }
+        }
+        if (nearPocket) continue
+        const d1 = cue.pos.distanceTo(bounce)
+        const d2 = bounce.distanceTo(b.pos)
+        if (d1 < 1.5 * R || d2 < 2 * R) continue
+        // 两段路径都必须畅通（各自的线段排除线段端点的球）
+        if (lineBlocked(cue.pos, bounce, allBalls, cue, b)) continue
+        if (lineBlocked(bounce, b.pos, allBalls, b)) continue
+        const total = d1 + d2
+        if (total < bestTotal) {
+          bestTotal = total
+          bestMirror = c.mirror
+          bestTarget = b
+          bestD1 = d1
+          bestD2 = d2
+        }
+      }
+    }
+    if (!bestMirror || !bestTarget) return null
+
+    const railPower = cueSpeedFor(
+      bestD1,
+      bestD2 + POCKET_RADIUS_CORNER,
+      POCKET_RADIUS_CORNER,
+      1,
+      0,
+      0,
+      1.3
+    )
+    const power = Math.min(
+      Math.max(railPower * 1.35, 34 * R),
+      72 * R
+    )
+    const hit = calculator.generateShot(
+      context.table,
+      this.profile.aimNoise,
+      jitterPower(power, this.profile.powerJitter),
+      bestMirror,
+      new Vector3(0, 0, 0)
+    )
+    return [AimEvent.fromJson(hit.tablejson.aim), hit]
+  }
 }
 
 /**
@@ -442,6 +625,33 @@ function rayMissDistance(
   const along = rel.dot(dir)
   if (along <= 0) return Infinity
   return Math.sqrt(Math.max(0, rel.lengthSq() - along * along))
+}
+
+/**
+ * v1.3.77：沿出杆角的直线「首撞预测」。
+ * 找出方向线上投影距离最近、且球心到射线垂距 < 2R（会撞上）的那颗球。
+ * 用于最终闸门：真正打出去的角度（含噪声）首撞必须落在合法目标里。
+ * 返回 null 表示直线上一颗球都碰不到（可能先撞库，反弹后不可预测）。
+ */
+function firstContactAlong(
+  cuePos: Vector3,
+  angle: number,
+  balls: Ball[],
+  cue: Ball
+): { ball: Ball; t: number } | null {
+  const dir = new Vector3(Math.cos(angle), Math.sin(angle), 0)
+  let best: { ball: Ball; t: number } | null = null
+  for (const b of balls) {
+    if (b === cue || !b.onTable()) continue
+    const rel = b.pos.clone().sub(cuePos)
+    const t = rel.dot(dir)
+    if (t <= 0) continue
+    const perp = Math.sqrt(Math.max(0, rel.lengthSq() - t * t))
+    if (perp < 2 * R && (!best || t < best.t)) {
+      best = { ball: b, t }
+    }
+  }
+  return best
 }
 
 /**
@@ -600,17 +810,20 @@ function segDistToPoint(a: Vector3, b: Vector3, p: Vector3): number {
  * v1.3.66：从候选球里挑「母球→该球」视线最不被遮挡的一颗。
  * 返回让母球首撞点离其他球最远的那颗（lineClarity 越大越畅通），
  * 用于「没有任何球视线完全畅通」时的安全球兜底，降低首撞错球犯规。
+ * v1.3.77：评估路径由调用方给定（主路径传 ghost 瞄准点 —— 按实际出杆
+ * 方向评估，而不是「母球→球心」直线，理由见 safetyOrFallback 注释）。
  */
 function clearestBall(
   from: Vector3,
   balls: Ball[],
   allBalls: Ball[],
-  cue: Ball
+  cue: Ball,
+  toOf: (b: Ball) => Vector3
 ): Ball | undefined {
   let best: Ball | undefined
   let bestC = -Infinity
   for (const b of balls) {
-    const c = lineClarity(from, b.pos, allBalls, cue, b)
+    const c = lineClarity(from, toOf(b), allBalls, cue, b)
     if (c > bestC) {
       bestC = c
       best = b

@@ -38,6 +38,14 @@ export class AimSlider {
   private dragStartAngle = 0
   /** 本次手势是否发生了有效滑动（>3px 视为拖动，否则视为轻点） */
   private didDrag = false
+  /**
+   * v1.3.76：本次拖动期间**冻结**的视角符号（见 viewSign）。
+   * 原先 onDragMove 每帧重算 viewSign()：相机跟着瞄准角一起转，
+   * dot 值会在 0 附近来回穿越，符号一会儿 +1 一会儿 -1，
+   * 于是「同一个手指位置」被解算成两个相反的角度增量 —— 表现就是
+   * 拖到条子边缘时示意线来回抽搐。拖动开始时算一次并锁死即可。
+   */
+  private dragViewSign = 1
 
   constructor(container: Container) {
     this.container = container
@@ -127,6 +135,8 @@ export class AimSlider {
     // 记录起点：屏幕 X 与当时的真实瞄准角，后续用相对增量（不截断）
     this.dragStartX = e.clientX
     this.dragStartAngle = this.cue.aim.angle
+    // v1.3.76：锁死本次手势的视角符号，避免拖动中因符号翻转而抽搐
+    this.dragViewSign = this.viewSign()
     this.cue.beginAimInteraction()
     // v1.2.17 #6：不再调用 setPointerCapture。部分 Android WebView 在 pointerdown
     // 上 preventDefault 后再 setPointerCapture，会立刻派发 pointercancel 并结束拖动，
@@ -152,19 +162,31 @@ export class AimSlider {
     if (Math.abs(dx) > 3) this.didDrag = true
     // 一条满轨宽 = ±AIM_FINE_HALF_RANGE（与旧 range 灵敏度一致，但不再夹住两端）
     const HALF = Math.PI / 180
-    const delta = (dx / rect.width) * 2 * HALF * this.viewSign()
+    // v1.3.76：拖出轨道两端后**停止继续转动**。
+    // 旧代码的角度增量没有上限，手指滑到条子最边缘甚至滑出条子外面时，
+    // 角度会一路继续转，辅助线在两个目标球 / 库边之间反复切换，
+    // 观感就是「多出一根示意线、其中一根不停抽搐」。
+    // 上限取 2×HALF（= 拖满一整条轨宽），与滑块 frac 的 ±1 完全对齐：
+    // 滑块到头 = 角度到头，再往外拖不再有任何变化。
+    const MAX_DELTA = 2 * HALF
+    const delta =
+      Math.max(-MAX_DELTA, Math.min(MAX_DELTA, (dx / rect.width) * 2 * HALF * this.dragViewSign))
     const target = this.dragStartAngle + delta
     this.cue.setAimAngle(target, this.container.table)
     this.container.lastEventTime = performance.now()
     // 视觉填充仅作方向提示（轨道中心=本杆初始方向），角度本身不截断
+    const frac = Math.max(-1, Math.min(1, (dx / rect.width) * 2))
     const pct = Math.max(0, Math.min(100, 50 + (dx / rect.width) * 50))
     if (this.slider) {
       // v1.2.17 #6：同步更新滑块 value，让旋钮（拉杆）在拖动时跟随手指移动，
       // 否则旋钮永远 Snap 回中心、手指拖它不动，表现为「无法拖动拉杆」。
-      const frac = Math.max(-1, Math.min(1, (dx / rect.width) * 2))
       this.slider.value = frac.toFixed(4)
       this.slider.style.setProperty("--v", pct.toFixed(2) + "%")
     }
+    // v1.3.76：滑块离开中心后淡出中央基准刻线。
+    // 静止时刻线被旋钮盖住看不出来；一旦旋钮滑到两端，刻线和旋钮就变成
+    // 屏幕上两根并排的竖条，玩家分不清哪根才是当前瞄准位置。
+    this.bar?.classList.toggle("aim-off-center", Math.abs(frac) > 0.02)
   }
 
   private onDragEnd = (e: PointerEvent) => {
@@ -186,6 +208,8 @@ export class AimSlider {
       this.slider.value = "0"
       this.slider.style.setProperty("--v", "50%")
     }
+    // v1.3.76：滑块回中 → 基准刻线重新显示（与拖动中的淡出配对）
+    this.bar?.classList.remove("aim-off-center")
     this.cue.setAimBase(this.cue.aim.angle)
   }
 

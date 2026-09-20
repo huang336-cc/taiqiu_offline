@@ -32,11 +32,34 @@ public class MainActivity extends Activity {
      *   （"URL scheme file is not supported"），且无法通过任何 WebSettings 开关放开。
      *   结果就是桌子模型和纹理全部加载失败，3D 场景为空 —— 表现为进游戏后一片黑。
      *
-     * 解法：把页面挂在一个不存在的 https 域名下，再用 shouldInterceptRequest
-     *   把请求转回 APK 内的 assets。这样页面 origin 是 https，fetch 完全正常，
+     * 解法：把页面挂在一个不存在的域名下，再用 shouldInterceptRequest
+     *   把请求转回 APK 内的 assets。这样页面 origin 正常、fetch 完全正常，
      *   同时所有流量都被本地拦截，不产生任何真实网络请求，依旧是纯离线。
+     *
+     * ★ v1.3.78：协议由 https 改为 http —— 这是「局域网对战连不上」的真正根因。
+     *   局域网对战要连的是**明文 WebSocket**（主机侧 ws://127.0.0.1:PORT，
+     *   客机侧 ws://<对方IP>:PORT）。而此前页面 origin 是 https://billiards.local/，
+     *   从 https 页面发起 ws:// 属于**主动混合内容（active mixed content）**，
+     *   Blink 在 new WebSocket() 的那一刻就做协议校验并**直接拦截**，
+     *   连 TCP 都不会发出去（控制台报 "Mixed Content: ... insecure WebSocket ...
+     *   This request has been blocked; this endpoint must be available over WSS"）。
+     *
+     *   两个此前的误判，这里一并写清楚以免后人重蹈：
+     *     1) WebSettings.setMixedContentMode(MIXED_CONTENT_ALWAYS_ALLOW) 对
+     *        WebSocket **不生效** —— 该开关只覆盖 img/script/fetch/XHR 那类子资源，
+     *        Chromium 有意把 WebSocket 排除在外（属主动混内容，唯一解是 wss）。
+     *     2) android:usesCleartextTraffic="true" 也**管不到 WebView 的 ws://** ——
+     *        它约束的是平台网络栈（HttpURLConnection / OkHttp / 原生 Socket）的
+     *        明文策略。该属性已在 APK 里正确注入（二进制 manifest 实测为 true），
+     *        但页面里的 ws:// 根本不经过它。
+     *
+     *   因此唯一改动是让页面与 ws:// **同处明文上下文**：origin 用 http://，
+     *   混合内容规则即不适用，new WebSocket("ws://...") 正常工作。
+     *   本 App 不依赖任何需要安全上下文的能力（摄像头 / 定位 / ServiceWorker /
+     *   getUserMedia），http:// 虚拟域名不会带来功能损失；所有资源仍走
+     *   shouldInterceptRequest 本地拦截，离线属性完全不变。
      */
-    private static final String VHOST = "https://billiards.local/";
+    private static final String VHOST = "http://billiards.local/";
     private static final String ASSET_ROOT = "dist";
 
     // 对应 android.view.View 的系统 UI 标志（当前 android.jar 常量表不全，用数值兼容）
@@ -80,8 +103,12 @@ public class MainActivity extends Activity {
         softSet(s, "setAllowFileAccessFromFileURLs", true);
         softSet(s, "setAllowUniversalAccessFromFileURLs", true);
 
-        // v1.3.65：局域网对战需要 https 页面连 ws://（主机侧 ws://127.0.0.1，
-        // 客机侧 ws://<对方IP>）。默认 mixed content 策略会拦截，这里放行。
+        // v1.3.65：放宽混合内容策略。
+        // v1.3.78 更正：这个开关**救不了局域网对战的 ws://** —— 它只覆盖
+        // img/script/fetch/XHR 一类的子资源，Chromium 有意把 WebSocket 排除在外
+        // （主动混合内容，只认 wss）。真正的修复是把页面 origin 从 https 换成
+        // http（见 VHOST 注释），让 ws:// 与页面同处明文上下文。
+        // 这里保留该设置：对页面内可能出现的其它 http 子资源仍有效。
         // MIXED_CONTENT_ALWAYS_ALLOW = 0。
         softSetInt(s, "setMixedContentMode", 0);
 
@@ -349,6 +376,8 @@ public class MainActivity extends Activity {
         // v1.3.65：页面/Activity 销毁时停掉局域网服务端，释放端口与线程
         if (lanBridge != null) {
             try { lanBridge.stopServer(); } catch (Throwable ignored) {}
+            // v1.3.81：同时断开原生 WebSocket 客户端，避免泄漏连接
+            try { lanBridge.wsClose(); } catch (Throwable ignored) {}
             lanBridge = null;
         }
         super.onDestroy();

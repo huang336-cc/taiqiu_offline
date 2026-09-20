@@ -244,6 +244,88 @@ body.train-mode .score-card {
   left: max(6px, env(safe-area-inset-left, 6px));
 }
 
+/* ==========================================================================
+   v1.3.82：平板 / 宽屏下比分栏遮挡球台画面的修复
+   --------------------------------------------------------------------------
+   现象（用户真机反馈）：平板（2560×1600，宽高比 1.6）下比分栏浮在球台左上
+   角，压住库边与台面，明显挡视线。
+
+   成因：.score-card 是 position:absolute; top:8px; left:8px，尺寸由
+   `max-width: clamp(180px, 36vw, 240px)` 决定 —— 在 853 CSS px 宽的平板上
+   36vw ≈ 307px 被 clamp 到 240px，整块压在台面上。而球台在本游戏里是**横向
+   铺满** .view3d 的（透视渲染，四周只有很窄的木质边框），左右两侧并没有可用
+   的"留白区"给比分栏，所以单纯挪位置无法根治。
+
+   思路：宽屏下把比分栏**显著收紧**（等比缩小字号/球径/内距，整体约缩到原
+   60%），并让背景**半透明**（球台能透出来），把遮挡面积与视觉干扰降到最低，
+   同时保证比分、已进球球号仍清晰可读。仅命中"平板级"视口：宽高比 ≥ 1.3 且
+   高度 ≥ 560px（手机横屏高通常 < 500px，由上面的 compact 规则处理，两者不
+   冲突）。
+   ========================================================================== */
+@media (min-aspect-ratio: 1.3) and (min-height: 560px) {
+  .score-card {
+    /* 收紧留白：上下左右各减一档，整体高度约降 25% */
+    top: 6px;
+    left: 6px;
+    padding: 3px 5px;
+    gap: 3px;
+    /* 从 240px 收到 160px 上限；用 min() 保证小屏也不会比原来更宽 */
+    max-width: min(160px, 30vw);
+    border-width: 1px;
+    border-radius: 9px;
+    /* 半透明木色：保留质感与金边，但让下方球台能透出来，降低"挡画面"感 */
+    background: linear-gradient(
+      180deg,
+      rgba(107, 74, 34, 0.78) 0%,
+      rgba(74, 48, 20, 0.78) 100%
+    );
+    /* 收紧阴影，避免大范围柔光进一步糊住台面 */
+    box-shadow:
+      inset 0 1px 2px rgba(255, 255, 255, 0.14),
+      0 3px 10px rgba(0, 0, 0, 0.35);
+  }
+  .sc-players {
+    gap: 3px;
+  }
+  .sc-player {
+    /* 列最小宽度同步收窄（原 60px），避免两列撑宽整块 */
+    min-width: 44px;
+    padding: 2px 4px;
+    gap: 1px;
+  }
+  .sc-player-label {
+    font-size: 9px;
+  }
+  .sc-player-score {
+    font-size: 14px;
+  }
+  .sc-ball {
+    /* 已进球圆点：14px → 11px，一行 3 颗仍清晰可辨 */
+    width: 11px;
+    height: 11px;
+    font-size: 7px;
+  }
+  .sc-player-balls {
+    /* 容器宽同步收紧 = 3 颗球 + 2 间距 = 3×11 + 2×2 = 37px */
+    width: 37px;
+    max-width: 37px;
+    gap: 2px;
+    min-height: 11px;
+  }
+  body.replay-mode .sc-player-balls {
+    width: 37px;
+    max-width: 37px;
+  }
+  .sc-time {
+    font-size: 9px;
+  }
+  .sc-series {
+    font-size: 10px;
+    padding: 1px 6px;
+    margin: 0 1px;
+  }
+}
+
 /* ---- 横屏紧凑 ---- */
 @media (orientation: landscape) and (max-height: 500px) {
   .score-card {

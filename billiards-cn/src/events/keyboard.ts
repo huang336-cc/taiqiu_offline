@@ -22,6 +22,19 @@ export class Keyboard {
   onDragStart?: () => void
   onDragEnd?: () => void
 
+  /**
+   * v1.3.76：本次手势是否应被**完全忽略**（既不改瞄准角、也不回调起止）。
+   *
+   * 场景：白球击球点面板展开时，用户点/滑主界面只是想把面板收起来。
+   * 旧实现只在 onDragStart 里 return（少调一次 beginAimInteraction），
+   * 但 interact.js 的 move 依旧会把 movementX/Y 攒进事件队列 ——
+   * 瞄准角照样被转跑，「关面板 = 白瞄一次」。这里在 start 就判定，
+   * 命中则整段 start/move/end 全部吞掉。
+   */
+  shouldIgnoreDrag?: () => boolean
+  /** 本次手势已被判为忽略（start 置位，end 复位） */
+  private dragSuppressed = false
+
   getEvents() {
     const result: Input[] = []
 
@@ -64,12 +77,23 @@ export class Keyboard {
       ignoreFrom,
       listeners: {
         start: () => {
+          // v1.3.76：整段手势吞掉，不改瞄准、也不回调起止
+          if (this.shouldIgnoreDrag?.()) {
+            this.dragSuppressed = true
+            return
+          }
+          this.dragSuppressed = false
           this.onDragStart?.()
         },
         move: (e) => {
+          if (this.dragSuppressed) return
           this.mousetouch(e)
         },
         end: () => {
+          if (this.dragSuppressed) {
+            this.dragSuppressed = false
+            return
+          }
           this.onDragEnd?.()
         },
       },
@@ -77,13 +101,23 @@ export class Keyboard {
     interact(element).gesturable({
       ignoreFrom,
       onstart: () => {
+        if (this.shouldIgnoreDrag?.()) {
+          this.dragSuppressed = true
+          return
+        }
+        this.dragSuppressed = false
         this.onDragStart?.()
       },
       onmove: (e) => {
+        if (this.dragSuppressed) return
         e.dx /= 3
         this.mousetouch(e)
       },
       onend: () => {
+        if (this.dragSuppressed) {
+          this.dragSuppressed = false
+          return
+        }
         this.onDragEnd?.()
       },
     })

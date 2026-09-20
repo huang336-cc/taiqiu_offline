@@ -28,7 +28,7 @@ export class BallMesh {
   private static _shadowGeometry: CircleGeometry
   private static _shadowMaterial: MeshBasicMaterial
   private static readonly _dottedGeometryCache = new Map<
-    number,
+    number | string,
     IcosahedronGeometry
   >()
 
@@ -147,11 +147,17 @@ export class BallMesh {
       appearance ?? (label === undefined ? "dotted" : "projected")
 
     if (effectiveAppearance === "dotted") {
-      const key = color.getHex()
+      /**
+       * 缓存 key 必须带上「是否画点」。母球（无点）和同色系彩球（有点）
+       * 若共用几何缓存，会出现「母球拿到彩球几何」的错配。
+       */
+      const isCueBall = color.getHex() === 0xffffff
+      const key = isCueBall ? "cue" : color.getHex()
       let cached = BallMesh._dottedGeometryCache.get(key)
       if (!cached) {
         cached = new IcosahedronGeometry(R, Math.max(1, Session.getLod()))
-        BallMesh.addDots(cached, color)
+        // 母球纯白无标记；其余球用暗红点区分
+        BallMesh.addDots(cached, color, isCueBall ? null : 0xaa2222)
         BallMesh._dottedGeometryCache.set(key, cached)
       }
       geometry = cached
@@ -184,7 +190,22 @@ export class BallMesh {
     this.trace = new Trace(500, color)
   }
 
-  private static addDots(geometry, baseColor) {
+  /**
+   * 给「无贴图」球体刷顶点色：底色 + 可选的点标记。
+   *
+   * ⚠️ v1.3.85 修复「母球长红斑」。
+   *
+   * 病史：本函数原本无条件在 `[0, 96, 111, 156, 186, 195]` 这 6 个面上刷
+   * 暗红 `0xaa2222`。但**母球（label === 0，color 0xffffff）也走 "dotted"
+   * 分支** —— 它没有 label 判定，于是纯白母球被打上 6 块红斑，看起来像
+   * 一颗掉色的旧球，而不是干净的白球。
+   *
+   * 修复：按球色判定。**纯白球不加点**（真实台球里母球本就是纯白无标），
+   * 其余彩球保留点标记以区分花色。
+   *
+   * @param dotColor  点标记颜色；传 null 表示这颗球不加点
+   */
+  private static addDots(geometry, baseColor, dotColor: number | null) {
     const count = geometry.attributes.position.count
     const color = new Color(baseColor)
 
@@ -204,7 +225,12 @@ export class BallMesh {
       )
     }
 
-    const red = new Color(0xaa2222)
+    if (dotColor === null) {
+      // 母球：纯白无点
+      return
+    }
+
+    const red = new Color(dotColor)
     const dots = [0, 96, 111, 156, 186, 195]
     dots.forEach((i) => {
       BallMesh.colorVerticesForFace(i / 3, verticies, red.r, red.g, red.b)

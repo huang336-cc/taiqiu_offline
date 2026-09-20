@@ -152,11 +152,18 @@ try {
         // v1.3.20：白球击球点展开面板打开时，屏蔽画布拖拽瞄准，
         // 防止调整打点时滑动屏幕误触旋转瞄准方向。
         if (cue.aimInputs.isCueBallPopupOpen()) return
+        // v1.3.76：这次按下刚把打点面板收起来 —— 本次手势只用来关面板，
+        // 不改瞄准。真正吞事件的是 Keyboard.shouldIgnoreDrag（连 movement
+        // 都不攒），这里再挡一道，保证辅助线也不会闪一下。
+        if (cue.aimInputs.isAimSuppressed()) return
         cue.beginAimInteraction()
       }
       keyboard.onDragEnd = () => {
         this.table.cue.endAimInteraction()
       }
+      // v1.3.76：打点面板刚被这次按下收起时，整段拖拽手势都不产生瞄准输入
+      keyboard.shouldIgnoreDrag = () =>
+        !!this.table.cue.aimInputs?.isAimSuppressed()
     }
     this.sound = assets.sound
     this.chat = new Chat(this.sendChat)
@@ -176,6 +183,9 @@ try {
       if (!cue.aimInputs || cue.aimInputs.isDisabled()) return
       // v1.3.20：白球击球点展开面板打开时，屏蔽点球瞄准（同拖拽瞄准互斥）。
       if (cue.aimInputs.isCueBallPopupOpen()) return
+      // v1.3.76：这次点击只是把打点面板收起来（含 pointerup 之后才派发的
+      // tap），不要顺手把瞄准对准到被点的球上。
+      if (cue.aimInputs.isAimTapSuppressed()) return
       cue.aimAtNext(this.table.cueball, ball)
       // 点球对准是瞬时操作，没有松手事件，给一个短暂的辅助线可见窗口
       cue.flashAimInteraction()
