@@ -465,6 +465,19 @@ export interface CueThemeDef {
    * shaft 作用于杆身段，butt 作用于杆尾段。
    */
   finish?: { shaft: number; butt: number }
+  /**
+   * 【v1.4.3】烘焙在贴图上的「定向光照」强度倍率（默认 1）。
+   *
+   * 与 finish 是两件事：finish 控制 MeshPhongMaterial.shininess（运行时
+   * 真实光源的高光锐度），relief 控制贴图里预先烘焙的圆柱周向明暗
+   * （主高光带 + 背光暗面 + 轮廓反光），决定"有没有体积感"。
+   * 两者互补：哑光材质同样有圆柱体积，镜面材质则额外锐利。
+   *
+   *   < 1：石砚 / 柔雾硅胶等刻意扁平的雾面；
+   *   > 1：玻璃、冰晶、抛光金属，以及整体过暗、
+   *        不靠明暗轮廓就说不清形体的深色主题。
+   */
+  relief?: number
 }
 
 export const CUE_THEMES: CueThemeDef[] = [
@@ -481,6 +494,7 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "dragon",
     swatch: "linear-gradient(135deg,#caa23a 0%,#3a0d0d 100%)",
     accent: 0xcaa23a,
+    relief: 0.85,
   },
   {
     id: "azure",
@@ -488,6 +502,7 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "azure",
     swatch: "linear-gradient(135deg,#5fd0e0 0%,#093b54 100%)",
     accent: 0x5fd0e0,
+    relief: 0.85,
   },
   {
     id: "minions",
@@ -495,6 +510,7 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "minions",
     swatch: "linear-gradient(135deg,#f4d000 0%,#1f6fb2 100%)",
     accent: 0xf4d000,
+    relief: 0.85,
   },
   {
     id: "peppa",
@@ -502,6 +518,7 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "peppa",
     swatch: "linear-gradient(135deg,#ff9ec4 0%,#ff6fa8 100%)",
     accent: 0xff9ec4,
+    relief: 0.90,
   },
   {
     id: "qilin",
@@ -509,6 +526,7 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "qilin",
     swatch: "linear-gradient(135deg,#ffd24a 0%,#d8320a 100%)",
     accent: 0xff7a1f,
+    relief: 0.85,
   },
   {
     id: "ultraman",
@@ -516,6 +534,7 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "ultraman",
     swatch: "linear-gradient(135deg,#e8eef2 0%,#c81f1f 100%)",
     accent: 0xe8eef2,
+    relief: 1.15,
   },
   // ===== 12 款特色球杆皮肤（v1.3.23 新增，v1.3.51 重做分区贴图与材质光泽）=====
   {
@@ -524,6 +543,7 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "moyunlongque",
     swatch: "linear-gradient(135deg,#3a3320 0%,#0c0a07 100%)",
     accent: 0xc9a24a,
+    relief: 1.15,
     // 乌木哑光 + 暗金浮刻：低调厚重
     finish: { shaft: 22, butt: 18 },
   },
@@ -533,6 +553,7 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "qingzhutingfeng",
     swatch: "linear-gradient(135deg,#bfe3a0 0%,#3f7d2f 100%)",
     accent: 0x9fd67a,
+    relief: 1.00,
     // 竹质素雅温润：微弱光泽
     finish: { shaft: 34, butt: 28 },
   },
@@ -542,6 +563,7 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "fengyuliujin",
     swatch: "linear-gradient(135deg,#1a1410 0%,#caa24a 100%)",
     accent: 0xe8c878,
+    relief: 1.20,
     // 黑檀 + 鲍鱼贝虹彩 + 鎏金：明显光泽
     finish: { shaft: 62, butt: 55 },
   },
@@ -551,6 +573,7 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "qianliyanshan",
     swatch: "linear-gradient(135deg,#8a99a0 0%,#39474d 100%)",
     accent: 0x6b7d85,
+    relief: 0.75,
     // 石砚哑光雾面 / 粗陶磨砂：几乎无高光
     finish: { shaft: 12, butt: 10 },
   },
@@ -560,6 +583,7 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "xinghedanmang",
     swatch: "linear-gradient(135deg,#1b2a4a 0%,#05060a 100%)",
     accent: 0x39c6ff,
+    relief: 1.25,
     // 深空哑光黑 + 金属磨砂
     finish: { shaft: 28, butt: 22 },
   },
@@ -569,6 +593,7 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "nihongsuguang",
     swatch: "linear-gradient(135deg,#ff7be0 0%,#3a1d6e 100%)",
     accent: 0xff5fd0,
+    relief: 1.35,
     // 半透玻璃 / 多边形切面镜面反光
     finish: { shaft: 88, butt: 70 },
   },
@@ -578,6 +603,7 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "xukonglilie",
     swatch: "linear-gradient(135deg,#2a1840 0%,#050507 100%)",
     accent: 0x9b5cff,
+    relief: 1.20,
     // 纯哑光炭黑金属
     finish: { shaft: 18, butt: 15 },
   },
@@ -587,6 +613,7 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "youciyeying",
     swatch: "linear-gradient(135deg,#3a3a42 0%,#0d0d10 100%)",
     accent: 0xb8a0d8,
+    relief: 1.05,
     // 炭黑金属 + 贝母珠光 + 真皮
     finish: { shaft: 42, butt: 34 },
   },
@@ -596,6 +623,7 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "jinhuofengfeng",
     swatch: "linear-gradient(135deg,#ff5a2a 0%,#1a0805 100%)",
     accent: 0xff7a1f,
+    relief: 1.30,
     // 黑红熔岩，厚重粗犷
     finish: { shaft: 32, butt: 26 },
   },
@@ -605,6 +633,7 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "yuntianghuanmeng",
     swatch: "linear-gradient(135deg,#ffe3ef 0%,#c9b6ff 100%)",
     accent: 0xffb8d8,
+    relief: 0.95,
     // 半透果冻 / 柔雾硅胶
     finish: { shaft: 72, butt: 62 },
   },
@@ -614,6 +643,7 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "bingjingxuepo",
     swatch: "linear-gradient(135deg,#eaf6ff 0%,#9fc6e0 100%)",
     accent: 0xcfeaff,
+    relief: 1.25,
     // 透白冰晶：通透冷调，高光最强
     finish: { shaft: 95, butt: 80 },
   },
@@ -623,6 +653,7 @@ export const CUE_THEMES: CueThemeDef[] = [
     kind: "wanxiangquanzhang",
     swatch: "linear-gradient(135deg,#caa24a 0%,#0c0a07 100%)",
     accent: 0xe8c878,
+    relief: 1.15,
     // 黑金撞色金属：局部哑光、局部抛光
     finish: { shaft: 78, butt: 68 },
   },
@@ -637,7 +668,7 @@ export function getCueTheme(id: string): CueThemeDef {
  * 替换盒子的材质贴图 + 调整环境光色调。全部为程序化生成，无外部贴图资源。
  * - wallA/wallB：墙面渐变两端色（顶/底）。
  * - amb/ambI：环境光颜色与强度，营造不同氛围。
- * - kind：墙面程序化图案类型（见 scenetexturefactory.ts）。
+ * - kind：场景类别标识（几何构建见 view/sceneenvironment.ts）。
  */
 export interface EnvSceneDef {
   id: string
@@ -650,8 +681,6 @@ export interface EnvSceneDef {
     | "room"
     | "beach"
     | "snow"
-    | "office"
-    | "cybercafe"
     | "football"
     | "basketball"
     | "ufc"
@@ -676,8 +705,6 @@ export const ENV_SCENES: EnvSceneDef[] = [
   // 渲染器 clearColor 是 0x292f36=(41,47,54)，envcheck 的无空洞判据是
   // 逐通道 |px-clear|>3，墙渐变整条必须留在该色盒之外（R≥46/G≥54/B≥66）。
   { id: "ufc", name: "UFC八角笼", wallA: 0x3a4350, wallB: 0x2e3642, amb: 0xdfe6f0, ambI: 0.6, kind: "ufc", swatch: "linear-gradient(135deg,#3a4350,#2e3642)" },
-  { id: "office", name: "办公室", wallA: 0xc9d2dc, wallB: 0x92a0b0, amb: 0xeef2f7, ambI: 0.62, kind: "office", swatch: "linear-gradient(135deg,#c9d2dc,#92a0b0)" },
-  { id: "cybercafe", name: "网吧", wallA: 0x281a4a, wallB: 0x0a0618, amb: 0x6a3cff, ambI: 0.52, kind: "cybercafe", swatch: "linear-gradient(135deg,#281a4a,#0a0618)" },
 ]
 
 export function getEnvScene(id: string): EnvSceneDef {

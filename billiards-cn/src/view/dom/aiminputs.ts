@@ -20,6 +20,11 @@ export class AimInputs {
   readonly cuePowerPercentElement: HTMLElement | null
   readonly resetSpinElement
   readonly cueTiltElement: AngleInput
+  /** v1.3.94（杆法档位按钮）：斯登 / 跟进 / 缩杆 / 扎杆 四个预设按钮 */
+  readonly spinStunElement
+  readonly spinFollowElement
+  readonly spinDrawElement
+  readonly spinJumpElement
   /** Shared button for both "Hit" and "Place Ball" actions. */
   readonly cueHitElement
   /** ② 白球击球点触发按钮（展开上方紧凑面板） */
@@ -52,6 +57,10 @@ export class AimInputs {
     this.cuePowerPercentElement = id("powerPercent")
     this.resetSpinElement = id("resetSpin") as HTMLButtonElement
     this.cueTiltElement = id("cueTilt") as AngleInput
+    this.spinStunElement = id("spinStun") as HTMLButtonElement
+    this.spinFollowElement = id("spinFollow") as HTMLButtonElement
+    this.spinDrawElement = id("spinDraw") as HTMLButtonElement
+    this.spinJumpElement = id("spinJump") as HTMLButtonElement
     this.cueHitElement = id("cueHit") as HTMLButtonElement
     this.cueBallTriggerElement = id("cueBallTrigger") as HTMLButtonElement
     if (this.cueHitElement) {
@@ -93,11 +102,35 @@ export class AimInputs {
   }
 
   addListeners() {
-    this.cueBallElement?.addEventListener("pointermove", this.mousemove)
-    this.cueBallElement?.addEventListener("click", (e) => {
-      this.adjustSpin(e)
-    })
+    // v1.3.93：击球点盘改用 pointerdown + setPointerCapture 驱动。
+    //
+    // 修的问题（用户：「白球击球点滑动不跟手」），原实现有三个叠加缺陷：
+    //
+    //  ① 只监听 pointermove，没有 pointerdown —— 按下那一刻不会跳到按点，
+    //     必须先滑一下才响应，手感上就是「慢半拍」。
+    //  ② 没有 setPointerCapture —— 手指滑出白球那 90px 左右的范围后事件
+    //     直接断掉，盘面停在半路不动（这是「滑一半卡住」的直接原因）。
+    //  ③ `adjustSpin` 用 e.offsetX/offsetY 取坐标 —— offsetX 是相对**事件
+    //     目标元素**的偏移，而白球内部还有高光伪元素 .cueBall::before 和
+    //     杆头 #cueTip。指针滑到这些子元素上时 e.target 会切换，参照系跟着
+    //     变，offsetX 瞬间跳变。正确做法是用 getBoundingClientRect + clientX。
+    //
+    // 改法：pointerdown 立即定位并捕获指针；pointermove 仅在持有捕获时生效；
+    // pointerup/cancel 释放。坐标统一用白球外框 rect 换算。
+    if (this.cueBallElement) {
+      this.cueBallElement.addEventListener("pointerdown", this.onSpinPointerDown)
+      this.cueBallElement.addEventListener("pointermove", this.onSpinPointerMove)
+      this.cueBallElement.addEventListener("pointerup", this.onSpinPointerUp)
+      this.cueBallElement.addEventListener("pointercancel", this.onSpinPointerUp)
+      // 鼠标的单击选点（桌面端）保留：pointerdown 已经处理，避免重复调用
+      // 这里不再绑 click，防止「按一下被执行两次」。
+    }
     this.resetSpinElement?.addEventListener("click", this.resetSpin)
+    // v1.3.94（杆法档位按钮）：一键设定击球杆法（保留当前左右塞 offX）
+    this.spinStunElement?.addEventListener("click", () => this.setSpinGear("stun"))
+    this.spinFollowElement?.addEventListener("click", () => this.setSpinGear("follow"))
+    this.spinDrawElement?.addEventListener("click", () => this.setSpinGear("draw"))
+    this.spinJumpElement?.addEventListener("click", () => this.setSpinGear("jump"))
     this.cueHitElement?.addEventListener("click", this.hit)
     // v1.1.41：力度条改为容器层自定义 pointer 事件
     // —— 原生 input[type=range] 在 Android WebView 上只在 thumb 附近 ±22px 响应触摸，
@@ -110,7 +143,8 @@ export class AimInputs {
       c.addEventListener("pointermove", this.onPowerPointerMove)
       c.addEventListener("pointerup", this.onPowerPointerUp)
       c.addEventListener("pointercancel", this.onPowerPointerUp)
-      c.addEventListener("lostpointercapture", this.onPowerPointerUp)
+      // v1.4.0：capture 中途丢失 → 转 window 兜底继续拖动（不再当松手处理）
+      c.addEventListener("lostpointercapture", this.onPowerCaptureLost)
     }
     this.cueTiltElement?.addEventListener("input", this.tiltChanged)
     if (!("ontouchstart" in globalThis)) {
@@ -223,6 +257,22 @@ export class AimInputs {
 
   setDisabled(disabled: boolean) {
     this.controlsDisabled = disabled || Session.isSpectator()
+    // v1.4.0：控件**启用瞬间 = 新回合瞄准开始**，此时复位白球击球点。
+    //
+    // 用户反馈「每个回合前都要将白球击球点位置重置（v1.3.46 已实现但未
+    // 生效）」。v1.3.46 的复位挂在 AimController.enter：aim.offset 清零 +
+    // updateAimInput() 刷 UI，数据链路本身没断 —— 真正的残留来自两处
+    // **视觉状态**：
+    //   ① 杆法档位按钮的 `.active` 高亮从不主动清除 —— 上一杆点了「缩杆」，
+    //      这一杆按钮还亮着，玩家自然认为击球点没重置；
+    //   ② 摆球类控制器（placeball/placeallballs/drilloptions）进入瞄准
+    //      不走 AimController.enter 的 !customShot 分支之前 aim.offset 可能
+    //      带着上一杆的打点。
+    // 本钩子覆盖**所有**进入瞄准的路径（setDisabled(false) 的全部调用点
+    // 都是回合开始），与 enter 的清零互为双保险。
+    if (!this.controlsDisabled) {
+      this.resetSpinForNewTurn()
+    }
     this.updateHitButton()
     this.updatePowerElement()
     this.updateTiltElement()
@@ -235,6 +285,34 @@ export class AimInputs {
       } else {
         this.showOverlap()
       }
+    }
+  }
+
+  /**
+   * v1.4.0：新回合开始时复位白球击球点（打点 + 抬杆 + 杆法按钮高亮）。
+   * 只在控件启用（回合开始）时由 setDisabled 调用；观战态 controlsDisabled
+   * 恒为 true，不会误清回放/观战演示的演示打点。
+   */
+  private resetSpinForNewTurn() {
+    const cue = this.container.table.cue
+    if (cue.aim.offset.x !== 0 || cue.aim.offset.y !== 0) {
+      cue.aim.offset.set(0, 0, 0)
+    }
+    if (cue.aim.elevation !== 0) {
+      cue.aim.elevation = 0
+    }
+    // 数据清零后统一刷 UI：红点回中、仰角滑杆归零（updateAimInput 内部
+    // 不检查 disabled，可在此安全调用）
+    cue.updateAimInput()
+    // 杆法档位按钮高亮一并清除 —— 否则玩家看到的「缩杆还亮着」就是
+    // 「击球点没重置」的直接来源
+    for (const el of [
+      this.spinStunElement,
+      this.spinFollowElement,
+      this.spinDrawElement,
+      this.spinJumpElement,
+    ]) {
+      el?.classList.remove("active")
     }
   }
 
@@ -294,6 +372,15 @@ export class AimInputs {
     }
     if (this.resetSpinElement) {
       this.resetSpinElement.disabled = this.controlsDisabled
+    }
+    // v1.3.94（杆法档位按钮）：与 resetSpin 同步禁用
+    for (const el of [
+      this.spinStunElement,
+      this.spinFollowElement,
+      this.spinDrawElement,
+      this.spinJumpElement,
+    ]) {
+      if (el) el.disabled = this.controlsDisabled
     }
   }
 
@@ -418,6 +505,17 @@ export class AimInputs {
     } catch {
       /* 某些嵌入式 WebView 在非 primary pointer 上 setPointerCapture 会抛错，忽略 */
     }
+    // v1.4.0：记录本次手势的 pointerId；capture 未成功时挂 window 兜底监听。
+    // 此前 setPointerCapture 失败被静默吞掉，而 onPowerPointerMove 的
+    // hasPointerCapture 守卫会把**所有**后续 move 丢弃 —— 力度条只响应
+    // 按下那一下，之后手指怎么滑都不动，用户感知就是「力度条不跟手」。
+    this.powerPointerId = e.pointerId
+    if (!el.hasPointerCapture(e.pointerId)) {
+      this.attachPowerWindowFallback()
+    }
+    // v1.3.93：按下时才量一次轨道几何，拖动全程复用（见 powerTrackRect）
+    this.powerSliderDragging = true
+    this.measurePowerTrack()
     this.beginAim()
     this.updatePowerFromPointer(e)
   }
@@ -425,7 +523,10 @@ export class AimInputs {
   private onPowerPointerMove = (e: PointerEvent) => {
     if (this.controlsDisabled) return
     if (!this.powerSliderContainerElement || !this.cuePowerElement) return
-    if (!this.powerSliderContainerElement.hasPointerCapture(e.pointerId)) return
+    // v1.4.0：守卫改为 pointerId 校验。capture 正常时事件只会来自容器内，
+    // fallback 模式下容器监听收不到滑出容器的 move，两者互不干扰；
+    // 关键是不再因 hasPointerCapture 为 false 而丢掉合法的拖动事件。
+    if (this.powerPointerId !== e.pointerId) return
     e.preventDefault()
     this.updatePowerFromPointer(e)
   }
@@ -439,7 +540,95 @@ export class AimInputs {
         /* 无捕获时忽略 */
       }
     }
+    // v1.4.0：摘掉 window 兜底监听并复位手势状态
+    this.powerPointerId = null
+    this.detachPowerWindowFallback()
+    // v1.3.93：松手后回到「按 input 量化值」的常规路径，并丢弃缓存的几何。
+    // 丢弃是为了让下次按下重新量 —— 期间可能旋转过屏幕 / 改变过窗口大小。
+    this.powerSliderDragging = false
+    this.powerTrackRect = null
     this.endAim()
+  }
+
+  // ---- v1.4.0：力度条 window 兜底监听 ----
+  //
+  // 两个触发场景：
+  //   ① pointerdown 时 setPointerCapture 直接失败（部分 Android WebView
+  //      在非 primary pointer / 触摸被浏览器判定为滚动的边缘情况）；
+  //   ② 拖动中途 capture 被 WebView 静默释放（lostpointercapture）——
+  //      此前监听直接把它当 pointerup 处理，拖动被强制结束，
+  //      表现为「滑到一半力度条就不动了」。
+  // 兜底 = window 捕获阶段挂 move/up/cancel，手指滑出容器也能持续收到。
+  private powerPointerId: number | null = null
+  private powerWindowFallback = false
+
+  private attachPowerWindowFallback() {
+    if (this.powerWindowFallback) return
+    this.powerWindowFallback = true
+    window.addEventListener("pointermove", this.onPowerPointerMoveWindow, true)
+    window.addEventListener("pointerup", this.onPowerPointerUpWindow, true)
+    window.addEventListener("pointercancel", this.onPowerPointerUpWindow, true)
+  }
+
+  private detachPowerWindowFallback() {
+    if (!this.powerWindowFallback) return
+    this.powerWindowFallback = false
+    window.removeEventListener("pointermove", this.onPowerPointerMoveWindow, true)
+    window.removeEventListener("pointerup", this.onPowerPointerUpWindow, true)
+    window.removeEventListener("pointercancel", this.onPowerPointerUpWindow, true)
+  }
+
+  private onPowerPointerMoveWindow = (e: PointerEvent) => {
+    if (e.pointerId !== this.powerPointerId) return
+    this.updatePowerFromPointer(e)
+  }
+
+  private onPowerPointerUpWindow = (e: PointerEvent) => {
+    if (e.pointerId !== this.powerPointerId) return
+    this.onPowerPointerUp(e)
+  }
+
+  /**
+   * v1.4.0：拖动中途 capture 丢失 —— 不再结束拖动，转入 window 兜底继续。
+   * （旧实现把 lostpointercapture 直接绑到 onPowerPointerUp，WebView 手势
+   * 判定一抖动就强制松手。）
+   */
+  private onPowerCaptureLost = (e: PointerEvent) => {
+    if (!this.powerSliderDragging || e.pointerId !== this.powerPointerId) return
+    this.attachPowerWindowFallback()
+  }
+
+  /**
+   * v1.3.93：力度条轨道的几何缓存。
+   *
+   * 修的问题：`updatePowerFromPointer` 原先**每次 pointermove 都调
+   * `getBoundingClientRect()`**。pointermove 在触摸屏上可达 120Hz，
+   * 而 getBoundingClientRect 会强制浏览器同步重算布局（forced reflow）。
+   * 更糟的是 `.power-track` 是 flex 子项、宽度会随右侧百分比文字变宽变窄，
+   * 每次读到的 rect 可能抖动 —— 既慢又不准。用户感知就是「滑动不跟手」。
+   *
+   * 修法：在 pointerdown 时量一次并缓存，拖动全程复用；
+   * 窗口尺寸变化（旋转/缩放）时失效重取。
+   */
+  private powerTrackRect: { left: number; width: number } | null = null
+  /** v1.3.93：力度条是否正在被拖动（拖动中走精确比例通道，绕过 input 量化） */
+  private powerSliderDragging = false
+  /**
+   * v1.3.93：拖动期间由球杆回灌的精确力度比例，用于切断「写值→回调→回写」回环。
+   * 见 updatePowerSlider 的说明。
+   */
+  private lastAppliedRatio: number | null = null
+
+  private measurePowerTrack() {
+    const el = this.powerSliderContainerElement
+    if (!el) return
+    const track = el.querySelector(".power-track") as HTMLElement | null
+    const rect = (track ?? el).getBoundingClientRect()
+    if (rect.width <= 0) {
+      this.powerTrackRect = null
+      return
+    }
+    this.powerTrackRect = { left: rect.left, width: rect.width }
   }
 
   /** 根据 pointer 坐标把轨道宽度映射到 [0,1]，写回 input.value 并触发 powerChanged */
@@ -452,17 +641,72 @@ export class AimInputs {
     // .power-track 宽度为基准（left:var(--p)），两者坐标系不同会导致
     // 「实际力度位置在手指右侧（不跟手）」。改用 track 的 left/width 后，
     // 触点与 8 球位置一一对应，力度条真正跟手。
-    const track = el.querySelector(".power-track") as HTMLElement | null
-    const rect = (track ?? el).getBoundingClientRect()
-    if (rect.width <= 0) return
-    const x = e.clientX - rect.left
-    const ratio = Math.max(0, Math.min(1, x / rect.width))
+    //
+    // v1.3.93：改为用缓存的 rect（见 powerTrackRect）。缓存为空时（首次
+    // pointerdown 未经 measure、或窗口刚变化）补量一次，保证不返回错误值。
+    if (!this.powerTrackRect) this.measurePowerTrack()
+    const cached = this.powerTrackRect
+    if (!cached) return
+    const x = e.clientX - cached.left
+    const ratio = Math.max(0, Math.min(1, x / cached.width))
+    if (this.powerSliderDragging) {
+      // v1.3.93：拖动中跳过 input.value 的字符串量化。
+      // 原生 input[type=range] 的 step="0.01" 会把写回值量化到 100 档，
+      // 快速拖动时力度呈阶梯跳变、手感发涩。这里直接把精确比例交给 cue，
+      // value 只作为「非拖动场景（键盘/程序写入）」的回退通道。
+      this.applyPowerRatio(ratio)
+      return
+    }
     input.value = ratio.toString()
     this.powerChanged()
   }
 
-  mousemove = (e) => {
-    e.buttons === 1 && this.adjustSpin(e)
+  /** v1.3.93：绕过 input 量化，直接把 [0,1] 比例下发给球杆并刷新视觉 */
+  private applyPowerRatio(ratio: number) {
+    this.flashAim()
+    this.lastAppliedRatio = ratio
+    this.container.table.cue.setPower(ratio)
+    // 精确比例写进 DOM 只是为了视觉与后续读取一致，这里用 toFixed(4) 而非
+    // 依赖 step 量化，避免「手感准了但数字显示跳档」。
+    if (this.cuePowerElement) {
+      this.cuePowerElement.value = ratio.toFixed(4)
+    }
+    this.updatePowerProgress(ratio)
+  }
+
+  /* ---------- v1.3.93：击球点盘的 pointer 事件 ---------- */
+  private onSpinPointerDown = (e: PointerEvent) => {    if (this.controlsDisabled) return
+    // preventDefault：阻止 Android WebView 把手势判定成滚动/长按选择，
+    // 否则会在拖动中途派发 pointercancel 把滑动打断（力度条早已这么做，
+    // 击球点盘此前漏了这一步）。
+    e.preventDefault()
+    try {
+      this.cueBallElement?.setPointerCapture(e.pointerId)
+    } catch {
+      /* 非 primary pointer 上可能抛错，忽略 */
+    }
+    this.adjustSpin(e)
+  }
+
+  private onSpinPointerMove = (e: PointerEvent) => {
+    if (this.controlsDisabled) return
+    // 仅在持有捕获时响应：pointerdown 已把指针锁给白球，
+    // 因此这里不再需要判断 e.buttons（触摸事件里它恒为 0）。
+    if (this.cueBallElement?.hasPointerCapture(e.pointerId)) {
+      e.preventDefault()
+      this.adjustSpin(e)
+    }
+  }
+
+  private onSpinPointerUp = (e: PointerEvent) => {
+    const el = this.cueBallElement
+    if (el && el.hasPointerCapture(e.pointerId)) {
+      try {
+        el.releasePointerCapture(e.pointerId)
+      } catch {
+        /* 无捕获时忽略 */
+      }
+    }
   }
 
   readDimensions() {
@@ -471,22 +715,32 @@ export class AimInputs {
     this.tipRadius = this.cueTipElement?.offsetWidth / 2
   }
 
+  /**
+   * v1.3.93：把指针位置换算成击球点偏移。
+   *
+   * 与旧版的唯一实质区别是坐标来源：不再用 e.offsetX/offsetY（参照系会随
+   * 事件目标在子元素间跳变），改为白球外框的 getBoundingClientRect + clientX。
+   * 这样无论指针压在高光伪元素、杆头还是白球本体上，算出来的都是同一个
+   * 以白球中心为原点的归一化坐标。
+   */
   adjustSpin(e) {
     if (this.controlsDisabled) {
       return
     }
     this.readDimensions()
+    const el = this.cueBallElement
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return
+    const halfW = rect.width / 2
+    const halfH = rect.height / 2
     // v1.2.5：弹出面板里选击球点属于「打点偏好」设置，不应被球桌几何的
     // 避免逻辑（avoidCueTouchingOtherBall）强制上移，否则白球贴球时下半部分
     // 选不中。故传入 avoid=false，让玩家能自由选择任意打点（含低杆/下半部分）。
     this.container.table.cue.setSpin(
       new Vector3(
-        -(e.offsetX - this.ballWidth / 2) /
-          (this.ballWidth / 2) /
-          AimInputs.TIP_SCALE,
-        -(e.offsetY - this.ballHeight / 2) /
-          (this.ballHeight / 2) /
-          AimInputs.TIP_SCALE
+        -(e.clientX - rect.left - halfW) / halfW / AimInputs.TIP_SCALE,
+        -(e.clientY - rect.top - halfH) / halfH / AimInputs.TIP_SCALE
       ),
       this.container.table,
       false
@@ -500,6 +754,56 @@ export class AimInputs {
     }
     this.container.table.cue.setSpin(new Vector3(0, 0, 0), this.container.table)
     this.updateVisualState(0, 0)
+    this.container.lastEventTime = performance.now()
+  }
+
+  /**
+   * v1.3.94（杆法档位按钮）：一键设定击球杆法。
+   *
+   * 预设量值与 AI 的 `chooseSpin` 玩家可达区间对齐（FOLLOW_MAX=0.4 /
+   * DRAW_MAX=−0.45 / elevation≤0.42），保证玩家与 AI 共用同一套物理、无特权。
+   * 左右塞(offX)保持不变，只改高低杆(offY)与抬杆(elev)：
+   *   斯登 = 中杆停球；跟进 = 高杆前跟；缩杆 = 低杆回缩；扎杆 = 低杆+抬杆起跳。
+   */
+  setSpinGear = (kind: "stun" | "follow" | "draw" | "jump") => {
+    if (this.controlsDisabled) {
+      return
+    }
+    const cue = this.container.table.cue
+    const offX = cue.aim.offset.x // 保留当前左右塞
+    let offY = 0
+    let elev = 0
+    switch (kind) {
+      case "stun":
+        offY = 0
+        elev = 0
+        break
+      case "follow":
+        offY = 0.4
+        elev = 0
+        break
+      case "draw":
+        offY = -0.42
+        elev = 0
+        break
+      case "jump":
+        offY = -0.45
+        elev = 0.35
+        break
+    }
+    cue.setSpin(new Vector3(offX, offY, 0), this.container.table)
+    cue.setElevation(elev)
+    this.updateVisualState(offX, offY)
+    this.updateTiltSlider(elev)
+    // 高亮当前档位按钮
+    for (const [el, k] of [
+      [this.spinStunElement, "stun"],
+      [this.spinFollowElement, "follow"],
+      [this.spinDrawElement, "draw"],
+      [this.spinJumpElement, "jump"],
+    ] as const) {
+      el?.classList.toggle("active", k === kind)
+    }
     this.container.lastEventTime = performance.now()
   }
 
@@ -556,18 +860,27 @@ export class AimInputs {
     this.aimSlider?.applyVisibility()
   }
 
-  private updatePowerProgress() {
+  private updatePowerProgress(ratioOverride?: number) {
     if (this.cuePowerElement) {
-      const percent = Number(this.cuePowerElement.value) * 100
+      const ratio =
+        ratioOverride ?? Number(this.cuePowerElement.value)
+      const percent = ratio * 100
       // v1.1.29：--p 设在容器上，轨道填充与 8 球滑块共用同一进度
       this.powerSliderContainerElement.style.setProperty("--p", percent + "%")
-      if (this.cuePowerPercentElement) {
-        this.cuePowerPercentElement.innerText = Math.round(percent) + "%"
+      // v1.4.0：整数百分比没有变化就不写 innerText —— 文字内容一变，
+      // flex 兄弟的宽度重排会拖累同帧的 move 处理（120Hz 触摸采样下
+      // 每次 move 都重排一次，是「拖动手感发涩」的最后一处来源）。
+      const text = Math.round(percent) + "%"
+      if (this.cuePowerPercentElement && this.lastPowerText !== text) {
+        this.lastPowerText = text
+        this.cuePowerPercentElement.innerText = text
       }
     }
   }
+  /** v1.4.0：力度百分比文字缓存（内容不变不写 DOM） */
+  private lastPowerText: string | null = null
 
-  powerChanged = (_) => {
+  powerChanged = (_?: unknown) => {
     if (this.controlsDisabled) {
       return
     }
@@ -585,10 +898,25 @@ export class AimInputs {
   }
 
   updatePowerSlider(power) {
-    if (this.cuePowerElement) {
-      this.cuePowerElement.value = power
-      this.updatePowerProgress()
+    if (!this.cuePowerElement) return
+    // v1.3.93：拖动中切断回环。
+    //
+    // 原先的调用链是个闭环：
+    //   pointermove → updatePowerFromPointer（写 input.value → powerChanged）
+    //     → cue.setPower() → cue.updateAimInput() → aimInputs.updatePowerSlider()
+    //     → 又写一次 input.value + updatePowerProgress()
+    //
+    // 结果每次 pointermove 都跑两遍 DOM 写 + 两遍 style.setProperty，
+    // 拖动越频繁越卡，表现为「跟不上手指」。
+    //
+    // 拖动期间力度值已由 applyPowerRatio 精确下发，球杆的回灌值与它同源，
+    // 再写一遍 DOM 纯属重复劳动。用 1e-4 容差判断：只有真正不同（例如
+    // 球杆内部按物理约束 clamp 过）才回写，保证不丢修正。
+    if (this.powerSliderDragging && this.lastAppliedRatio !== null) {
+      if (Math.abs(power - this.lastAppliedRatio) < 1e-4) return
     }
+    this.cuePowerElement.value = power
+    this.updatePowerProgress()
   }
 
   updateTiltSlider(elevation) {

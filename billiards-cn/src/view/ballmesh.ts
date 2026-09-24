@@ -36,10 +36,47 @@ export class BallMesh {
     if (!this._ballGeometry) {
       this._ballGeometry = new IcosahedronGeometry(
         R,
-        Math.max(1, Session.getLod())
+        BallMesh.ballGeometryDetail()
       )
     }
     return this._ballGeometry
+  }
+
+  /**
+   * v1.3.93：球的几何细分度。
+   *
+   * 修的问题：用户反馈「锯齿太多，球的锯齿也多」。根因是这里原先直接写
+   * `Math.max(1, Session.getLod())` —— 把**画质档位原样**当作二十面体的
+   * 细分度 detail 用。而 `IcosahedronGeometry(R, detail)` 的三角面数是
+   * `20 * 4^detail`，档位每降一级，面数直接砍到 1/4：
+   *
+   *   detail=1 →    80 面   ← 画质档 0/1
+   *   detail=2 →   320 面
+   *   detail=3 →  1280 面   ← 默认档
+   *   detail=4 →  5120 面
+   *   detail=5 → 20480 面
+   *
+   * 80 面的球，轮廓是肉眼可辨的多边形；1280 面在中远距离仍见棱角。MSAA
+   * 只能抗**边缘走样**，抗不了**几何本身的多边形折线**——这就是为什么
+   * 用户觉得「画质调了也没用」。
+   *
+   * 修法：细分度与画质档解耦，改为「保底 2，高画质档逐级加」：
+   *   档 0/1 → detail 2（  320 面，低端机护栏，比原来 ×4）
+   *   档 2/3 → detail 3（ 1280 面，默认档持平，但关掉了 flatShading，净收益）
+   *   档 4   → detail 4（ 5120 面，比原来持平）
+   *   档 5   → detail 5（20480 面，仅最高档）
+   *
+   * 注意 detail 不能无脑拉满：这是**静态共享几何**（`_ballGeometry` 全局
+   * 一份，所有球复用），但在台 16 颗球 × 61440 顶点 ≈ 百万级顶点，手机
+   * 上会明显掉帧。所以档位越高给得越保守，且**最高档才给 detail 5**——
+   * 中间档直接从 1280 跳到 20480（×16）是没有意义的陡坡。
+   */
+  private static ballGeometryDetail(): number {
+    const lod = Session.getLod()
+    if (lod <= 1) return 2
+    if (lod <= 3) return 3
+    if (lod === 4) return 4
+    return 5
   }
 
   private static getShadowGeometry() {
@@ -155,7 +192,9 @@ export class BallMesh {
       const key = isCueBall ? "cue" : color.getHex()
       let cached = BallMesh._dottedGeometryCache.get(key)
       if (!cached) {
-        cached = new IcosahedronGeometry(R, Math.max(1, Session.getLod()))
+        // v1.3.93：与 getBallGeometry 用同一套细分度（原先这里也直接拿
+        // Session.getLod() 当 detail 用，低画质档同样出多边形棱角）。
+        cached = new IcosahedronGeometry(R, BallMesh.ballGeometryDetail())
         // 母球纯白无标记；其余球用暗红点区分
         BallMesh.addDots(cached, color, isCueBall ? null : 0xaa2222)
         BallMesh._dottedGeometryCache.set(key, cached)

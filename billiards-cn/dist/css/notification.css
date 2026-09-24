@@ -453,6 +453,103 @@
   gap: 10px;
 }
 
+/* ---------------- v1.3.93：detail 状态指示 ----------------
+   局域网对战的四个状态（取 IP / 连接中 / 已连接 / 失败 / 对手退出）此前视觉
+   完全一致，用户只能逐字读文案才能分辨。这里给 detail 加一个左侧状态图标：
+   等待中转圈、成功对勾、注意感叹号、失败叉号，并把等待态的字色压暗，
+   让"还在等"和"已经有结果"在余光里就能区分。
+
+   图标全部用 CSS 画（不引外部字体/图片），保证离线 APK 里也一定能显示。 */
+.notification-detail-state {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+}
+
+.notification-state-icon {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+/* 等待中：旋转的缺口圆环（复用 ingame-cn.css 的 view3d-spin 关键帧；
+   若该文件未加载则下面的 animation 会被忽略，但仍能看到一个缺口圆环） */
+.notification-detail-state-spin .notification-state-icon {
+  border: 3px solid rgba(255, 216, 122, 0.25);
+  border-top-color: #ffd87a;
+  animation: view3d-spin 0.8s linear infinite;
+}
+
+/* 成功：绿色圆底 + 白色对勾（用两条边框旋转 45° 画出来） */
+.notification-detail-state-ok .notification-state-icon {
+  position: relative;
+  background: #2f9e5f;
+  border: 2px solid #55c98a;
+}
+
+.notification-detail-state-ok .notification-state-icon::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* 注意：琥珀色圆底 + 竖条 + 圆点（感叹号） */
+.notification-detail-state-warn .notification-state-icon {
+  position: relative;
+  background: #d69a2a;
+  border: 2px solid #f0be5c;
+}
+
+.notification-detail-state-warn .notification-state-icon::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 2px;
+  width: 2px;
+  height: 7px;
+  border-radius: 1px;
+  background: #3a2a08;
+  box-shadow: 0 9px 0 -0.5px #3a2a08;
+}
+
+/* 失败：红色圆底 + 叉号（两条 45° 交叉的线） */
+.notification-detail-state-error .notification-state-icon {
+  position: relative;
+  background: #b93a3a;
+  border: 2px solid #e07070;
+}
+
+.notification-detail-state-error .notification-state-icon::before,
+.notification-detail-state-error .notification-state-icon::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 2px;
+  width: 2px;
+  height: 9px;
+  border-radius: 1px;
+  background: #fff;
+}
+
+.notification-detail-state-error .notification-state-icon::before {
+  transform: rotate(45deg);
+}
+
+.notification-detail-state-error .notification-state-icon::after {
+  transform: rotate(-45deg);
+}
+
 .notification-detail-value {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 17px;
@@ -461,6 +558,22 @@
   letter-spacing: 0.5px;
   word-break: break-all;
   flex: 1 1 auto;
+}
+
+/* v1.3.93：需要"抄给对手"的内容（IP / 目标主机）加大字号、提高对比，
+   与"状态描述"这种一句话说明区分开。 */
+.notification-detail-mono {
+  font-size: 20px;
+  letter-spacing: 1.2px;
+  color: #fffbe8;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* 等待态：正文压暗一档，避免把「正在连接 192.168.1.8」读成「已连上」 */
+.notification-detail-state-spin .notification-detail-value,
+.notification-detail-state-spin .notification-detail-mono {
+  color: #ecd9a8;
+  opacity: 0.9;
 }
 
 .notification-copy-btn {
@@ -497,4 +610,28 @@
   opacity: 0.85;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* v1.3.93：按钮忙碌态（防连点）。
+   「重新连接」是同步阻塞的重连入口，连点会反复重置超时计时器导致永远
+   等不到失败判定。点击瞬间置为此态，按钮变灰 + 不可点，直到弹窗重绘。
+   附一个左侧转圈，让"点了正在做事"和"点了没反应"能区分开。 */
+#notification .notification-btn[data-busy="1"],
+#notification .notification-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+  pointer-events: none;
+}
+
+#notification .notification-btn.is-busy::before {
+  content: "";
+  display: inline-block;
+  vertical-align: -2px;
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffd87a;
+  border-radius: 50%;
+  animation: view3d-spin 0.8s linear infinite;
 }

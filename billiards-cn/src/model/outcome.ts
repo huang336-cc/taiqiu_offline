@@ -7,6 +7,16 @@ export enum OutcomeType {
   Collision = "Collision",
   Hit = "Hit",
   Proximity = "Proximity",
+  /**
+   * v1.3.95：球离开台面（跳台 / 飞出球桌）。
+   *
+   * v1.3.94 引入跳球后，空中的球会越过库边掉到台面外，而规则层完全没有
+   * 「出界」这个概念 —— 于是它要么被 Cushion.bounceAny 算出荒谬速度引发
+   * 连锁碰撞（Depth exceeded 直接抛错），要么永不静止使本杆无法结算。
+   * 把出界做成一种 Outcome，就能像落袋/撞库一样自然流进四套规则的既有
+   * 判决流程（详见 utils/offtable.ts）。
+   */
+  OffTable = "OffTable",
 }
 
 export class Outcome {
@@ -81,6 +91,29 @@ export class Outcome {
     return new Outcome(OutcomeType.Proximity, ballA, ballB, distance, timestamp)
   }
 
+  /** v1.3.95：球飞出台面（入射速度用于规则层判定与罚分） */
+  static offTable(ballA: Ball, incidentSpeed: number, timestamp: number) {
+    return new Outcome(
+      OutcomeType.OffTable,
+      ballA,
+      ballA,
+      incidentSpeed,
+      timestamp
+    )
+  }
+
+  /** v1.3.95：本杆所有出界的球 */
+  static offTableBalls(outcomes: Outcome[]): Ball[] {
+    return outcomes
+      .filter((o) => o.type === OutcomeType.OffTable)
+      .map((o) => o.ballA!)
+  }
+
+  /** v1.3.95：母球是否出台了（决定「是否给对手自由球」） */
+  static isCueBallOffTable(cueBall, outcomes: Outcome[]) {
+    return Outcome.offTableBalls(outcomes).some((b) => b === cueBall)
+  }
+
   static isCueBallPotted(cueBall, outcomes: Outcome[]) {
     return outcomes.some(
       (o) => o.type == OutcomeType.Pot && o.ballA === cueBall
@@ -110,6 +143,34 @@ export class Outcome {
   static firstCollision(outcome: Outcome[]) {
     const collisions = outcome.filter((o) => o.type === OutcomeType.Collision)
     return collisions.length > 0 ? collisions[0] : undefined
+  }
+
+  /**
+   * v1.3.92：母球**首撞**的球是否落在合法目标集合里（八球规则判定用）。
+   *
+   * 为什么不能用 `firstCollision()`：
+   * 那个方法返回 `collisions[0]` —— 只是 outcome 列表里第一条碰撞记录，
+   * **不保证球A是母球**（母球可能先撞库，或两物体球互相碰撞先入列）。
+   * harness 直接拿它判「首撞是否为目标球」，会把大量正常击球误判成犯规
+   * （实测一局「进7球全部清台」的样本竟被记成 11 次首撞犯规）。
+   *
+   * 正确口径与 `isThreeCushionPoint` 一致：先用 `cueBallFirst` 把涉及母球的
+   * 碰撞规范成 ballA = 母球，再取**第一条** ballA 为母球的碰撞。
+   *
+   * @returns 首撞球在 targets 内返回 true；母球一球未碰（空杆）返回 false；
+   *          首撞对方球 / 黑8 返回 false
+   */
+  static firstCueContact(
+    cueBall,
+    outcome: Outcome[],
+    targets: { includes(b: unknown): boolean } | unknown[]
+  ): boolean {
+    const normalised = Outcome.cueBallFirst(cueBall, outcome.slice())
+    const first = normalised.find(
+      (o) => o.type === OutcomeType.Collision && o.ballA === cueBall
+    )
+    if (!first) return false
+    return (targets as { includes(b: unknown): boolean }).includes(first.ballB)
   }
 
   static isClearTable(table) {

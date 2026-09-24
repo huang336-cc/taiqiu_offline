@@ -13,7 +13,7 @@ const path = require("path")
 const fs = require("fs")
 const puppeteer = require("puppeteer-core")
 
-const ROOT = "/workspace/project/source/billiards-cn"
+const ROOT = "/workspace/dev/source/billiards-cn"
 const DIST = path.join(ROOT, "dist")
 const OUT_DIR = "/root/.codebuddy/artifact/render/shots"
 
@@ -34,14 +34,20 @@ const VIEWS = {
   aim: { desc: "贴地平视（球员视角）", patch: "aim" },
   top: { desc: "俯视（瞄准视角）", patch: "top" },
   free: { desc: "斜俯视全景（自定义）", patch: "free" },
+  // v1.3.100：游戏内「远台视角」——直接调用 camera.farView（跟随球杆），测真实代码路径
+  far: { desc: "远台视角（跟随球杆，退远+抬高）", patch: "far" },
 }
 
 async function main() {
+  /**
+   * v1.3.96：不再强制要求 DISPLAY。
+   * SwiftShader 软件渲染在「纯 headless」下最稳（`--ozone-platform=headless`
+   * 已加进启动参数）。一旦 DISPLAY 被设置，Chrome 的 GPU 进程会改走 Vulkan-XCB
+   * 路径去连 X 服务器，反而 `xcb_connect() failed` 崩溃。所以这里允许 DISPLAY
+   * 为空，并把传给浏览器的 env 里的 DISPLAY 删掉，强制走 headless GL。
+   */
   if (!process.env.DISPLAY) {
-    console.error("错误：未设置 DISPLAY。请先启动 Xvfb：")
-    console.error("  Xvfb :99 -screen 0 1280x800x24 -nolisten tcp &")
-    console.error("  DISPLAY=:99 node tools/render/render.js ...")
-    process.exit(1)
+    console.warn("提示：未设置 DISPLAY，将以纯 headless 软件渲染（SwiftShader）运行。")
   }
 
   const scene = arg("scene", "room")
@@ -60,6 +66,9 @@ async function main() {
     args: [
       "--no-sandbox",
       "--hide-scrollbars",
+      "--disable-dev-shm-usage",
+      "--no-zygote",
+      "--ozone-platform=headless",
       "--use-gl=angle",
       "--use-angle=swiftshader",
       "--enable-unsafe-swiftshader",
@@ -75,7 +84,7 @@ async function main() {
       "--allow-file-access-from-files",
       `--window-size=${w},${h}`,
     ],
-    env: { ...process.env },
+    env: { ...process.env, DISPLAY: "" },
   })
 
   const page = await browser.newPage()
@@ -261,6 +270,23 @@ async function main() {
         camWrap.update(0, null)
         return `topView(hijacked)`
       }
+      // v1.3.100：远台跟随视角 —— 劫持 update 调 farView（跟随球杆方向）。
+      // 需要真实 AimEvent 驱动（同 aim 分支），这里取游戏自己的 aim。
+      // farView 内部用 lerp(…,0.12) 平滑到位，主动多跑几帧让它收敛。
+      if (vn === "far") {
+        const aim =
+          (view.table && view.table.cue && view.table.cue.aim) || null
+        if (!aim) return `farView(ERROR: no aim event)`
+        camWrap.update = function () {
+          camWrap.farView(aim)
+        }
+        for (let i = 0; i < 80; i++) camWrap.update(16, null)
+        return `farView(follow) cue@(${aim.pos.x.toFixed(2)},${aim.pos.y.toFixed(
+          2
+        )}) angle=${(aim.angle * 180 / Math.PI).toFixed(1)}° pos=(${c.position.x.toFixed(
+          2
+        )},${c.position.y.toFixed(2)},${c.position.z.toFixed(2)}) fov=${c.fov.toFixed(1)}`
+      }
       // free：劫持 update，摆场景总览机位（v1.3.90b 真实比例球场）
       // 球桌在 XY 平面、Z 向上。篮球场 28×15m、足球场 105×68m，总览机位
       // 必须退到足够远才能把整场 + 两端器材框进来。
@@ -271,6 +297,10 @@ async function main() {
         // 足球场：105m×68m 太大，透视下从端线看会把远端压成细线；
         // 改用略带倾角的顶视图，场地几乎撑满画面，比例关系最清晰。
         football:   { pos: [0, 0, 60], look: [0, 0, 0], fov: 90 },
+        // room：复刻参考图机位 —— 从 +Y 长边侧、离地 ~2.55m 斜俯视，
+        // 视线沿 −Y：远端 −Y 墙两角的落地灯/边几、±X 墙沙发左右入画，
+        // 构图与用户参考图（豆包 AI 生成图）1:1 对应。
+        room:       { pos: [0, 3.3, 1.75], look: [0, -0.4, 0.1], fov: 55 },
         default:    { pos: [0, -7.2, 3.4], look: [0, 0.2, 0.85], fov: 55 },
       }
       const TARGET = FREE[sc] || FREE.default
@@ -330,6 +360,14 @@ async function main() {
       if (!removed) break
       await new Promise((r) => setTimeout(r, 350))
     }
+    // v1.3.97：教学横幅的收起态小标签（.tutorial-banner，~30x18 深色圆点）
+    // 自身无可匹配文案，上面的主循环漏网；它压在画面中带（横竖屏都居中）
+    // 曾被误判为「3D 场景黑色悬浮物」。真实对局里它属正常 UI，仅截图时隐藏。
+    await page.evaluate(() => {
+      for (const el of document.querySelectorAll(".tutorial-banner")) {
+        el.style.display = "none"
+      }
+    })
   }
 
   /**
@@ -476,6 +514,7 @@ async function main() {
     aim: { min: 0.1, max: 1.2, why: "瞄准视角：贴地平视，相机 z 应在 0.1~1.2m" },
     top: { min: 3, max: 30, why: "俯视：相机 z 应在 3~30m" },
     free: { min: 2, max: 8, why: "free：自定义斜俯视，z≈3.4" },
+    far: { min: 0.9, max: 1.3, why: "far：远台跟随机位，相机 z≈1.10" },
   }[viewName]
   if (EXPECT && cz !== null) {
     if (cz < EXPECT.min || cz > EXPECT.max) {

@@ -212,8 +212,9 @@ export class Cue {
     this.t = 0
     this.hittingAnimation = true
     this.strokeRetracted = false
-    ball.state = State.Sliding
     const strike = cueStrike(angle, power, offset, elevation)
+    // v1.3.94（跳球）：抬杆产生竖直速度时进入 Airborne，平杆仍走 Sliding
+    ball.state = strike.vel.z > Ball.airborneThreshold ? State.Airborne : State.Sliding
     ball.vel.copy(strike.vel)
     ball.rvel.copy(strike.rvel)
     if (this.hitStatsElement) {
@@ -538,7 +539,27 @@ export class Cue {
     // 各档对应「无袋口可指时」虚线延伸的最大长度（米）；最长档用 Infinity 表示延伸到袋口。
     const TARGET_LINE_MAX: number[] = [0, 0.5, 1.4, Infinity]
     const maxLen = TARGET_LINE_MAX[settings.targetLineLength] ?? 0
-    this.aimLine.update(table, this.aim.angle, maxLen)
+    // v1.3.93：把当前打点（侧旋/高低杆）与抬杆角一并交给辅助线。
+    //
+    // 修的问题：用户反馈「击球辅助线存在概率出错」。根因是 update() 原先只吃
+    // 一个 angle 参数，**完全不知道玩家加了塞、抬了杆**，于是：
+    //   - 加侧旋后母球撞库的反弹角会被明显偏转，辅助线却按无旋的理想反射画
+    //     → 「加了塞线就不准」，而且因为只在加塞时出问题，主观上像「概率性出错」；
+    //   - 抬杆后水平初速被 cos(elevation) 削减，球实际走不到线画的位置。
+    // 传入打点与抬杆后，AimLine 可对这两项做一阶修正（见 aimline.ts 的 update）。
+    //
+    // v1.4.1：再传当前出杆速度 —— 碰撞抛离（throw）的偏转角 μ 随力度变化
+    // （低速满塞 3~5°、高速 1~2°），力度与实际击球是同一个值（cue.strike
+    // 直接读 aim.power），辅助线据此重算目标球被撞后的真实初始方向，
+    // 修「加塞/薄切瞄准时线指着袋口、球却偏出去」的瞄准线偏差。
+    this.aimLine.update(
+      table,
+      this.aim.angle,
+      maxLen,
+      this.aim.offset,
+      this.aim.elevation,
+      this.aim.power
+    )
   }
 
   /** 实时更换皮肤（item 1）：重设球杆各段材质颜色，并套用当前球杆主题 */

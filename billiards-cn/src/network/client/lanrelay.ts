@@ -469,8 +469,15 @@ export class LanRelay implements MessageRelay {
         if (s.n >= 2) {
           // v1.3.83：记下「本局对手来过」，供下面的掉线分支判断
           this.peerWasHere = true
-          this.dismissRoom()
-          this.notify("局域网对战", "对手已连接，等待开局…")
+          // v1.3.93：改用 sticky 刷新而不是 dismiss + notify。
+          //
+          // 旧实现是 dismissRoom() 关掉房间窗，再 notify 一条 3 秒的瞬时提示
+          // 「对手已连接，等待开局…」。问题在于：从「对手连入」到「真正开局」
+          // 之间有一段**握手真空期**（要等对方 hello / 且最坏要等 2.5s 宽限
+          // 超时）。这段时间屏幕上什么都没有，用户看到的就是"窗关了、球桌没人
+          // 开球"，很容易以为掉线了。现在把房间窗原地刷成"对手已加入，正在开局"
+          // 的等待态，转圈提示进行中，开局时由 init.handleBegin 关窗。
+          this.showRoomWaitingPeer()
           // v1.3.82：客机已连入。起一个宽限计时 —— 如果对方是旧版 APK
           // （不重发 hello）或者 hello 又被吞了一次，到点由主机主动开局，
           // 不至于两边一起卡在球桌上。
@@ -509,18 +516,43 @@ export class LanRelay implements MessageRelay {
     this.pushSelfDiag("对手已离开对局")
     this.dismissRoom()
     try {
-      this.container.notify({
-        type: "Info",
-        title: "局域网对战",
-        subtext: "对手已退出对局",
-        extra:
-          "对方已离开房间，本局无法继续。" +
-          '<button type="button" class="notification-btn" ' +
-          'data-notification-action="menu">返回主菜单</button>',
-      } as const)
+      this.container.notifyLocal(
+        {
+          type: "Info",
+          title: "局域网对战",
+          subtext: "对手已退出对局",
+          // v1.3.93：不再只有一个「返回主菜单」。对方可能只是网络抖动或手滑
+          // 退出，直接判死太生硬 —— 给一个「留在房间继续等」的出口（房间窗
+          // 会被重新拉起，服务端仍在监听），也明确告知本局已无法继续。
+          extra:
+            "对方已离开房间，本局无法继续。你可以返回菜单重新建房，或留在房间等待对方重新加入。" +
+            '<button type="button" class="notification-btn" ' +
+            'data-notification-action="lan-keep-wait">留在房间等待</button>' +
+            '<button type="button" class="notification-btn" ' +
+            'data-notification-action="menu">返回主菜单</button>',
+        },
+        0,
+        {
+          "lan-keep-wait": () => this.keepWaitingForPeer(),
+        }
+      )
     } catch {
       // 通知失败不影响连接状态机
     }
+  }
+
+  /**
+   * v1.3.93：「留在房间等待」—— 对手退出后不结束，把房间窗重新拉起来继续监听。
+   *
+   * 必须重置 peerLeftShown，否则对方重新加入、再次退出时不会再提示
+   * （去重标记的本意是"同一段离开只提示一次"，而这里用户已明确选择继续等，
+   * 语义上是一段新的等待）。
+   */
+  private keepWaitingForPeer(): void {
+    this.peerLeftShown = false
+    this.peerWasHere = false
+    this.pushSelfDiag("用户选择留在房间继续等待对手")
+    this.showRoomInfo()
   }
 
   /**
@@ -785,32 +817,46 @@ export class LanRelay implements MessageRelay {
     const addr = diag.ip
       ? (portChanged ? `${diag.ip}:${this.roomPort}` : diag.ip)
       : ""
-    let detail: { label: string; value: string; hint?: string }
+    let detail: {
+      label: string
+      value: string
+      hint?: string
+      state?: "spin" | "ok" | "warn" | "error"
+      mono?: boolean
+    }
     if (addr) {
+      // v1.3.93：房间地址是"要念给对手/让对方手抄"的内容 —— 用等宽大字展示，
+      // 且**不带状态图标**（这里不是"出问题了"，纯信息）。端口被顺延时用
+      // 警示态提醒"这串地址和别人不一样，别少抄端口"。
       detail = {
         label: "本机房间地址",
         value: addr,
         hint: portChanged
           ? `默认端口被占用，已改用 ${this.roomPort}。请把上面这串**完整地址**（含端口）告诉对手。`
-          : "把上面这串地址告诉对手，让他在『加入房间』里填写。",
+          : "把这串地址告诉对手，让他在『加入房间』里填写。\n等对方连上后会自动开局，这扇窗会自动关闭。",
+        state: portChanged ? "warn" : undefined,
+        mono: true,
       }
     } else if (diag.error) {
       detail = {
         label: "取本机 IP 失败",
         value: diag.error,
         hint: "请确认手机已连 Wi-Fi，然后返回菜单重新建房",
+        state: "error",
       }
     } else if (!diag.hasWifiIface) {
       detail = {
         label: "未连接 Wi-Fi",
         value: "没检测到无线网络",
         hint: "局域网对战需要两台手机连同一个 Wi-Fi。请连上后返回菜单重新建房",
+        state: "error",
       }
     } else {
       detail = {
         label: "Wi-Fi 未分配 IP",
         value: "接口已连接但没拿到 IPv4",
         hint: "请到 设置 → Wi-Fi → 当前网络 查看 IP 地址，把地址告诉对手；或重启 Wi-Fi 后重进",
+        state: "warn",
       }
     }
     try {
@@ -818,12 +864,52 @@ export class LanRelay implements MessageRelay {
         {
           type: "Info",
           title: ruleName(this.ruletype),
+          // v1.3.93：subtext 直接说出「在等谁做什么」，而不是只描述房间状态。
+          // 主机建房后最常见的困惑就是「然后呢？」，这里明确给出「等对手加入」。
           subtext: addr
-            ? "局域网对战 · 我的房间"
-            : "局域网对战 · 我的房间（IP 待取）",
+            ? "局域网对战 · 等待对手加入"
+            : "局域网对战 · 正在准备房间…",
           sticky: true,
           key: "lan-room",
           detail,
+        },
+        0
+      )
+    } catch {
+      // 通知组件不可用，不影响对局逻辑
+    }
+  }
+
+  /**
+   * v1.3.93：主机端「对手已连入，正在开局」的等待态。
+   *
+   * 为什么不沿用 notify()：走 notify 会先关掉房间窗再弹一条 3 秒瞬时提示，
+   * 于是从「对手连入」到「真正开局」之间的握手真空期（等对方 hello、最坏
+   * 2.5 秒宽限超时）屏幕上空着，用户容易误判为掉线。这里复用 sticky 窗
+   * （key 仍是 "lan-room"），原地刷成等待态并在开局时由 init.handleBegin
+   * 统一关闭 —— 全程都有明确反馈，也不新增任何连接逻辑。
+   *
+   * 注意**不写具体 IP**：这一步双方的连接已经建立，IP 已无用途；写它反而
+   * 让用户以为还要再抄一遍地址。
+   */
+  private showRoomWaitingPeer(): void {
+    if (this.role !== "host") return
+    // 只在房间窗还在屏上时才刷新（用户已手动关窗 / 已进对局就别再弹回来）
+    if (this.container.notification?.stickyKey !== "lan-room") return
+    try {
+      this.container.notifyLocal(
+        {
+          type: "Info",
+          title: ruleName(this.ruletype),
+          subtext: "局域网对战 · 对手已加入",
+          sticky: true,
+          key: "lan-room",
+          detail: {
+            label: "连接状态",
+            value: "双方已连通，正在开局…",
+            hint: "你是先手，开局后由你先击球。",
+            state: "spin",
+          },
         },
         0
       )
@@ -1094,23 +1180,36 @@ export class LanRelay implements MessageRelay {
   private showJoin(reason?: string, hint?: string): void {
     if (this.role !== "join") return
     let subtext = "局域网对战 · 加入房间"
-    let detail: { label: string; value: string; hint?: string }
+    let detail: {
+      label: string
+      value: string
+      hint?: string
+      state?: "spin" | "ok" | "warn" | "error"
+      mono?: boolean
+    }
     let extra: string | undefined
     switch (this.joinState) {
       case "connecting":
+        // v1.3.93：等待态带转圈 + 进度感文案。
+        // 旧版这里只有一行「正在连接 ws://...，请稍候…」，6 秒内页面完全静止，
+        // 用户无法判断是"在连"还是"卡死了"。现在有旋转指示器，且把目标地址
+        // 单独用等宽大字展示（方便核对是不是抄错了 IP）。
         subtext = "局域网对战 · 正在连接…"
         detail = {
           label: "目标主机",
           value: this.peerHost,
-          hint: `正在连接 ${this.targetUrl || this.peerHost}，请稍候…`,
+          hint: `正在连接 ${this.targetUrl || this.peerHost}\n若 6 秒内无响应会自动判定超时，可点下方按钮重试。`,
+          state: "spin",
+          mono: true,
         }
         break
       case "connected":
         subtext = "局域网对战 · 已连接"
         detail = {
           label: "连接状态",
-          value: "已连接",
-          hint: "已连上对方房间，等待主机开球…",
+          value: "已连接对方房间",
+          hint: "已连上对方房间，正在等待主机开球…",
+          state: "ok",
         }
         break
       case "disconnected":
@@ -1121,6 +1220,7 @@ export class LanRelay implements MessageRelay {
           label: "状态",
           value: "对手已退出对局",
           hint: reason ?? "对方已离开房间或网络中断，本局无法继续。",
+          state: "warn",
         }
         extra = LAN_FAIL_ACTIONS
         break
@@ -1130,6 +1230,7 @@ export class LanRelay implements MessageRelay {
           label: "原因",
           value: reason ?? "连接失败",
           hint: hint ?? LAN_GUIDE_GENERAL,
+          state: "error",
         }
         extra = LAN_FAIL_ACTIONS
         break

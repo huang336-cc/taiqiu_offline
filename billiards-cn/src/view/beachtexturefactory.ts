@@ -10,7 +10,7 @@ import { fbm2D, makeSeededRng, makeValueNoise2D } from "../utils/noise"
  * 沙滩场景程序化贴图工厂（v1.3.84j）。
  *
  * 全部为「程序化 Canvas 贴图」，零外部图片资源 —— 与 project 里
- * `cuetexturefactory.ts` / `scenetexturefactory.ts` 同一套路：
+ * `cuetexturefactory.ts` 同一套路：
  * 离线可用、不增加 APK 体积、不存在加载失败。
  *
  * ══════════════════════════════════════════════════════════════════════

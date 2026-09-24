@@ -33,7 +33,7 @@ A fully Chinese, ad-free Android billiards game. Built on a realistic three.js p
 
 ## Download
 
-**Online Play Page**: <https://a8bf01e5f1e8b47ce.bj9.agentos-app.net/>
+**Online Play Page**: <https://a7b9dc0cd0da80587.app.workbuddy.link>
 
 No installation needed — **play online** right in your browser, or download the latest APK directly from that page.
 

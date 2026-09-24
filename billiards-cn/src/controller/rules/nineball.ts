@@ -22,6 +22,7 @@ import { Session } from "../../network/client/session"
 import { isFirstShot } from "../../utils/utils"
 import { roundVec } from "../../utils/three-utils"
 import { t, foulReason } from "../../utils/i18n"
+import { respotOffTable, OFF_TABLE_FOUL } from "../../utils/offtable"
 
 export class NineBall implements Rules {
   readonly container: Container
@@ -121,7 +122,11 @@ export class NineBall implements Rules {
       this.respotAndBroadcastNineBall(outcome)
     }
 
-    const startPos = cueball.onTable() ? cueball.pos.clone() : this.placeBall()
+    // v1.3.95：出界的母球虽已被夹回台面内侧，但它不等于「仍在台上」
+    const startPos =
+      cueball.onTable() && !cueball.offTable
+        ? cueball.pos.clone()
+        : this.placeBall()
     roundVec(startPos)
     const placeBallEvent = new PlaceBallEvent(startPos, undefined, true)
     this.container.sendEvent(placeBallEvent)
@@ -211,16 +216,23 @@ export class NineBall implements Rules {
   }
 
   respot(outcome: Outcome[]): Ball[] {
+    // v1.3.95：先把本杆出界的球放回原处（含九号球被打出界的情况）
+    const moved = respotOffTable(this.container.table, outcome)
     const nineBall = this.container.table.balls[9]
     if (nineBall && Outcome.pots(outcome).includes(nineBall)) {
       Respot.nineBall(this.container.table)
       return [nineBall]
     }
-    return []
+    return moved
   }
 
   public static foulReason(table: Table, outcome: Outcome[]): string | null {
     const cueball = table.cueball
+
+    // v1.3.95：跳台犯规（球飞出台面）—— 优先级最高
+    if (Outcome.offTableBalls(outcome).length > 0) {
+      return OFF_TABLE_FOUL
+    }
 
     // 1. Cue ball potted
     if (Outcome.isCueBallPotted(cueball, outcome)) {

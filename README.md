@@ -33,7 +33,7 @@
 
 ## 下载
 
-**在线发布页**：<https://a8bf01e5f1e8b47ce.bj9.agentos-app.net/>
+**在线发布页**：<https://a7b9dc0cd0da80587.app.workbuddy.link>
 
 无需安装即可在浏览器中**在线试玩**，也可以直接在该页面下载最新版 APK。
 

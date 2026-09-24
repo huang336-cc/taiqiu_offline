@@ -1,11 +1,13 @@
 import { Aim } from "./aim"
 import { WatchAim } from "./watchaim"
+import { PlaceBall } from "./placeball"
 import { ControllerBase } from "./controllerbase"
 import { PlaceBallEvent } from "../events/placeballevent"
 import { RerackEvent } from "../events/rerackevent"
 import { Session } from "../network/client/session"
 import { BeginEvent } from "../events/beginevent"
 import { HitEvent } from "../events/hitevent"
+import { isFirstShot } from "../utils/utils"
 
 export class WatchShot extends ControllerBase {
   override get name(): string {
@@ -59,6 +61,28 @@ export class WatchShot extends ControllerBase {
    * 复位被 `placeBallMode()` 改过的可见性与相机。
    *
    * 保留原有职责：`respot` 的球先归位，`useStartPos` 时先 `startTurn()`。
+   *
+   * ⚠️ v1.3.102 修复「电脑犯规玩家无法摆球」。
+   *
+   * 病史（用户 2026-09-22 报）：电脑犯规后，玩家**看不到摆球提示、也没法把
+   * 白球拖到想要的位置**，白球被 AI 摆到它自己挑的点上就直接开打了。
+   *
+   * 根因在**发事件的那一侧**：`BotEventHandler.handleFoul` 处理的是「电脑自己
+   * 的犯规」（`handleStationary` 里 `botRules.foulReason` 判的是 bot 这一杆），
+   * 却仍然调 `chooseBallInHandPosition()` 给**自己**挑点，然后
+   * `publishSequenceToPlayer([new PlaceBallEvent(startPos, respot, true)])`。
+   * `useStartPos=true` 在本函数里的语义是「**位置已定**，直接落位、跳过交互」，
+   * 于是玩家被彻底锁在摆球流程之外 —— 犯规方没有交出球权。
+   *
+   * 正确语义：**犯规方交出球权**（与 `eightball.ts handleFoul` 对称）。
+   * 现在 `BotEventHandler.handleFoul` 已改为发 `useStartPos=false`，
+   * 本函数据此把控制权交给**交互式** `PlaceBall`，玩家就能像单机模式一样
+   * 自由拖拽白球，按 `SpaceUp` 确认后再开打。
+   *
+   * 守卫（与 `boteventhandler.handlePlaceBall` 的 `canReposition` 对称）：
+   *   · 只有 `useStartPos=false` 且 `rules.allowsPlaceBall()` 才进交互摆球；
+   *   · 开球杆（`isFirstShot`）位置由规则层定死，仍走原来的「直接落位」；
+   *   · 无自由球机制的规则（三库 / 沙狐）照旧直接落位。
    */
   override handlePlaceBall(event: PlaceBallEvent) {
     const table = this.container.table
@@ -70,6 +94,17 @@ export class WatchShot extends ControllerBase {
         ball.setStationary()
         ball.fround()
       }
+    }
+
+    // v1.3.102：电脑犯规 → 玩家自由球 → 交给交互式 PlaceBall 让玩家自己摆。
+    // `useStartPos=false` 是「位置未定，请自己摆」的信号（对称于 bot 侧
+    // `canReposition` 的判据），但开球杆与无自由球机制的规则除外。
+    if (
+      !event.useStartPos &&
+      this.container.rules.allowsPlaceBall() &&
+      !isFirstShot(this.container.recorder)
+    ) {
+      return new PlaceBall(this.container, event.pos)
     }
 
     // 应用机器人已经决定好的白球位置（与 BotEventHandler 的语义对齐）

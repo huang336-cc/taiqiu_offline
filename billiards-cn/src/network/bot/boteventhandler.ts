@@ -15,6 +15,7 @@ import { Vector3 } from "three"
 import { Rules } from "../../controller/rules/rules"
 import { RuleFactory } from "../../controller/rules/rulefactory"
 import { Professional } from "./strategies/professional"
+import { chooseBallInHandPosition as pickBallInHandSpot } from "./decision/ballinhand"
 import { TableGeometry } from "../../view/tablegeometry"
 import { Snooker } from "../../controller/rules/snooker"
 import { SnookerUtils } from "../../controller/rules/snookerutils"
@@ -27,7 +28,6 @@ import {
 import { ClawBreak } from "./strategies/clawbreak"
 import { TheFarJaw } from "./strategies/thefarjaw"
 import { t, foulReason as translateFoul } from "../../utils/i18n"
-import { R } from "../../model/physics/constants"
 
 class BotContainer {
   table
@@ -430,15 +430,39 @@ botName === "TheFarJaw"
         this.container.table
       )
     }
-    // v1.2.5：玩家犯规后电脑自由摆球——搜索整桌最佳合法点，而非默认开球线。
-    const startPos = this.chooseBallInHandPosition()
+    /**
+     * ⚠️ v1.3.102 修复「电脑犯规玩家无法摆球」。
+     *
+     * 病史：本函数处理的是**电脑自己的犯规**（入口 `handleStationary` 里
+     * `botRules.foulReason(outcome, botType)` 判的就是 bot 这一杆）。但旧实现
+     * 在 ballInHand 分支里调 `chooseBallInHandPosition()` —— 那是「**我方**拿到
+     * 自由球时给自己挑一个好点」的评估 —— 并把结果以
+     * `PlaceBallEvent(startPos, respot, /*useStartPos* /true)` 发给玩家。
+     *
+     * `useStartPos=true` 在玩家侧 `WatchShot.handlePlaceBall` 的语义是
+     * 「**位置已定**，直接落位、跳过交互」，于是玩家被锁在摆球流程外：
+     * 看不到摆球提示、不能拖白球，白球被 AI 摆到**AI 自己挑的**点上直接开打。
+     *
+     * 语义上，犯规方应**交出球权**（与 `eightball.ts handleFoul` 对称）：
+     *   · 玩家犯规 → 发 `PlaceBallEvent(startPos, …, true)` 给 AI → AI 自己挑点
+     *     （`botballinhand.ts` 已覆盖这条）
+     *   · **电脑犯规 → 必须让玩家拿到自由球** → 这里改发 `useStartPos=false`，
+     *     玩家侧据此进入**交互式** `PlaceBall`，由玩家自己拖拽白球。
+     *
+     * 注意 `startPos` 仍然有意义：它是玩家侧的**初始落点**（母球当前位或
+     * 规则默认点），交互式 PlaceBall 会以它为起点让玩家微调。
+     */
+    const startPos =
+      cueball.onTable() && !cueball.offTable
+        ? cueball.pos.clone()
+        : this.container.rules.placeBall()
     cueball.setStationary()
     const respotted = respottedOverride ?? this.container.rules.respot(outcome)
     let respot: RespotBody | undefined
     if (respotted.length > 0) {
       respot = { id: respotted[0].id, pos: respotted[0].pos.clone() }
     }
-    this.publishSequenceToPlayer([new PlaceBallEvent(startPos, respot, true)])
+    this.publishSequenceToPlayer([new PlaceBallEvent(startPos, respot, false)])
   }
 
   private snookerFoulPoints(outcome: Outcome[]): number {
@@ -461,67 +485,42 @@ botName === "TheFarJaw"
    * 不再只放到默认开球线位置，而是在整张球桌上搜索一个「合法（不与任何球重叠）且
    * 能对准目标球」的最佳点：优先选一条能直球命中目标球、距离适中（约 0.5m）的落点，
    * 让电脑像玩家一样自由摆球并争取好球型。
+   *
+   * v1.3.93：整体重写 —— 交给 `decision/ballinhand.ts`。
+   *
+   * 旧实现（就地 14×14 网格 + `1/(1+|d−0.5m|)` 打分）只判「不与球重叠」和
+   * 「视线不被挡」，**完全不看能不能进球、打完母球停哪、会不会摔袋、下一杆好不好打**。
+   * 用户反馈「AI 拿到自由球在乱摆白球」就是这个 —— 摆的位置几何上合法，战术上常是坏签。
+   *
+   * 新实现复用 decision/ 下已打磨的评估链（enumerateCandidates / refineStopsPhysics /
+   * evaluatePosition / evalThreat），与 AI 实际出杆用**同一套判据**，不存在
+   * 「以为好、真打时才发现打不进」的脱节。
    */
   private chooseBallInHandPosition(): Vector3 {
     const table = this.container.table
-    const cueball = table.cueball
-    const balls = table.balls.filter((b) => b !== cueball && b.onTable())
-    const targets = this.validTargetBalls()
-    const tx = TableGeometry.tableX - R * 1.2
-    const ty = TableGeometry.tableY - R * 1.2
-
-    const overlaps = (pos: Vector3): boolean => {
-      for (const b of balls) {
-        if (pos.distanceTo(b.pos) < 2 * R * 1.02) return true
-      }
-      return false
+    try {
+      const choice = pickBallInHandSpot(
+        table,
+        this.validTargetBalls(),
+        this.profile,
+        this.calculator,
+        this.buildShotContext(),
+        () => this.container.rules.placeBall()
+      )
+      this.logs.info(
+        `Bot ball-in-hand: 选定 (${choice.pos.x.toFixed(3)}, ${choice.pos.y.toFixed(3)}) ` +
+          `评分=${choice.score.toFixed(3)} 最难/最易杆难度=${choice.easiestDifficulty.toFixed(2)} ` +
+          `摔袋=${choice.risky ? "是" : "否"} 精算点数=${choice.evaluated}`
+      )
+      return choice.pos
+    } catch (e) {
+      // 评估链任何一环出错都不应让 AI 卡在这一步 —— 退回规则默认点，
+      // 保证「拿自由球后一定能出杆」这个底线。
+      this.logs.info(
+        `Bot ball-in-hand 评估失败，退回默认点: ${e instanceof Error ? e.message : String(e)}`
+      )
+      return this.container.rules.placeBall()
     }
-    // 从 from 到 to 的线段是否被其它球阻挡（点到线段距离 < 2R 视为挡住）
-    const lineBlocked = (from: Vector3, to: Vector3): boolean => {
-      const dir = to.clone().sub(from)
-      const len = dir.length()
-      if (len < 1e-4) return false
-      dir.multiplyScalar(1 / len)
-      for (const b of balls) {
-        const w = b.pos.clone().sub(from)
-        const t = Math.max(0, Math.min(len, w.dot(dir)))
-        const proj = from.clone().add(dir.clone().multiplyScalar(t))
-        if (proj.distanceTo(b.pos) < 2 * R) return true
-      }
-      return false
-    }
-    const scorePos = (pos: Vector3): number => {
-      if (overlaps(pos)) return -1
-      if (targets.length === 0) return 0.5
-      let best = -1
-      for (const t of targets) {
-        const d = pos.distanceTo(t.pos)
-        if (d < 2 * R + 0.05) return -1 // 太近无法瞄准
-        if (lineBlocked(pos, t.pos)) continue // 视线被挡，跳过
-        // 距离约 0.5m 最舒适，越接近越好
-        const quality = 1 / (1 + Math.abs(d - 0.5))
-        best = Math.max(best, quality)
-      }
-      return best
-    }
-
-    let bestPos: Vector3 | null = null
-    let bestScore = -1
-    const N = 14
-    const stepX = (2 * tx) / N
-    const stepY = (2 * ty) / N
-    for (let i = 0; i <= N; i++) {
-      for (let j = 0; j <= N; j++) {
-        const pos = new Vector3(-tx + i * stepX, -ty + j * stepY, 0)
-        const s = scorePos(pos)
-        if (s > bestScore) {
-          bestScore = s
-          bestPos = pos
-        }
-      }
-    }
-    // 兜底：极端情况下退回到规则默认点
-    return bestPos ?? this.container.rules.placeBall()
   }
 
   private handlePot(pots: number, outcome: Outcome[]): void {
@@ -606,8 +605,34 @@ botName === "TheFarJaw"
     }
 
     const cueball = table.cueball
+
+    /**
+     * v1.3.95：拿到自由球时要**自己挑一个好位置**，而不是照着 `event.pos` 直接开打。
+     *
+     * 此前这里无条件 `cueball.pos.copy(event.pos)`，而规则层发来的那个 pos
+     * 就是母球**当前**的位置 —— 于是 `decision/ballinhand.ts` 里那套
+     * 「网格粗筛 + 前 12 个候选跑真实物理精算」的摆位评估只在 handleFoul
+     * 那条支路上被调用，玩家实际看到的永远是「摆球在哪就直接开打」。
+     *
+     * 只有同时满足下面三条时才走摆位评估：
+     *   ① `useStartPos` —— 这是规则层在说「你可以自由球」；
+     *   ② `rules.allowsPlaceBall()` —— 三库 / 沙狐恒为 false，它们没有自由球机制；
+     *   ③ 不是开球杆 —— 开球必须回到开球线，位置只能由 rules.placeBall() 决定。
+     * 其余情况保持原有逻辑不变。
+     */
+    const canReposition =
+      event.useStartPos === true &&
+      this.container.rules.allowsPlaceBall() &&
+      !this.thisShotIsBreak
+
+    // chooseBallInHandPosition 内部已有 try/catch 兜底：
+    // 评估失败会退回规则默认点，保证「拿自由球后一定能出杆」这条底线。
     cueball.pos.copy(
-      event.useStartPos ? event.pos : this.container.rules.placeBall()
+      canReposition
+        ? this.chooseBallInHandPosition()
+        : event.useStartPos
+          ? event.pos
+          : this.container.rules.placeBall()
     )
     cueball.setStationary()
     cueball.fround()

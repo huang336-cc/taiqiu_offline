@@ -67,7 +67,13 @@ export class BallMaterialFactory {
 
     const material = new MeshPhongMaterial({
       emissive: 0,
-      flatShading: true,
+      // v1.3.93：关掉 flatShading。
+      //
+      // 这个材质给「画点」外观的球用，**母球就走这里**（ballmesh 里
+      // isCueBall 分支）。开着面法线着色时，母球这颗纯白球在台面灯光下
+      // 会把每个三角面照得明暗分明，一圈棱线非常扎眼——用户说的「球的
+      // 锯齿也多」，母球是最显眼的一处。改为平滑法线后恢复成连续球面。
+      flatShading: false,
       vertexColors: true,
       forceSinglePass: true,
       shininess: 25,
@@ -101,7 +107,16 @@ export class BallMaterialFactory {
             color: color,
             roughness: 0.5,
             metalness: 0,
-            flatShading: true,
+            // v1.3.93：去掉 flatShading。
+            //
+            // 原先低画质档（lod≤1）开 flatShading，本意是省一点着色开销，
+            // 但副作用是**每个三角面用同一个面法线**——球面被显式地画成
+            // 一堆可见的平面，棱角比几何细分度本身还刺眼。用户反馈的
+            // 「球的锯齿也多」里，有一部分其实不是走样（MSAA 能治的那种），
+            // 而是这个 flatShading 造成的**面片感**，MSAA 完全治不了。
+            // 关掉它改用平滑法线后，配合 ballmesh 里提升的细分度，
+            // 低画质档的球也恢复成连续曲面。
+            flatShading: false,
             transparent: false,
             depthWrite: true,
           })

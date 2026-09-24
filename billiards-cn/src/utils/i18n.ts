@@ -34,6 +34,9 @@ const FOUL_REASONS: Record<string, string> = {
   "Hit opponent ball first": "先碰到对方的球",
   "Potted black ball": "黑八提前落袋",
   "No rail after contact": "击球后无球碰库",
+  // v1.3.95：跳台犯规（球飞出台面）
+  "Ball off table": "球跳出台面",
+  球跳出台面: "跳台犯规（球飞出台面）",
 }
 
 export function foulReason(reason: string | undefined): string {

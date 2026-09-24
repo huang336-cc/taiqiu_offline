@@ -80,7 +80,7 @@ export function stronge(
     .copy(v)
     .addScaledVector(n̂, Δv_n)
     .addScaledVector(t̂, Δv_t)
-  v_new.z = 0 // project back onto table plane (rvw[1][2] = 0.0 in Python)
+  if (n̂.z === 0) v_new.z = 0 // v1.3.94（跳球）：仅法线无竖直分量时压平
 
   // 6. Apply angular change: Δω = (m * R / I) * (-n̂ × Δv_t t̂)
   const negative_n̂ = negative_n̂_v.copy(n̂).negate()

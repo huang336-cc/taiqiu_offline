@@ -138,13 +138,41 @@ function placeRail(balls: Ball[], cueOnRail: boolean): boolean {
   return true
 }
 
-function simulate(table: Table, aim: AimEvent) {
+/**
+ * v1.3.95：Depth exceeded 不再让整个探针崩掉 —— 打印现场后跳过本局。
+ *
+ * 为什么改成这样：这类崩溃是**间歇性**的（实测连续跑 3 次会中 1 次），
+ * 一旦撞上就是进程直接退出、连汇总都打不出来，等于彻底失去回归能力。
+ * 把现场（每颗球的位置 / offTable 标记 / 是否运动 / 出杆向量）打出来，
+ * 才有可能回头定位 —— 「奔溃了」这句话本身没有任何信息量。
+ */
+function simulate(table: Table, aim: AimEvent): boolean {
   table.cue!.aim = aim
   table.cue!.hit(table.cueball)
   let guard = 0
-  while (!table.allStationary() && guard++ < 300000) {
-    table.advance(STEP)
+  try {
+    while (!table.allStationary() && guard++ < 300000) {
+      table.advance(STEP)
+    }
+  } catch (e) {
+    const msg = (e as Error).message.split("\n")[0]
+    console.log(`\n[Depth exceeded] ${msg}`)
+    console.log(
+      `  出杆: angle=${aim.angle?.toFixed(4)} power=${(aim.power / R).toFixed(1)}R ` +
+        `aimpos=(${aim.pos.x.toFixed(3)}, ${aim.pos.y.toFixed(3)})`
+    )
+    for (const b of table.balls) {
+      console.log(
+        `   #${b.label ?? 0}${b === table.cueball ? "(母)" : "   "} ` +
+          `pos=(${b.pos.x.toFixed(4)}, ${b.pos.y.toFixed(4)}, ${b.pos.z.toFixed(4)}) ` +
+          `state=${b.state} off=${b.offTable} air=${b.wasAirborne} ` +
+          `|v|=${b.vel.length().toFixed(3)}`
+      )
+    }
+    console.log(`  outcome=${table.outcome.map((o) => o.type).join(",")}`)
+    return false
   }
+  return true
 }
 
 function distToRail(p: Vector3): number {
@@ -232,7 +260,7 @@ function run(N: number) {
     const aim = AimEvent.fromJson(hit.tablejson.aim)
     const usedFallback = events.length <= 2
 
-    simulate(table, aim)
+    if (!simulate(table, aim)) continue
     const outcome: Outcome[] = table.outcome
     const firstCollision = Outcome.firstCollision(outcome)
     const firstCushion = outcome.find((o) => o.type === OutcomeType.Cushion)
@@ -270,7 +298,7 @@ function run(N: number) {
           )
           .join(" ")
         samples.push(
-          `angle=${deg}° power=${((aim.power ?? 0) / R).toFixed(1)}R ` +
+          `angle=${(aim.angle ?? 0).toFixed(1)}° power=${((aim.power ?? 0) / R).toFixed(1)}R ` +
             `offset=(${(aim.offset?.x ?? 0).toFixed(2)},${(aim.offset?.y ?? 0).toFixed(2)}) ` +
             `branch=${usedFallback ? "fallback" : "main"} ` +
             `最近垂距=${(nearest / R).toFixed(2)}R(#${nearestLabel})` +

@@ -181,6 +181,50 @@ export class Camera {
   }
 
   /**
+   * v1.3.100：远台跟随视角（farView）——「拉远版的瞄准视角」。
+   *
+   * 需求变更：v1.3.99 的 farView 是**固定在球台 +Y 端线外**的静态机位，
+   * 用户要求改成**跟随球杆**：相机站在母球后方、沿当前出杆方向看向前方，
+   * 与 aimView 同源，只是**距离更远、高度更高**，因此一屏能看见更完整的
+   * 台面与房间，适合观察全局球势。
+   *
+   * 与 aimView 的差异（都在同一套「母球后方 + 出杆方向」几何上）：
+   *   - 距离：aimView 用 `this.distance`（默认 R*24 ≈ 0.79m，贴台）；
+   *     farView 用 `FAR_DISTANCE = R*73 ≈ 2.39m`，明显退远。
+   *   - 高度：aimView 用 `this.height`（默认 R*9 ≈ 0.295m，近台面平视）；
+   *     farView 用 `FAR_HEIGHT = 1.10m`，略高于瞄准、略带俯瞰。
+   *   - 注视抬升：aimView 用 `AIM_LOOK_LIFT = R*6`；farView 用
+   *     `FAR_LOOK_LIFT = R*10`（≈0.33m），因相机更高，需同步抬高注视点
+   *     才能让视线不过分下压、把房间带进画面。
+   *
+   * 坐标系：世界 Z-up，球台居中于原点，台面在 z≈0。房间天花板 z=2.85，
+   * 相机高度 1.10m 远低于天花板，不会穿顶。
+   *
+   * 横屏专用：本版**只做横屏**（竖屏不做），因此不做竖屏 FOV 收窄分支，
+   * 统一走 `adaptiveFov`（横屏受 60° 横向上限约束）。
+   */
+  private static readonly FAR_DISTANCE = R * 73
+  private static readonly FAR_HEIGHT = 1.10
+  private static readonly FAR_FOV = 42
+  private static readonly FAR_LOOK_LIFT = R * 10
+
+  farView(aim: AimEvent) {
+    // 横屏专用：与 aimView 同款自适应 FOV（横屏横向上限 60°）
+    this.camera.fov = this.adaptiveFov(Camera.FAR_FOV)
+    // 相机站在母球后方，沿出杆反方向退 FAR_DISTANCE —— 与 aimView 完全同源，
+    // 因此会随球杆方向实时跟随（每杆出杆方向变化，机位随之旋转）。
+    this.target
+      .copy(aim.pos)
+      .addScaledVector(unitAtAngle(aim.angle, this.tempVec), -Camera.FAR_DISTANCE)
+    this.camera.position.lerp(this.target, 0.12)
+    this.camera.position.z = Camera.FAR_HEIGHT
+    this.camera.up = up
+    // 注视母球前方、抬高 FAR_LOOK_LIFT，使视线不过分下压
+    this.lookTarget.copy(aim.pos).addScaledVector(up, Camera.FAR_LOOK_LIFT)
+    this.camera.lookAt(this.lookTarget)
+  }
+
+  /**
    * v1.3.60：以指定中心点为俯视视线锚点的「聚焦俯视」。
    * 与 topView 不同：相机不放在「(0, -εR, dist)」看原点，而是抬到
    * `center.x, center.y, center.z + dist(radius)` 看 center。
@@ -232,7 +276,7 @@ export class Camera {
    * 上缘反而更低。实测 height 从 R*9 升到 R*30，台呢占比 67.8% → **91.1%**，
    * 画面退化成俯视平面图。所以「机位抬高」这条思路整体作废。
    *
-   * 正解是把**注视点抬高**让视线变平。实测（room / office / cybercafe 三场景一致）：
+   * 正解是把**注视点抬高**让视线变平。实测（室内场景）：
    *     lookLift  R*2 → 68%    R*4 → 61%    R*6 → 51%    R*8 → 41%
    * 取 `R*6`：台呢从 68% 降到 51%，画面里同时保有「球桌质感」与
    * 「可辨识的房间」（木地板、踢脚线、球杆架、置球、投影）。
@@ -484,6 +528,30 @@ this.resetReplayNudge()
 }
 
 /**
+* v1.3.93：进度条拖动（seek）后的相机复位。
+*
+* 修的问题：seekToFraction 只还原球局布局与物理时间，**从不碰相机**。
+* 而 replayFrameView 用的是 `this.replayAnchor ?? buildReplayAnchor(...)`，
+* 锚点只在 setReplayFrame 里被清空；seek 不清它，镜头就继续沿用**拖动前那一杆**
+* 的机位。表现为用户说的「进度条往回滑动后视角又定死在滑之前的视角，啥也看不见」。
+* 更糟的是两段跳：seek 后镜头卡旧机位，等球一动、playNextShot 调 frameCameraForShot
+* 重建锚点，画面才「啪」地跳到正确位置。
+*
+* 这里按目标杆重新框定并**立即完成定位**（fraction=1），保证拖到哪就看到哪。
+* 与 setReplayFrame 的区别：不动 mode / mainMode，也不碰按钮 class ——
+* 调用方（Replay）已经决定好当前是跟随还是俯视，这里只负责把机位摆正。
+*/
+reframeReplayNow(points: Vector3[], shotAngle?: number | null) {
+if (!points || points.length === 0) return
+this.replayFocus = points
+this.replayShotAngle = typeof shotAngle === "number" ? shotAngle : null
+this.resetReplayNudge()
+this.replayAnchor = null
+if (this.mode !== this.replayFrameView) return
+this.replayFrameView(null as unknown as AimEvent, 1)
+}
+
+/**
 * v1.2.11 #user：仅更新回放框定焦点，不切换相机模式。
 * v1.3.58：焦点变化意味着重新框定，锚点一并作废重建，
 * 否则镜头会继续沿用旧机位、看上去像没生效。
@@ -717,7 +785,15 @@ this.camera.lookAt(this.lookTarget)
       this.mainMode = this.topView
       this.isZoomedOut = false
       this.updateCameraButtonClass("topview")
+    } else if (this.mode === this.topView) {
+      // v1.3.99：俯视 → 远台（静态框全台）
+      this.restoreSavedDistance()
+      this.mode = this.farView
+      this.mainMode = this.farView
+      this.isZoomedOut = false
+      this.updateCameraButtonClass("far")
     } else {
+      // v1.3.99：远台 → 瞄准，闭合「瞄准 → 俯视 → 远台」三态循环
       this.restoreSavedDistance()
       this.mode = this.aimView
       this.mainMode = this.aimView
@@ -726,10 +802,10 @@ this.camera.lookAt(this.lookTarget)
     }
   }
 
-  private updateCameraButtonClass(state: "aim" | "aimz" | "topview") {
+  private updateCameraButtonClass(state: "aim" | "aimz" | "topview" | "far") {
     const btn = document.getElementById("camera")
     if (btn) {
-      btn.classList.remove("aim", "aimz", "topview")
+      btn.classList.remove("aim", "aimz", "topview", "far")
       btn.classList.add(state)
       // v1.1.59：只更新模式指示子元素 .cam-mode，绝不整体替换 btn.textContent。
       // 之前用 emoji（🎥ᶻ / 🎥ᵀ）整体覆盖按钮，会把精心做好的奶白 SVG 图标抹掉，
@@ -737,7 +813,9 @@ this.camera.lookAt(this.lookTarget)
       // 现在保留 SVG，仅切换 class + 更新 ᶻ/ᵀ 文本，颜色完全交给 CSS 控制。
       const mode = btn.querySelector(".cam-mode")
       if (mode) {
-        mode.textContent = state === "aimz" ? "ᶻ" : state === "topview" ? "ᵀ" : ""
+        // v1.3.99：新增远台模式字母 ᶠ（与 ᶻ/ᵀ 同为上标小写体）
+        mode.textContent =
+          state === "aimz" ? "ᶻ" : state === "topview" ? "ᵀ" : state === "far" ? "ᶠ" : ""
       }
     }
   }

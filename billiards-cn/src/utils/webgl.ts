@@ -92,7 +92,17 @@ function createRenderer(
   let glRenderer: WebGLRenderer | undefined
   try {
     glRenderer = new WebGLRenderer({
-      antialias: lod >= 1,
+      // v1.3.93：MSAA 改为**始终开启**，不再随画质档开关。
+      //
+      // 原先是 `antialias: lod >= 1`，即画质档 0 完全关闭多重采样。用户反馈
+      // 「锯齿太多，整体的画质差」，而 MSAA 恰恰是治边缘走样最直接、最便宜
+      // 的手段：它由 GPU 的 MSAA 硬件路径完成，对 4x 采样而言显存与带宽开销
+      // 在现代移动 GPU 上完全可接受（相比关掉后满屏爬行的边缘锯齿，
+      // 这点开销换来的观感提升是压倒性的）。
+      //
+      // 真正的低端护栏应该是**分辨率**（见 computeCappedDPR，档 0 的 cap 仍是
+      // 1x）和**几何细分度**（见 BallMesh.ballGeometryDetail），而不是砍掉抗锯齿。
+      antialias: true,
       depth: true,
       powerPreference: lod <= 1 ? "low-power" : "high-performance",
       stencil: false,
@@ -158,6 +168,17 @@ function computeCappedDPR() {
   const lod = Session.getLod()
   const device = globalThis.devicePixelRatio ?? 1
 
+  // v1.3.93：中高画质档的 cap 各上调一档。
+  //
+  // 背景：DPR cap 是「渲染分辨率」的直接闸门 —— cap=2 意味着 DPR=3 的手机
+  // 只按 2x 渲染，相当于把渲染分辨率砍掉 (2/3)² ≈ 56%，画面上就是整体发糊 +
+  // 边缘锯齿。用户反馈「整体的画质差」，cap 偏低是仅次于几何细分度的第二大
+  // 因素（在 MSAA 已改为始终开启之后）。
+  //
+  // 调整：档 2 从 1.5 → 2，档 3 从 2 → 2.5，档 4 从 2.5 → 3。档 0/1 保持
+  // 1 / 1.25 不动 —— 那是低端机护栏，动了会真掉帧。MSAA 现在始终开启，
+  // 加上球几何在低档也提到 detail 2，低档的观感已经比改前明显好，
+  // 不需要再靠抬 DPR 补偿。
   let cap: number
   switch (lod) {
     case 0:
@@ -167,13 +188,13 @@ function computeCappedDPR() {
       cap = 1.25
       break
     case 2:
-      cap = 1.5
-      break
-    case 3:
       cap = 2
       break
-    case 4:
+    case 3:
       cap = 2.5
+      break
+    case 4:
+      cap = 3
       break
     // 修复：原 switch 只到 case 4，QualityLevel 最高为 5（"最高画质"），
     // lod=5 会掉进 default=2，导致「调到最高档反而比 4 档更糊、锯齿更重」。
@@ -186,6 +207,26 @@ function computeCappedDPR() {
       break
   }
   return Math.min(device, cap)
+}
+
+/**
+ * v1.3.93：按当前画质档与设备像素比刷新渲染器的像素比。
+ *
+ * 修的问题：`setPixelRatio(computeCappedDPR())` 原先**只在创建渲染器时调一次**
+ * （见 createRenderer 末尾），而 resize 路径（view.ts 的 updateSize 分支）只调
+ * setSize / setViewport / setScissor，**从不刷新 DPR**。后果有两类：
+ *
+ *  1. 旋转屏幕 / 折叠屏展开后，`devicePixelRatio` 可能变化（横竖屏的 DPR 常不同），
+ *     渲染分辨率却仍按旧 DPR 算，画质要么糊要么白白多渲染；
+ *  2. 用户在设置里改了画质档，本函数是让它**当场生效**的钩子（否则要退出重进）。
+ *
+ * 返回是否真的发生了变化，便于调用方决定要不要顺带 updateProjectionMatrix。
+ */
+export function refreshPixelRatio(glRenderer: WebGLRenderer): boolean {
+  const next = computeCappedDPR()
+  if (glRenderer.getPixelRatio() === next) return false
+  glRenderer.setPixelRatio(next)
+  return true
 }
 
 /**

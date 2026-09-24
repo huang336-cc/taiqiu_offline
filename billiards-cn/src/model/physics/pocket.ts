@@ -13,6 +13,10 @@ export class Pocket {
   }
 
   private static willFall(pocket, futurePosition) {
+    // v1.3.94（跳球）：加高度门限，从袋口上方飞过的球不落袋
+    if (futurePosition.z > R) {
+      return false
+    }
     return futurePosition.distanceTo(pocket.pos) < pocket.radius
   }
 

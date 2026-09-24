@@ -9,7 +9,7 @@
  * 其余判定同 v1：入画 + 不被桌挡 + 分层输出。
  */
 const puppeteer = require("puppeteer-core")
-const DIST = "/workspace/project/source/billiards-cn/dist"
+const DIST = "/workspace/dev/source/billiards-cn/dist"
 
 async function main() {
   const browser = await puppeteer.launch({

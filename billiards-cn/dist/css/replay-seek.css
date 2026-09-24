@@ -167,6 +167,13 @@
   /* 让原生轨道在木纹胶囊内可见：用半透明金边轨道 */
   -webkit-appearance: none;
   appearance: none;
+  /* v1.3.93：显式声明 touch-action。
+     index.css 里的全局兜底是 `div { touch-action: none }` —— 而 #replaySeek
+     是个 <input>，**不被那条规则覆盖**。缺了这条声明，浏览器会把手指在进度条上的
+     横向拖动优先解释成页面滚动手势，拖动途中派发 pointercancel 把 seek 打断，
+     表现为「进度条拖不动 / 拖着拖着跳回去」。
+     进度条是纯拖拽控件，必须 none。 */
+  touch-action: none;
 }
 
 #replaySeek::-webkit-slider-runnable-track {

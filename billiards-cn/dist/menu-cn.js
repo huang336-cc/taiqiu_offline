@@ -359,6 +359,7 @@
       "奥特曼的台球 · 离线版": "Ultraman Billiards · Offline Edition",
       "电脑 · 专业": "CPU · Pro",
       "台球桌外观": "Table Appearance",
+      "球桌外观": "Table Appearance",
       "点击色块即可实时更换台呢、桌框、纹理与边缘发光特效（球杆随台面自动协调）": "Tap a swatch to change the cloth, frame, texture and edge glow in real time (the cue follows the table automatically).",
       "最长": "Longest",
       "选择后会立即在主菜单高亮，进入对局即生效；对局中经本页或设置页更换也会实时刷新。": "Your selection is highlighted on the home screen immediately and takes effect when you enter a match; changes made here or in Settings also refresh live during a match.",
@@ -758,7 +759,8 @@
       var raw = ($("lanPeerInput") && $("lanPeerInput").value) || ""
       var ip = raw.trim()
       if (!ip) {
-        showToast("请输入对方的 IP 地址")
+        showToast("请输入对方的地址")
+        focusLanInput()
         return
       }
       // v1.3.73：进游戏前先做格式校验。此前只要非空就放行，随手填的
@@ -766,7 +768,9 @@
       // 之前连失败提示都会被常驻弹窗吞掉），表现就是"进入游戏后无反应"。
       // 在这里拦下最省事，用户当场就能改。
       if (!isLanAddress(ip)) {
-        showToast("IP 格式不正确，应形如 192.168.1.5")
+        showToast("地址格式不正确，应形如 192.168.1.8")
+        markLanInputInvalid(true)
+        focusLanInput()
         return
       }
       settings.lastLanHost = ip
@@ -780,10 +784,61 @@
     location.href = "play.html?" + params.join("&")
   }
 
+  /* v1.3.93：局域网输入框的即时校验。
+     旧版只在点「加入」时才校验一次，填错要点了才知道。现在边输边提示，
+     并把提示文字染成对应颜色，用户不需要试错。
+     **只做提示，不拦截输入** —— 校验规则与 startLan 里用的是同一个
+     isLanAddress，不会出现"提示说没问题但点进去报错"的不一致。 */
+  function markLanInputInvalid(bad) {
+    var inp = $("lanPeerInput")
+    if (inp) inp.classList.toggle("is-invalid", !!bad)
+  }
+
+  function focusLanInput() {
+    try {
+      var inp = $("lanPeerInput")
+      if (inp) inp.focus()
+    } catch (e) {}
+  }
+
+  function updateLanPeerHint() {
+    var inp = $("lanPeerInput")
+    var hint = $("lanPeerHint")
+    if (!inp || !hint) return
+    var v = (inp.value || "").trim()
+    // 清掉上一次的上色，后面按新内容重设
+    hint.classList.remove("is-warn", "is-ok")
+    markLanInputInvalid(false)
+    if (!v) {
+      hint.textContent = "填写对方建房时显示的那串地址（含冒号后的端口）。"
+      return
+    }
+    if (isLanAddress(v)) {
+      hint.textContent = "地址格式没问题，点「加入」即可。"
+      hint.classList.add("is-ok")
+      return
+    }
+    hint.textContent = "格式不对：应为类似 192.168.1.8 或 192.168.1.8:24816。"
+    hint.classList.add("is-warn")
+    markLanInputInvalid(true)
+  }
+
+  /* v1.3.93：按钮防连点。点一下即置灰，直到页面跳转。
+     「创建房间 / 加入」都会立刻 location.href 跳走，但跳转前有几十毫秒的
+     空档，连点会重复触发 startLan（重复拼 URL、重复调 buzz）。
+     这里在点击瞬间锁住按钮，配合 CSS 的 [data-busy] 视觉反馈。 */
+  function lockLanButton(btn) {
+    if (!btn || btn.dataset.busy === "1") return false
+    btn.dataset.busy = "1"
+    btn.setAttribute("disabled", "disabled")
+    return true
+  }
+
   function initLanPanel() {
     var hb = $("lanHostBtn")
     if (hb) {
       hb.addEventListener("click", function () {
+        if (!lockLanButton(hb)) return
         buzz(10)
         startLan("host")
       })
@@ -791,10 +846,28 @@
     var jb = $("lanJoinBtn")
     if (jb) {
       jb.addEventListener("click", function () {
+        if (!lockLanButton(jb)) return
         buzz(10)
         startLan("join")
+        // startLan 校验失败会原地返回（不跳转），此时必须解锁，
+        // 否则按钮永久置灰，用户改完地址也点不动。
+        jb.dataset.busy = ""
+        jb.removeAttribute("disabled")
       })
     }
+    var inp = $("lanPeerInput")
+    if (inp) {
+      inp.addEventListener("input", updateLanPeerHint)
+      inp.addEventListener("change", updateLanPeerHint)
+      // 回车 = 点「加入」，省一次点击
+      inp.addEventListener("keydown", function (e) {
+        if (e && e.key === "Enter") {
+          e.preventDefault()
+          if (jb) jb.click()
+        }
+      })
+    }
+    updateLanPeerHint()
     updateLanPanel()
   }
 
@@ -1053,12 +1126,6 @@ $("setKeepViews").checked = settings.keepAllViews !== false
           ctx.fillRect(0, y + ((y / 22) % 2 ? 5 : 0), W, 5)
         ctx.globalAlpha = 1
         break
-      case "forest":
-        ctx.globalAlpha = 0.2
-        ctx.fillStyle = "#0c1a0c"
-        for (var x = 24; x < W; x += 58) ctx.fillRect(x, 0, 22, horizonY)
-        ctx.globalAlpha = 1
-        break
       case "snow":
         ctx.fillStyle = "rgba(255,255,255,0.55)"
         for (var s = 0; s < 140; s++) {
@@ -1072,46 +1139,6 @@ $("setKeepViews").checked = settings.keepAllViews !== false
           )
           ctx.fill()
         }
-        break
-      case "office":
-        ctx.globalAlpha = 0.12
-        ctx.strokeStyle = "#1a2430"
-        ctx.lineWidth = 3
-        for (var x2 = 0; x2 <= W; x2 += 96) {
-          ctx.beginPath()
-          ctx.moveTo(x2, 0)
-          ctx.lineTo(x2, horizonY)
-          ctx.stroke()
-        }
-        for (var y2 = 0; y2 <= horizonY; y2 += 96) {
-          ctx.beginPath()
-          ctx.moveTo(0, y2)
-          ctx.lineTo(W, y2)
-          ctx.stroke()
-        }
-        ctx.globalAlpha = 1
-        break
-      case "cybercafe":
-        ctx.globalAlpha = 0.5
-        ctx.strokeStyle = "#36e0ff"
-        ctx.lineWidth = 2
-        for (var x3 = 0; x3 <= W; x3 += 44) {
-          ctx.beginPath()
-          ctx.moveTo(x3, 0)
-          ctx.lineTo(x3, horizonY)
-          ctx.stroke()
-        }
-        for (var y3 = 0; y3 <= horizonY; y3 += 44) {
-          ctx.beginPath()
-          ctx.moveTo(0, y3)
-          ctx.lineTo(W, y3)
-          ctx.stroke()
-        }
-        ctx.globalAlpha = 0.3
-        ctx.strokeStyle = "#ff3ca0"
-        ctx.lineWidth = 4
-        ctx.strokeRect(6, 6, W - 12, horizonY - 12)
-        ctx.globalAlpha = 1
         break
       case "football":
         ctx.fillStyle = "rgba(0,0,0,0.10)"
@@ -1443,7 +1470,22 @@ $("setKeepViews").checked = settings.keepAllViews !== false
     ctx.restore()
   }
 
+  /**
+   * v1.3.103：给卡片挂两类预览。
+   *
+   * 1）**2D 占位图**（立即、同步、零成本）—— 由 drawScenePreview /
+   *    drawCuePreview / drawTableSkinPreview 手绘。它是"先顶上"的兜底，
+   *    保证首屏立刻有图、且 WebGL 不可用时菜单依然可用。
+   * 2）**3D 真图**（懒加载、逐张替换）—— 由 skin-preview-3d.js 用游戏内
+   *    真实贴图离屏渲染。只有当卡片滚动进视口时才排队渲染，渲染成功就
+   *    覆盖掉 2D 占位；失败/不支持则静默保留 2D 图。
+   *
+   * 为什么不一上来就全部渲染 3D：19 款球杆 + 13 款球桌 + 6 个场景共 38 张，
+   * 每张都要建场景、编译着色器、读回像素 —— 一次性做完会明显卡顿。
+   * 懒加载 + requestIdleCallback 分片后，用户滑到哪儿才渲染哪儿。
+   */
   function applyCardPreviews() {
+    // ---- 1) 2D 占位（同步立即出图）----
     Array.prototype.forEach.call(
       document.querySelectorAll("#sceneCards .skin-card"),
       function (card) {
@@ -1492,6 +1534,185 @@ $("setKeepViews").checked = settings.keepAllViews !== false
         }
       }
     )
+
+    // ---- 2) 3D 真图（懒加载 + 逐张替换）----
+    scheduleCardPreview3D()
+  }
+
+  // ---------- v1.3.103：卡片缩略图的真 3D 渲染 ----------
+  //
+  // 加载链：three.standalone.js（挂 window.THREE）
+  //        → skin-factory.js（挂 window.CueGameSkin：游戏内真实贴图工厂 +
+  //           TableGeometry / R 等几何参数；必须在 three 之后注入，原因同
+  //           loadCuePreview3DLib 的注释）
+  //        → cue-texture-factory.js（挂 window.CueGameCue：球杆贴图与长度）
+  //        → skin-preview-3d.js（挂 window.SkinPreview3D，渲染本体）
+  //
+  // 只在**真的有卡片进入视口**时才加载，菜单首屏不受拖累。
+  var skin3DScriptPromise = null
+  function loadSkinPreview3DLib() {
+    if (skin3DScriptPromise) return skin3DScriptPromise
+    skin3DScriptPromise = new Promise(function (resolve, reject) {
+      if (window.SkinPreview3D) { resolve(); return }
+      var base = window.__APP_ROOT__ || ""
+      function inject(src, ok, fail) {
+        var s = document.createElement("script")
+        s.src = base + src
+        s.onload = ok
+        s.onerror = function () { fail(new Error("加载失败: " + src)) }
+        document.head.appendChild(s)
+      }
+      inject("three.standalone.js", function () {
+        inject("skin-factory.js", function () {
+          inject("cue-texture-factory.js", function () {
+            inject("skin-preview-3d.js", function () {
+              if (window.SkinPreview3D) resolve()
+              else reject(new Error("SkinPreview3D 未定义"))
+            }, reject)
+          }, reject)
+        }, reject)
+      }, reject)
+    })
+    return skin3DScriptPromise
+  }
+
+  // 渲染队列：存 {sw, kind, id}，用 IntersectionObserver 投递
+  var preview3DQueue = []
+  var preview3DRunning = false
+  var preview3DObserver = null
+
+  /** 把队列里的任务分批在空闲时段渲染，逐张替换色块背景 */
+  function drainPreview3DQueue() {
+    if (preview3DRunning || !preview3DQueue.length) return
+    preview3DRunning = true
+    var P = window.SkinPreview3D
+    // v1.4.0：批量 3→8 —— 静态图直出后每张只是一次图片解码（<10ms），
+    // 一批 8 张仍远轻于旧版单张 3D 渲染；减少 idle 调度轮数，
+    // 面板打开后所有卡片更快收敛。
+    var BATCH = 8
+
+    function step() {
+      var n = 0
+      while (n < BATCH && preview3DQueue.length) {
+        var job = preview3DQueue.shift()
+        n++
+        var sw = job.sw
+        // 已经被渲染过（或卡片已从 DOM 移除）就跳过
+        if (!sw || !sw.isConnected || sw.dataset.pv3d === "1") continue
+        // v1.3.104：预热缓存命中 → 免渲染直接出图（点开面板秒出，不卡顿）
+        var cached = getCachedThumb(job.kind, job.id)
+        if (cached) {
+          sw.style.backgroundImage = "url(" + cached + ")"
+          sw.dataset.pv3d = "1"
+          continue
+        }
+        if (cached === null) {
+          // 预热时已确认失败：保留 2D 占位，不再重试
+          sw.dataset.pv3d = "fail"
+          continue
+        }
+        // v1.4.0：缓存 miss 先试构建期静态图（零渲染开销），
+        // 静态缺失才回退运行时渲染 —— 全部异步化，不阻塞空闲分片。
+        ;(function (sw, kind, id) {
+          ensureThumb(kind, id, function (url) {
+            if (!sw.isConnected) return
+            if (url) {
+              sw.style.backgroundImage = "url(" + url + ")"
+              sw.dataset.pv3d = "1"
+            } else {
+              // 标记"已尝试但失败"，避免反复重试
+              sw.dataset.pv3d = "fail"
+            }
+          })
+        })(sw, job.kind, job.id)
+      }
+      if (preview3DQueue.length) schedule()
+      else preview3DRunning = false
+    }
+    function schedule() {
+      if (window.requestIdleCallback) {
+        window.requestIdleCallback(step, { timeout: 400 })
+      } else {
+        window.setTimeout(step, 24)
+      }
+    }
+    schedule()
+  }
+
+  /**
+   * 建立 IntersectionObserver：卡片进入视口才把它的渲染任务入队。
+   * 不支持 IntersectionObserver 的老 WebView 直接退化为「全部入队」，
+   * 行为仍正确，只是首屏可能稍慢。
+   */
+  function scheduleCardPreview3D() {
+    if (!preview3DObserver) {
+      if (!window.IntersectionObserver) {
+        // 老环境：一次性全部入队
+        collectPreview3DJobs(function (job) { preview3DQueue.push(job) })
+        loadSkinPreview3DLib().then(drainPreview3DQueue, function () {})
+        return
+      }
+      preview3DObserver = new IntersectionObserver(
+        function (entries) {
+          var added = 0
+          entries.forEach(function (en) {
+            if (!en.isIntersecting) return
+            var job = jobForCard(en.target)
+            if (job) {
+              preview3DQueue.push(job)
+              added++
+            }
+            preview3DObserver.unobserve(en.target)
+          })
+          if (added) {
+            // 有卡片可见了，才去加载那套 3D 库；加载成功再开始消化队列
+            loadSkinPreview3DLib().then(drainPreview3DQueue, function () {})
+          }
+        },
+        { root: null, rootMargin: "120px 0px" }
+      )
+    }
+    collectPreview3DJobs(function (job) {
+      preview3DObserver.observe(job.card)
+    })
+  }
+
+  /** 遍历三类卡片，产出 {card, sw, kind, id} */
+  function collectPreview3DJobs(cb) {
+    function each(sel, attr, kind) {
+      Array.prototype.forEach.call(document.querySelectorAll(sel), function (card) {
+        var sw = card.querySelector(".skin-swatch")
+        if (!sw) return
+        // 已经有 3D 图 / 已尝试过就跳过
+        if (sw.dataset.pv3d) return
+        var id = card.getAttribute(attr)
+        // 有实拍照片的场景不走 3D（照片优先）
+        if (kind === "scene" && card.getAttribute("data-photo")) return
+        if (!id) return
+        cb({ card: card, sw: sw, kind: kind, id: id })
+      })
+    }
+    each("#sceneCards .skin-card", "data-scene", "scene")
+    each("#cueThemeCards .skin-card", "data-cuetheme", "cue")
+    each("#tableSkinCards .skin-card", "data-tableskin", "table")
+  }
+
+  /** 按卡片元素反查它的渲染任务 */
+  function jobForCard(card) {
+    var sw = card.querySelector(".skin-swatch")
+    if (!sw || sw.dataset.pv3d) return null
+    var kind = null
+    var id = null
+    if (card.hasAttribute("data-scene")) {
+      if (card.getAttribute("data-photo")) return null  // 照片场景不渲染 3D
+      kind = "scene"; id = card.getAttribute("data-scene")
+    } else if (card.hasAttribute("data-cuetheme")) {
+      kind = "cue"; id = card.getAttribute("data-cuetheme")
+    } else if (card.hasAttribute("data-tableskin")) {
+      kind = "table"; id = card.getAttribute("data-tableskin")
+    }
+    if (!kind || !id) return null
+    return { card: card, sw: sw, kind: kind, id: id }
   }
 
   var NAME_OF = {
@@ -1509,16 +1730,198 @@ $("setKeepViews").checked = settings.keepAllViews !== false
     },
   }
 
-  /** 刷新首页「外观定制」三行的缩略图与当前值（item 4） */
-  function refreshCustomRows() {
+  /* ============================================================================
+   * v1.3.104：首页三行缩略图改「实物」+ 球杆主题提前预渲染
+   *
+   * 【问题 1｜首页缩略图非实物】
+   *   refreshCustomRows() 原本用 drawScenePreview / drawCuePreview /
+   *   drawTableSkinPreview 三个 canvas 2D 手绘函数画示意图 —— 与游戏内
+   *   真实贴图毫无关系，和二级面板里的 3D 实物缩略图也对不上。
+   *
+   * 【问题 2｜点开「球杆主题」面板会卡顿一下】
+   *   19 张球杆卡片的 3D 图是「滑到可见才渲染」，用户一点开面板，
+   *   19 张集中排队 → 肉眼可见的停顿。
+   *
+   * 【解法】
+   *   共用同一套 window.SkinPreview3D。首页空闲时（startup + 2.5s）
+   *   先把**球杆主题 20 款**与**首页当前三项**预渲染并缓存到
+   *   preview3DCache，之后：
+   *     · 首页当前项直接取缓存出图；
+   *     · 二级面板卡片命中缓存则**同步秒出**，不再需要排队。
+   * ========================================================================== */
+
+  /** kind:id → dataURL 缓存；记录「已试过但失败」（null）避免反复重试 */
+  var preview3DCache = {}
+  function cacheKey(kind, id) {
+    return kind + ":" + id
+  }
+  /** 取缓存；miss 返回 undefined，hit-but-failed 返回 null */
+  function getCachedThumb(kind, id) {
+    var k = cacheKey(kind, id)
+    return Object.prototype.hasOwnProperty.call(preview3DCache, k) ? preview3DCache[k] : undefined
+  }
+  /** 渲染并写缓存（失败存 null）。返回 url 或 null。 */
+  function renderAndCache(kind, id) {
+    var P = window.SkinPreview3D
+    if (!P) return null
+    var url = null
+    try {
+      url = P.renderThumb(kind, id)
+    } catch (e) {
+      url = null
+    }
+    preview3DCache[cacheKey(kind, id)] = url
+    return url
+  }
+
+  /* ============================================================================
+   * v1.4.0：缩略图「构建期静态图优先」—— 打开软件不再渲染 3D
+   *
+   * 用户反馈：「后台渲染一次缩略图，然后各自截图用于缩略图展示，不要每次
+   * 打开软件渲染了，太慢了」。构建脚本 tools/render/render-previews.js 在
+   * 打包前用 headless chrome 走**同一条** SkinPreview3D 管线把全部 35 张
+   * 缩略图渲染成 dist/previews/<kind>-<id>.jpg（260×120 JPEG，与运行时
+   * 输出同参数），菜单改为静态图直出：
+   *   1. preview3DCache 命中 → 直接用（不变）；
+   *   2. 静态文件 previews/<kind>-<id>.jpg 加载成功 → 写缓存直接用，
+   *      **零渲染开销**（每张 ~2KB，本地/APK 内加载 <10ms）；
+   *   3. 静态缺失（未来新增皮肤未预渲染）→ 回退运行时渲染（原管线保留）。
+   */
+  /** 静态图加载结果缓存：url（成功）/ null（失败，不重复请求） */
+  var staticThumbTried = {}
+  function staticThumbPath(kind, id) {
+    return "previews/" + kind + "-" + id + ".jpg"
+  }
+  function loadStaticThumb(kind, id, cb) {
+    var k = cacheKey(kind, id)
+    if (staticThumbTried[k] !== undefined) {
+      cb(staticThumbTried[k])
+      return
+    }
+    var rel = staticThumbPath(kind, id)
+    var img = new Image()
+    img.onload = function () {
+      staticThumbTried[k] = rel
+      cb(rel)
+    }
+    img.onerror = function () {
+      staticThumbTried[k] = null
+      cb(null)
+    }
+    img.src = (window.__APP_ROOT__ || "") + rel
+  }
+  /**
+   * 统一异步获取链：缓存 → 静态图 → 运行时渲染兜底。
+   * done(url)：成功给 url；彻底失败给 null（调用方保留 2D 占位）。
+   */
+  function ensureThumb(kind, id, done) {
+    var cached = getCachedThumb(kind, id)
+    if (cached !== undefined) {
+      done(cached)
+      return
+    }
+    loadStaticThumb(kind, id, function (url) {
+      if (url) {
+        preview3DCache[cacheKey(kind, id)] = url
+        done(url)
+        return
+      }
+      loadSkinPreview3DLib().then(function () {
+        var u = null
+        try {
+          u = renderAndCache(kind, id)
+        } catch (e) {
+          u = null
+        }
+        done(u || null)
+      }, function () {
+        done(null)
+      })
+    })
+  }
+
+  /** 首页当前三项：缓存/静态命中直接出图；否则异步取（先回 2D 占位） */
+  function applyHomeThumb(el, kind, id) {
+    if (!el || !id) return false
+    var url = getCachedThumb(kind, id)
+    if (url !== undefined) {
+      if (url) {
+        el.style.backgroundImage = "url(" + url + ")"
+        return true
+      }
+      return false
+    }
+    // v1.4.0：不再同步渲染（这正是「打开软件太慢」的来源）——
+    // 本帧先回 false 让 2D 占位上屏，静态图/渲染完成后异步替换。
+    ensureThumb(kind, id, function (u) {
+      if (u && el.isConnected) {
+        el.style.backgroundImage = "url(" + u + ")"
+      }
+    })
+    return false
+  }
+
+  /** 首页空闲预热：球杆 20 款 + 首页当前三项（分片在 idle 里跑） */
+  var preview3DWarmed = false
+  function warmUpPreviews() {
+    if (preview3DWarmed) return
+    preview3DWarmed = true
+    loadSkinPreview3DLib().then(function () {
+      var P = window.SkinPreview3D
+      if (!P || !P.warmUp) return
+      try {
+        P.warmUp()
+      } catch (e) {}
+      // 预热清单：先把球杆主题全部渲染好，再补首页当前的两项非球杆皮肤
+      var jobs = []
+      Array.prototype.forEach.call(
+        document.querySelectorAll("#cueThemeCards .skin-card[data-cuetheme]"),
+        function (c) {
+          jobs.push({ kind: "cue", id: c.getAttribute("data-cuetheme") })
+        }
+      )
+      var curTable = settings.tableSkin || "classic"
+      var curScene = settings.scene || "room"
+      jobs.push({ kind: "table", id: curTable })
+      var sceneCard = document.querySelector('#sceneCards .skin-card[data-scene="' + curScene + '"]')
+      // 有实拍照片的场景首页缩略图也用照片，不必预热 3D
+      if (!(sceneCard && sceneCard.getAttribute("data-photo"))) {
+        jobs.push({ kind: "scene", id: curScene })
+      }
+
+      // v1.4.0：预热 = 静态图预载（每张 ~2KB，纯图片解码，无 3D 渲染）。
+      // 仅当静态缺失时才经 ensureThumb 的兜底分支触发运行时渲染。
+      var WARM_BATCH = 10
+      function step() {
+        var n = 0
+        while (n < WARM_BATCH && jobs.length) {
+          var j = jobs.shift()
+          n++
+          if (getCachedThumb(j.kind, j.id) !== undefined) continue
+          ensureThumb(j.kind, j.id, function () {})
+        }
+        if (jobs.length) {
+          if (window.requestIdleCallback) window.requestIdleCallback(step, { timeout: 500 })
+          else window.setTimeout(step, 32)
+        } else {
+          // 预热完成后，把首页三行换成实物缩略图
+          refreshHomeThumbs()
+        }
+      }
+      if (window.requestIdleCallback) window.requestIdleCallback(step, { timeout: 500 })
+      else window.setTimeout(step, 32)
+    }, function () {})
+  }
+
+  /** 只刷新首页三行的缩略图（不碰文案），优先用缓存 */
+  function refreshHomeThumbs() {
     var ts = $("thumbScene")
     if (ts) {
-      $("valScene").textContent = NAME_OF.scene(settings.scene)
-      var sc = document.querySelector('#sceneCards .skin-card[data-scene="' + settings.scene + '"]')
+      var sc = document.querySelector('#sceneCards .skin-card[data-scene="' + (settings.scene || "room") + '"]')
       if (sc) {
         var photo = sc.getAttribute("data-photo")
         if (photo) {
-          // Request D：照片场景用实景照片作首页缩略图
+          // 照片场景：仍用实景照片（3D 场景是示意，照片才是实物）
           var pimg = new Image()
           pimg.onload = function () {
             var cv = makeCanvas(92, 92)
@@ -1526,33 +1929,47 @@ $("setKeepViews").checked = settings.keepAllViews !== false
             ts.style.backgroundImage = "url(" + cv.toDataURL() + ")"
           }
           pimg.src = photo
-        } else {
-          var cv = makeCanvas(92, 92)
-          drawScenePreview(cv, sc.dataset.pattern, sc.dataset.c1, sc.dataset.c2)
-          ts.style.backgroundImage = "url(" + cv.toDataURL() + ")"
+        } else if (!applyHomeThumb(ts, "scene", sc.getAttribute("data-scene"))) {
+          var cv0 = makeCanvas(92, 92)
+          drawScenePreview(cv0, sc.dataset.pattern, sc.dataset.c1, sc.dataset.c2)
+          ts.style.backgroundImage = "url(" + cv0.toDataURL() + ")"
         }
       }
     }
     var tc = $("thumbCue")
     if (tc) {
-      $("valCue").textContent = NAME_OF.cuetheme(settings.cueTheme)
-      var cc = document.querySelector('#cueThemeCards .skin-card[data-cuetheme="' + settings.cueTheme + '"]')
-      if (cc) {
-        var cv2 = makeCanvas(92, 92)
-        drawCuePreview(cv2, cc.dataset.pattern, cc.dataset.c1, cc.dataset.c2)
-        tc.style.backgroundImage = "url(" + cv2.toDataURL() + ")"
+      var cid = settings.cueTheme || "auto"
+      if (!applyHomeThumb(tc, "cue", cid)) {
+        var cc = document.querySelector('#cueThemeCards .skin-card[data-cuetheme="' + cid + '"]')
+        if (cc) {
+          var cv2 = makeCanvas(92, 92)
+          drawCuePreview(cv2, cc.dataset.pattern, cc.dataset.c1, cc.dataset.c2)
+          tc.style.backgroundImage = "url(" + cv2.toDataURL() + ")"
+        }
       }
     }
     var tsk = $("thumbTableSkin")
     if (tsk) {
-      $("valTableSkin").textContent = NAME_OF.tableskin(settings.tableSkin)
-      var ttc = document.querySelector('#tableSkinCards .skin-card[data-tableskin="' + (settings.tableSkin || "classic") + '"]')
-      if (ttc) {
-        var cv4 = makeCanvas(92, 92)
-        drawTableSkinPreview(cv4, ttc.dataset.c1, ttc.dataset.c2)
-        tsk.style.backgroundImage = "url(" + cv4.toDataURL() + ")"
+      var tid = settings.tableSkin || "classic"
+      if (!applyHomeThumb(tsk, "table", tid)) {
+        var ttc = document.querySelector('#tableSkinCards .skin-card[data-tableskin="' + tid + '"]')
+        if (ttc) {
+          var cv4 = makeCanvas(92, 92)
+          drawTableSkinPreview(cv4, ttc.dataset.c1, ttc.dataset.c2)
+          tsk.style.backgroundImage = "url(" + cv4.toDataURL() + ")"
+        }
       }
     }
+  }
+
+  /** 刷新首页「外观定制」三行的缩略图与当前值（item 4） */
+  function refreshCustomRows() {
+    // 文案先更新（同步、无副作用）
+    if ($("valScene")) $("valScene").textContent = NAME_OF.scene(settings.scene)
+    if ($("valCue")) $("valCue").textContent = NAME_OF.cuetheme(settings.cueTheme)
+    if ($("valTableSkin")) $("valTableSkin").textContent = NAME_OF.tableskin(settings.tableSkin)
+    // 缩略图：优先取预热缓存出「实物」图，未命中则回退 2D 占位
+    refreshHomeThumbs()
   }
 
   /* ---------------- 启动游戏 ---------------- */
@@ -1676,6 +2093,9 @@ $("setKeepViews").checked = settings.keepAllViews !== false
 
     applyCardPreviews()
     refreshCustomRows()
+    // v1.3.104：首页空闲时预渲染球杆主题等，点开二级面板即秒出（消除卡顿）
+    // 延后 2.5s，避开首屏启动竞争
+    window.setTimeout(warmUpPreviews, 2500)
 
     $("btnStart").addEventListener("click", function () {
       buzz(15)

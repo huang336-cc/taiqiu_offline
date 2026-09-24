@@ -3,7 +3,7 @@
  * 找出「落在画面中带（py 250~450）」的位置 —— 特征物摆放的依据。
  */
 const puppeteer = require("puppeteer-core")
-const DIST = "/workspace/project/source/billiards-cn/dist"
+const DIST = "/workspace/dev/source/billiards-cn/dist"
 
 async function main() {
   const browser = await puppeteer.launch({

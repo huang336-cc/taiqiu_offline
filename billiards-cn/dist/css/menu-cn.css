@@ -465,10 +465,31 @@ letter-spacing: 0.5px;
   );
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
 }
+/* v1.3.103：色块回到 30px 扁横条，缩略图改由**真 3D 离屏渲染**出图。
+ *
+ * 病史（两版连续踩坑，一并记录）：
+ *  · v1.3.102 之前：height:30px 固定 + background-size:auto。缩略图是
+ *    150×150 的 canvas dataURL，auto 让图片按原尺寸渲染、只有顶部 30px
+ *    进入可视框 → 2D 手绘把「地面 + 图案」画在画布下方 64%，可见区只剩
+ *    顶部平坦的天空渐变，用户看到的就是一条纯色带。
+ *  · v1.3.102：改为 aspect-ratio:1/1 正方形 + cover —— 元素是看清了，
+ *    但色块从 30px 涨到 65px，**卡片从 75px 被撑到 110px（+47%）**，
+ *    用户反馈「增大了原有的按钮面积」。且 2D 手绘本身是**示意图形**，
+ *    与游戏内真实皮肤无关，用户仍觉得「非实物」。
+ *  · v1.3.103（本版）：两条一起解决 ——
+ *    ① 色块回到 30px，卡片恢复原 75px；
+ *    ② 缩略图不再用手绘，改由 dist/skin-preview-3d.js 用 three.js
+ *       **离屏渲染游戏内真实贴图/几何**（130×60 的横构图，与球桌
+ *       2.04:1 的长宽比天然吻合），cover 铺满。2D 绘制保留为占位与回退。
+ * 宽高比 ≈ 2.17:1（卡片 5 列下宽约 65px / 高 30px）。 */
 .skin-swatch {
   width: 100%;
   height: 30px;
-  border-radius: 8px;
+  aspect-ratio: auto;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  border-radius: 6px;
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 .skin-name {
@@ -783,11 +804,20 @@ letter-spacing: 0.5px;
     padding: 0.6vh 0.6vw;
   }
   html:not(.in-app) .sec-custom .menu-thumb {
-    flex: 1 1 auto; /* 吃掉 menu-row 剩余高度，自适配，不固定 px（覆盖 baseline 24/64px） */
+    /* v1.3.104：改 aspect-ratio 锁死横向比例，不再 flex 撑满行高 ——
+       缩略图源图是 260×120（2.17:1）的横向 3D 渲染，行高很高时
+       若让盒子撑满会被 cover 裁得只剩中间一条。锁定 16:9 更接近源图比例。 */
+    flex: 0 0 auto;
     width: 100%;
+    aspect-ratio: 16 / 9;
     min-height: 0;
     height: auto;
     object-fit: cover;
+    /* v1.3.104：宽屏下该盒被拉成扁矩形，必须 cover 否则 92×92 方图会被拉伸变形
+       （球桌 3/4 视角被拉扁成"一条"）。cover + center 与二级面板一致。 */
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
     border-radius: var(--radius);
   }
   html:not(.in-app) .sec-custom .sec-custom-title {
@@ -1489,10 +1519,13 @@ kbd {
   transform: scale(0.96);
 }
 
-/* ---------------- v1.3.65：局域网对战面板 ---------------- */
+/* ---------------- v1.3.65：局域网对战面板 ----------------
+   v1.3.93：交互重做。原版「建房 / 加入」两行平铺 + 一行静态说明，问题见
+   menu.html 注释。现在改为分块结构（序号 + 标题 + 操作 + 说明）+ 输入即时
+   校验。**只动展示层，连接方式与传参完全不变**。 */
 .lan-panel {
   margin-top: 8px;
-  padding: 10px;
+  padding: 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.22);
@@ -1500,11 +1533,75 @@ kbd {
 .lan-panel[hidden] {
   display: none;
 }
+.lan-block {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.lan-block-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.5px;
+}
+/* 步骤序号圆牌：让「先建房、再让对方加入」的顺序一眼可见 */
+.lan-step {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--felt);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+.lan-block-tip {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+/* 输入框下方的即时校验提示：默认中性，校验不过转为警示色 */
+.lan-block-tip.is-warn {
+  color: #ffcf7a;
+}
+.lan-block-tip.is-ok {
+  color: #7fd6a0;
+}
+/* 两块的「或」分隔线（文字压在细线上，两侧渐变淡出） */
+.lan-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 11px 0;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.lan-divider::before,
+.lan-divider::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--border) 30%,
+    var(--border) 70%,
+    transparent
+  );
+}
 .lan-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 .lan-label {
   flex: 0 0 34px;
@@ -1514,21 +1611,28 @@ kbd {
 .lan-input {
   flex: 1;
   min-width: 0;
-  padding: 7px 9px;
-  font-size: 12px;
+  padding: 8px 10px;
+  font-size: 13px;
   color: var(--text);
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--border);
   border-radius: 7px;
   font-family: inherit;
   outline: none;
+  /* 数字键盘 + 等宽数字：抄 IP 时不容易看错 0/O、1/l */
+  font-variant-numeric: tabular-nums;
+  transition: border-color 0.15s ease;
 }
 .lan-input:focus {
   border-color: var(--gold, #ffb648);
 }
+/* 校验失败：边框转警示色，与下方 hint 呼应 */
+.lan-input.is-invalid {
+  border-color: #d9743a;
+}
 .lan-btn {
-  padding: 7px 12px;
-  font-size: 12px;
+  padding: 8px 14px;
+  font-size: 12.5px;
   color: var(--text);
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid var(--border);
@@ -1536,19 +1640,44 @@ kbd {
   cursor: pointer;
   font-family: inherit;
   white-space: nowrap;
+  transition: transform 0.1s ease, opacity 0.15s ease;
 }
 .lan-btn.primary {
   background: var(--felt);
   color: #fff;
   font-weight: 600;
   border-color: transparent;
+  /* 主操作独占一行、更醒目：建房是两人里更常见的起手动作 */
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 13px;
 }
 .lan-btn:active {
   transform: scale(0.97);
 }
+/* v1.3.93：按钮忙碌态防连点（点一下即置灰，直到页面跳转 / 校验重开） */
+.lan-btn[data-busy="1"],
+.lan-btn:disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
 .lan-tip {
-  margin: 4px 0 0;
-  font-size: 10px;
+  margin: 11px 0 0;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+  font-size: 10.5px;
   line-height: 1.5;
   color: var(--text-dim);
+}
+/* 极窄屏（小手机竖屏）下输入框会被按钮挤没，允许换行 */
+@media (max-width: 360px) {
+  .lan-row {
+    flex-wrap: wrap;
+  }
+  .lan-input {
+    flex: 1 1 100%;
+  }
+  .lan-btn {
+    flex: 1 1 auto;
+  }
 }

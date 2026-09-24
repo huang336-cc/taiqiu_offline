@@ -309,7 +309,11 @@ this.botName === "TheFarJaw"
         {
           type: "Info",
           title: ruleName(this.ruletype),
-          subtext: "局域网对战 · 我的房间",
+          // v1.3.93：subtext 改为「等待对手加入」—— 明确说出这一步在等什么。
+          // 旧文案「我的房间」只描述状态不给出动作，用户建房后经常不知所措
+          // （不知道要等谁、要做什么）。等对手连上后由 showRoomWaitingPeer
+          // 原地刷成「对手已加入」，再由 init.handleBegin 关窗。
+          subtext: "局域网对战 · 等待对手加入",
           sticky: true,
           key: "lan-room",
           detail: initial,
@@ -342,7 +346,11 @@ this.botName === "TheFarJaw"
           detail: {
             label: "目标主机",
             value: this.lanPeer,
-            hint: "正在连接对方的房间，请稍候…",
+            // v1.3.93：补上超时预期（LanRelay 的 6 秒兜底），并给出等不到时的
+            // 动作 —— 旧文案只说「请稍候…」，用户不知道要等多久、等不到怎么办。
+            hint: "正在连接对方的房间，请稍候…\n6 秒内无响应会自动提示失败，届时可点「重新连接」。",
+            state: "spin" as const,
+            mono: true,
           },
         } as const,
         0
@@ -409,7 +417,7 @@ this.botName === "TheFarJaw"
           {
             type: "Info",
             title: ruleName(this.ruletype),
-            subtext: "局域网对战 · 我的房间",
+            subtext: "局域网对战 · 等待对手加入",
             sticky: true,
             key: "lan-room",
             detail,

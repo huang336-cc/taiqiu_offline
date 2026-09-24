@@ -13,6 +13,7 @@ import { Table } from "../../model/table"
 import { Camera } from "../../view/camera"
 import { isFirstShot } from "../../utils/utils"
 import { t, foulReason } from "../../utils/i18n"
+import { OFF_TABLE_FOUL } from "../../utils/offtable"
 
 export class Sagu extends ThreeCushion {
   override rulename = "sagu"
@@ -110,6 +111,11 @@ export class Sagu extends ThreeCushion {
   }
 
   override foulReason(outcomes: Outcome[]): string | null {
+    // v1.3.95：球飞出台面 —— 优先级最高
+    if (Outcome.offTableBalls(outcomes).length > 0) {
+      return OFF_TABLE_FOUL
+    }
+
     // 1. Check if the opponent's cue ball was struck (Sub-cue Foul)
     const opponentCue = this.otherPlayersCueBall()
     const hitOpponent = outcomes.some(

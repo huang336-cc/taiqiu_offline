@@ -41,17 +41,26 @@ import {
 } from "three"
 import { makeValueNoise2D, fbm2D, makeSeededRng } from "../utils/noise"
 import { getBeachTexture } from "./beachtexturefactory"
-import { getInteriorTexture } from "./interiortexturefactory"
 
 /**
  * 台球桌底沿真实世界 z 坐标（Z-up 世界），用于雪山场景：
- * 桌面下沿在 z = -0.203；雪地平面必须贴在这里，避免穿插桌面。
+ * v1.3.95：球桌按**真实高度**摆放 —— 物理台面保持 z=0 完全不动，只让地面下沉。
+ *
+ * 真实中式八球 / 斯诺克球桌的台面离地约 0.76~0.81m，这里取 **0.80m**。
+ * 此前 GROUND_Z = -0.203（仅等于桌体厚度），桌面离地只有 20cm，
+ * 观感就是"整张桌子直接插在地面上"。
+ *
+ * ## 为什么是「降地面」而不是「抬球桌」
+ * 物理层严格假定「台面 = z=0 平面」：Ball.pos.z、Table 的库边/袋口/落袋/跳球
+ * 判定全部围绕 z=0 展开。若把球桌整体抬到 +0.597，placeball.ts 等处会把新的
+ * z 写回物理坐标 → 落台判定直接失效；相机机位与鼠标拾取（Plane((0,0,1),0)）
+ * 也得逐一改。改为让地面下沉则：物理 / 相机 / 拾取**零改动**，
+ * 唯一需要补的是 0.597m 桌腿几何（见 view/tablelegs.ts）。
  *
  * 同时导出给 assets.ts —— 立方体房间（没有几何 3D 环境的场景）的地板
- * 也必须落在这个高度，否则地板会悬在球桌上方 1.2m 处，把俯视镜头
- * 的球桌整个盖住（v1.3.62 修复）。
+ * 也必须落在这个高度，否则地板会悬在球桌上方，把俯视镜头的球桌整个盖住。
  */
-export const GROUND_Z = -0.203
+export const GROUND_Z = -0.8
 
 // ══════════════════════════════════════════════════════════════════════
 // v1.3.63：场景环境规格表（EnvSpec）
@@ -123,23 +132,13 @@ export const SNOW_SKY_RADIUS = 145
  * 是否返回 null 为准，表的字段超前不会出错）。
  */
 export const ENV_SPECS: Record<string, EnvSpec> = {
-  // ── 室内三件套：墙 + 顶棚，不需要天穹 ──
+  // ── 室内场景：墙 + 顶棚，不需要天穹 ──
   //
   // v1.3.85：`amb` 显式置 0，关掉 view.ts 那盏全局 AmbientLight(0x009922, 0.3)。
   // 那盏灯是绿色（R=0,G=0.6,B=0.13），强度 0.3 → 辐照度约 (0, 0.18, 0.04)，
   // 折算照度因子 0.18/π ≈ 5.7% 的绿偏。环境物体升级为 PBR 后会真实吃到它，
   // 画面会泛绿。室内照度全部交给 indoorAmb / indoorDir（纯白），故此处归零。
   room: {
-    far: 70, skyRadius: 0, outdoor: false, fog: null,
-    amb: { color: 0xffffff, intensity: 0 },
-    realShadow: false, indoor: true, geometric: true,
-  },
-  office: {
-    far: 70, skyRadius: 0, outdoor: false, fog: null,
-    amb: { color: 0xffffff, intensity: 0 },
-    realShadow: false, indoor: true, geometric: true,
-  },
-  cybercafe: {
     far: 70, skyRadius: 0, outdoor: false, fog: null,
     amb: { color: 0xffffff, intensity: 0 },
     realShadow: false, indoor: true, geometric: true,
@@ -197,7 +196,7 @@ export const ENV_SPECS: Record<string, EnvSpec> = {
  * 于是整块球场在世界里是**立起来的**，看台沿世界 Z 方向一层层往上堆。
  * 这才是「3D 做了但视野极差」的真正原因；v1.3.60 只把尺度从 22×14 缩到
  * 5.5×3.5，没碰朝向，等于白调。现在整套改成 Z-up：地面是 XY 平面、法线 +Z，
- * 与雪山 / 室内三件套完全一致。
+ * 与雪山 / 室内场景完全一致。
  *
  * 尺寸按可见性反推（与室内同一套结论）：瞄准相机的可见高度上限是
  * 0.295 + 0.035·d，于是
@@ -1458,8 +1457,6 @@ export function buildSceneEnvironment(sceneId: string): Group | null {
     case "beach":
       return buildBeach()
     case "room":
-    case "office":
-    case "cybercafe":
       return buildIndoorScene(sceneId)
     default:
       return null
@@ -1850,7 +1847,7 @@ function buildTerrainBand(band: TerrainBand, style: TerrainStyle): Mesh {
     new MeshBasicMaterial({
       vertexColors: true,
       toneMapped: false,
-      fog: false,
+      fog: envFogEnabled,
       ...(mapTex ? { map: mapTex } : {}),
     })
   )
@@ -2006,12 +2003,34 @@ function bakeVertices(
  * `outdoor` 为 false（snow 除外），太阳光与半球光都隐藏，环境物体**只吃**
  * view.ts 里那盏 `AmbientLight(0x009922, 0.3)`（绿、强度 0.3）。全局换 PBR
  * 会让它们整体变暗约九成并染绿。所以默认行为保持 basic 不变，只有显式
- * 传 `pbr` 的调用点（室内三件套）才升级。
+ * 传 `pbr` 的调用点（室内场景）才升级。
  *
  * 「零变形」约束：PBR 的 `BRDF_Lambert` 带 1/π，要让改造后亮度与改造前
  * （直接输出顶点色）一致，需满足 `ambient + Σ dir·max(0,N·L) = π`。
  * 光照参数见 view.ts 的 indoorAmb / indoorDir。
  */
+/**
+ * v1.3.94：环境材质是否参与 scene.fog（修复「雾只雾桌子不雾山」）。
+ *
+ * 背景：v1.3.62 给雪山加了 `Fog(0xd3e9f7, 70, 320)`，但本文件所有环境材质
+ * 都硬编码 `fog:false`，于是这条雾**只作用于球桌/球/球杆**（它们的材质没关
+ * 雾），反而把近景球桌洗淡发白；而最该有大气透视的远景雪山地形/天穹/岩石
+ * 完全不受雾，靠顶点色 `SNOW_HAZE` 单独做 —— 两套机制并行且方向相反，
+ * 表现为「远山贴脸、近桌后退」，纵深关系整体倒挂。
+ *
+ * 修法：让环境材质跟随场景的 `spec.fog` —— 有雾的场景（当前仅雪山）环境
+ * 物体一起受雾，形成统一的大气透视；无雾场景（其余 7 个）保持 `fog:false`，
+ * 行为与改前逐位一致（那些场景 scene.fog 为 null，开不开标志都无效果）。
+ *
+ * 由 View.applyScene() 在切场景时设置。默认 true 与 Three.js 语义一致。
+ */
+let envFogEnabled = true
+
+/** 由 View.applyScene() 调用：切换环境材质的雾参与状态。 */
+export function setEnvFogEnabled(enabled: boolean): void {
+  envFogEnabled = enabled
+}
+
 function envMaterial(pbr?: {
   roughness?: number
   metalness?: number
@@ -2020,7 +2039,7 @@ function envMaterial(pbr?: {
     return new MeshBasicMaterial({
       vertexColors: true,
       toneMapped: false,
-      fog: false,
+      fog: envFogEnabled,
     })
   }
   return new MeshStandardMaterial({
@@ -2030,7 +2049,7 @@ function envMaterial(pbr?: {
     metalness: pbr.metalness ?? 0,
     // NoToneMapping 下与 true 等效；保留是为了防止将来被误共享进 ACES 场景
     toneMapped: false,
-    fog: false,
+    fog: envFogEnabled,
   })
 }
 
@@ -2249,6 +2268,7 @@ function buildSnowRocks(): Group {
   const cRock = new Color(0x5c6672)
   const cSnow = new Color(0xf4f9ff)
   const tmp = new Color()
+  const geos: BufferGeometry[] = []
   for (let i = 0; i < 24; i++) {
     const ang = rng() * Math.PI * 2
     const r = 2.1 + rng() * 3.2
@@ -2292,19 +2312,24 @@ function buildSnowRocks(): Group {
       cols[v * 3 + 2] = tmp.b
     }
     geo.setAttribute("color", new BufferAttribute(cols, 3))
-    const m = new Mesh(
-      geo,
-      // 注：MeshBasicMaterial 不做光照，flatShading 无效果（且新版类型里已移除）
-      new MeshBasicMaterial({
-        vertexColors: true,
-        toneMapped: false,
-      })
-    )
-    m.position.set(Math.cos(ang) * r, Math.sin(ang) * r, snowFloorZ(r))
-    m.castShadow = false
-    m.receiveShadow = false
-    g.add(m)
+    // v1.3.94：把落位直接烘进几何（mergeColored 只搬属性、不应用矩阵），
+    // 24 块岩石合并为单个 Mesh，省下 23 个 draw call。
+    geo.translate(Math.cos(ang) * r, Math.sin(ang) * r, snowFloorZ(r))
+    geos.push(geo)
   }
+  // 注：MeshBasicMaterial 不做光照，flatShading 无效果（且新版类型里已移除）
+  const rockMesh = new Mesh(
+    mergeColored(geos),
+    new MeshBasicMaterial({
+      vertexColors: true,
+      toneMapped: false,
+      fog: envFogEnabled,
+    })
+  )
+  rockMesh.name = "SnowRocks"
+  rockMesh.castShadow = false
+  rockMesh.receiveShadow = false
+  g.add(rockMesh)
   return g
 }
 
@@ -2625,7 +2650,7 @@ function buildBeachSea(): Mesh {
   geo.setAttribute("color", new BufferAttribute(colors, 3))
   const mesh = new Mesh(
     geo,
-    new MeshBasicMaterial({ vertexColors: true, toneMapped: false, fog: false })
+    new MeshBasicMaterial({ vertexColors: true, toneMapped: false, fog: envFogEnabled })
   )
   mesh.name = "BeachSea"
   mesh.castShadow = false
@@ -2681,6 +2706,7 @@ function buildBeachRocks(): Group {
   // v1.3.84j：半球补光强度。0.20 让背光面从「纯黑」提到「深灰」，是修复发黑的关键。
   const HEMI = 0.2
   const rockTex = getBeachTexture("rock")
+  const rockGeos: BufferGeometry[] = []
   /**
    * v1.3.84i：礁石 14 → 24 块，半径 2.6~9.0m → 2.6~14m。
    * v1.3.84k：**上限从 14m 收到 11.5m** —— 修「石头泡在海里」。
@@ -2787,24 +2813,30 @@ function buildBeachRocks(): Group {
       colors[v * 3 + 2] = tmp.b
     }
     geo.setAttribute("color", new BufferAttribute(colors, 3))
-    const m = new Mesh(
-      geo,
-      new MeshBasicMaterial({
-        vertexColors: true,
-        toneMapped: false,
-        fog: false,
-        map: rockTex,
-      })
-    )
-    m.position.set(
+    // v1.3.94：把自转与落位烘进几何（mergeColored 只搬属性、不应用矩阵），
+    // 24 块礁石合并为单个 Mesh，省下 23 个 draw call。
+    geo.rotateZ(rng() * Math.PI * 2)
+    geo.translate(
       Math.cos(ang) * r,
       Math.sin(ang) * r,
       // 半埋在沙里：下沉多一点，露出的部分才像「礁石」而不是「摆件」
       beachFloorZ(r) - s * 0.42
     )
-    m.rotation.z = rng() * Math.PI * 2
-    g.add(m)
+    rockGeos.push(geo)
   }
+  const rockMesh = new Mesh(
+    mergeColored(rockGeos, { uv: true }),
+    new MeshBasicMaterial({
+      vertexColors: true,
+      toneMapped: false,
+      fog: envFogEnabled,
+      map: rockTex,
+    })
+  )
+  rockMesh.name = "BeachRockMesh"
+  rockMesh.castShadow = false
+  rockMesh.receiveShadow = false
+  g.add(rockMesh)
   return g
 }
 
@@ -2985,7 +3017,7 @@ function buildBeachShrubs(): Group {
     new MeshBasicMaterial({
       vertexColors: true,
       toneMapped: false,
-      fog: false,
+      fog: envFogEnabled,
       map: foliageTex,
     })
   )
@@ -3095,7 +3127,7 @@ function buildBeachProps(): Group {
     geo.setAttribute("color", new BufferAttribute(cols, 3))
     const m = new Mesh(
       geo,
-      new MeshBasicMaterial({ vertexColors: true, toneMapped: false, fog: false })
+      new MeshBasicMaterial({ vertexColors: true, toneMapped: false, fog: envFogEnabled })
     )
     // 几何已在局部坐标立起（中心 z+0.42、下端 -0.3 沉沙），落位即贴沙面
     m.position.set(sx, sy, z)
@@ -3228,8 +3260,8 @@ interface IndoorLamp {
    *
    * ⚠️ v1.3.85：`far` 必须收在**真实光池尺度**内（2~4m），否则 `att` 在
    * 全房间都接近 1.0，衰减形同虚设 → 整面墙均匀受光 → 平涂色块。
-   * 旧值 room.far=10.5 / office=11.0 / cyber=11.0 都远超房间半宽，
-   * 这是「家具看起来像色块剪纸」的第一个成因。
+   * v1.3.94：已按本约束改到 3.6~3.8m（此前注释写了要求但数值仍是
+   * room 10.5，与实际不符）。
    */
   near: number
   far: number
@@ -3255,11 +3287,6 @@ interface IndoorPalette {
 function hash2(i: number, j: number): number {
   const s = Math.sin(i * 127.1 + j * 311.7) * 43758.5453
   return s - Math.floor(s)
-}
-
-/** 取 hex 的 sRGB 0~1 分量（自发光要直接写**显示空间**数值，不能用线性值） */
-function hexRGB(hex: number): [number, number, number] {
-  return [((hex >> 16) & 255) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255]
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -3368,7 +3395,13 @@ function aoFactor(px: number, py: number, pz: number, nz: number, ao: AoCtx): nu
 const INDOOR_AO: AoCtx = {
   hx: 6,
   hy: 4,
-  floorZ: -0.207,
+  /**
+   * v1.3.97：−0.207 → ROOM_FLOOR_Z(−0.804)。
+   * 旧值是 v1.3.95 地坪下沉前的遗物 —— 家具按旧地坪 z≈0 摆时它“碰巧”
+   * 让贴地 AO 落在家具中部；本版家具已真正落地（以 ROOM_FLOOR_Z 为基线），
+   * AO 的贴地压暗必须跟着对齐，否则家具底部接触阴影错位。
+   */
+  floorZ: ROOM_FLOOR_Z,
   reach: 1.0,
   strength: 0.55,
   ceilBias: 0.15,
@@ -3515,18 +3548,12 @@ function cylGeo(rTop: number, rBot: number, h: number, seg = 10): BufferGeometry
   return g
 }
 
-/** 压扁的球（盆栽叶簇、坐垫这类有机体块） */
-function blobGeo(r: number, sy: number, sz: number, seg = 8): BufferGeometry {
-  const g = new SphereGeometry(r, seg, Math.max(4, seg - 2))
-  g.scale(1, sy, sz)
-  return g
-}
 
 /**
  * 道具收集器：把一堆小几何体烘好顶点色后合并成**一个** Mesh。
  *
- * 网咖场景有上百个零件（桌腿 / 机箱 / 椅子五爪），每个一个 Mesh 就是上百个
- * draw call，移动端帧率直接崩。合并后只剩一次 draw call，顶点色还完全可控。
+ * 家具场有几十个零件（桌腿 / 椅爪 / 灯杆 / 书本），每个一个 Mesh 就是几十个
+ * draw call。合并后只剩一次 draw call，顶点色还完全可控。
  */
 class Props {
   private geos: BufferGeometry[] = []
@@ -3583,25 +3610,12 @@ class Props {
   }
 }
 
-/** 自发光：直接把显示空间 rgb 顶成指定颜色（灯带、机箱侧透、屏幕） */
-function emissive(hex: number, k = 1) {
-  const [r, g, b] = hexRGB(hex)
-  return (rgb: number[]) => {
-    rgb[0] = r * k
-    rgb[1] = g * k
-    rgb[2] = b * k
-  }
-}
-
-/** 按权重混入自发光（做灯带的软辉光，而不是硬边贴片） */
-function emissiveMix(hex: number, w: number) {
-  const [r, g, b] = hexRGB(hex)
-  return (rgb: number[]) => {
-    rgb[0] += (r - rgb[0]) * w
-    rgb[1] += (g - rgb[1]) * w
-    rgb[2] += (b - rgb[2]) * w
-  }
-}
+/**
+ * v1.3.96：`emissive()` / `emissiveMix()` 已随 office（屏幕）、cybercafe
+ * （灯带 / 机箱侧透 / 霓虹）两个场景一并删除 —— 室内场景里需要自发光的
+ * 地方（吊灯发光面、灯罩顶面）直接用 `(out: Color) => out.setRGB(...)`
+ * 更直白，不必再走「后处理 rgb 数组」这条路。
+ */
 
 /**
  * 地板：一张细分平面 + 顶点色拼花。
@@ -3660,11 +3674,15 @@ function buildIndoorFloor(
       roughness: 0.92,
       metalness: 0,
       toneMapped: false,
-      fog: false,
+      fog: envFogEnabled,
       ...(map ? { map } : {}),
     })
   )
   m.name = "IndoorFloor"
+  // v1.3.98：地板不接收实时阴影 —— 掠射角下阴影贴图采样在地板上留波浪状
+  // acne（A/B 探针实锤），而参考图的桌影/家具影本就是弥散软影，已直接
+  // 烘进 roomFloor 顶点色（blob 系列），实时阴影只剩家具/桌体自身受光。
+  m.receiveShadow = false
   return m
 }
 
@@ -3716,7 +3734,11 @@ function buildIndoorWalls(
     )
     geos.push(ni)
   }
-  const m = new Mesh(mergeColored(geos), envMaterial({ roughness: 0.95 }))
+  // v1.3.97：墙改用不受光的 MeshBasicMaterial —— 顶点色（albedo×AMB）就是
+  // 最终显示色。PBR 材质下实时方向光/半球光会给不同朝向的墙不同的 N·L，
+  // 导致「转身看，四面墙颜色不一样」；Basic 材质 + 无灯烘焙让四面墙在
+  // 任意视角、任意机位下严格同色，正符合「统一纯色浅米色」的要求。
+  const m = new Mesh(mergeColored(geos), envMaterial())
   m.name = "IndoorWalls"
   return m
 }
@@ -3729,61 +3751,11 @@ function buildIndoorCeiling(pal: IndoorPalette): Group {
   geo.rotateX(Math.PI) // 法线 +Z → −Z，朝下
   geo.translate(0, 0, INDOOR_CEIL_Z)
   bakeIndoor(geo, pal, (out, P) => pal.ceil(out, P.x, P.y))
-  const m = new Mesh(geo, envMaterial({ roughness: 1.0 }))
+  // v1.3.97：顶棚与墙同理由 Basic 材质呈现（永远不入画，颜色无所谓，但保持一致）
+  const m = new Mesh(geo, envMaterial())
   m.name = "Ceiling"
   g.add(m)
   return g
-}
-
-/**
- * 五爪转椅底座：低视角下最出戏的零件（气压柱 + 五个爪）。
- *
- * 不做脚轮 —— 每个轮子直径 5cm，在 3m 外只占半个像素，但一个 CylinderGeometry
- * 就是 96 个顶点；18 把椅子 × 5 个轮子 = 8640 个顶点，占了网咖总面数的两成，
- * 把构建时间顶到 106ms。省掉它们，椅子在画面里完全看不出区别。
- */
-function addChair(
-  p: Props,
-  x: number,
-  y: number,
-  rotZ: number,
-  seatHex: number,
-  baseHex: number
-): void {
-  for (let i = 0; i < 5; i++) {
-    const a = rotZ + (i / 5) * Math.PI * 2
-    p.add(boxGeo(0.30, 0.055, 0.028), x + Math.cos(a) * 0.15, y + Math.sin(a) * 0.15, 0.012, a, baseHex)
-  }
-  p.add(cylGeo(0.032, 0.044, 0.44, 8), x, y, 0.012, 0, 0x3a3f47)
-  p.add(boxGeo(0.50, 0.50, 0.10), x, y, 0.45, rotZ, seatHex)
-}
-
-/** 盆栽：陶盆 + 土 + 七簇压扁的叶球（整体 0.7m 高，正好在可见窗口里） */
-function addPlant(
-  p: Props,
-  x: number,
-  y: number,
-  potHex: number,
-  leafHex: number,
-  s = 1
-): void {
-  p.add(cylGeo(0.17 * s, 0.13 * s, 0.30 * s, 12), x, y, 0, 0, potHex)
-  p.add(cylGeo(0.158 * s, 0.158 * s, 0.03 * s, 12), x, y, 0.30 * s, 0, 0x2e2118)
-  const rng = makeSeededRng(1000 + Math.round((x * 13.7 + y * 7.3) * 100))
-  for (let i = 0; i < 7; i++) {
-    const a = (i / 7) * Math.PI * 2 + rng() * 0.6
-    const rr = (0.05 + rng() * 0.10) * s
-    const h = (0.40 + rng() * 0.28) * s
-    const dl = (rng() - 0.5) * 0.12
-    p.add(
-      blobGeo(0.15 * s, 0.9, 1.5),
-      x + Math.cos(a) * rr,
-      y + Math.sin(a) * rr,
-      0.30 * s + h * 0.42,
-      a,
-      (out: Color) => out.setHex(leafHex).offsetHSL(0, 0, dl)
-    )
-  }
 }
 
 /**
@@ -3792,765 +3764,347 @@ function addPlant(
  * 地板平面是 `PlaneGeometry(ROOM_HX*2, ROOM_HY*2)`（12×8m），uv 线性铺满
  * [0,1]，所以 `repeat = 平面尺寸 / 期望周期`。
  *
- * ⚠️ `repeat` 挂在**共享的** Texture 上，同 kind 只能设一次 —— 三个场景
- * 用不同 kind（room=wood / office=carpet / cyber=stone），所以不会互相覆盖。
+ * ⚠️ `repeat` 挂在**共享的** Texture 上，同 kind 只能设一次。v1.3.96 之后
+ * 室内只剩 room 一种（kind=wood），不存在互相覆盖。
  * 若将来两个场景要共用同一 kind 但不同 repeat，必须**各建一张独立贴图**，
  * 不能用同一张改 repeat，更不能 clone（见 interiortexturefactory 的注释）。
  *
  * @param kind    贴图种类
  * @param period  期望的贴图平铺周期（米/次）
  */
-function floorTex(
-  kind: "carpet" | "wood" | "stone" | "concrete",
-  period: number
-): Texture {
-  const t = getInteriorTexture(kind)
-  t.repeat.set((ROOM_HX * 2) / period, (ROOM_HY * 2) / period)
-  return t
-}
+// ═══════════════════ room：居家台球房（v1.3.96 按参考图复刻）═══════════════════
+//
+// 【参考图特征】
+//   ① 墙面：米黄/奶油色涂料，无墙裙、无护墙板，只在墙根一条浅色踢脚线
+//   ② 地面：浅色木地板（宽板、直纹、低饱和平铺）
+//   ③ 家具：米色布艺简约沙发 + 方腿边几 + 米色灯罩落地灯（左右对称两组）
+// ═══════════════════ room：居家台球房（v1.3.97 按用户参考图精确复刻）═══════════════════
+//
+// 【参考图特征（2026-09-22 定稿图）】
+//   ① 墙面：统一纯色浅米色涂料，无踢脚线、无墙裙、无任何装饰与纹理
+//   ② 地面：浅暖木地板，保留**柔和**板缝线条，无强烈色差
+//   ③ 家具：**只有** 2 米色布艺沙发（贴 ±X 墙）+ 2 小木边几 + 2 锥罩落地灯
+//      —— 左右镜像完全对称，全部落在地板上（v1.3.96 曾整体悬空 0.8m，见
+//      buildRoom 内的 FLOOR 说明），不摆球杆架/盆栽/格架/扶手椅等任何杂物
+//   ④ 光影：柔和漫射环境光，无刺眼光池；阴影边缘柔和（实时 PCF radius）
+//
+// 【可见性预算不变】瞄准相机高 0.295m / pitch −16.33° → 只有「地面 + 墙根
+//   + 家具下半截」入画。所以细节全部压在 0.5m 以下，高处的家具只做剪影。
+//
+// 【配色基调】用户 2026-09-22 指定：**米黄**；墙面统一纯色，地板浅暖木。
 
-// ───────────────────────── room：居家台球房 ─────────────────────────
+const RM_FLOOR_A = new Color(0xe8c49e) // 浅暖木主色（v1.3.98 像素校色：奶油粉调）
+const RM_FLOOR_B = new Color(0xe0b994) // 色差板（仅轻微明度差）
+const RM_FLOOR_C = new Color(0xf2d0b0) // 偶发浅板
+const RM_SEAM = new Color(0xca9775) // 板缝（柔和暗线，低对比）
+const RM_SHADOW = new Color(0x8a623e) // 烘焙软阴影色调（参考图桌影核心 ≈#a1755a）
 
-const RM_OAK_A = new Color(0xba8c57)
-const RM_OAK_B = new Color(0x95693d)
-const RM_SEAM = new Color(0x4a3520)
-const RM_RUG = new Color(0x8d4038)
-const RM_RUG_D = new Color(0x6d2f2b)
-const RM_RUG_EDGE = new Color(0xd6c39c)
-
-/** 长条木地板：板宽 0.24、板长 1.15、隔行错缝；中央再压一块暗红地毯 */
+/**
+ * 浅色木地板（v1.3.98 按参考图重做）。
+ *
+ * 【为什么 v1.3.97 的地板看起来「粗糙/波浪」】两个根因：
+ *   ① 板宽 0.34m 与地板顶点网格 0.08m（12m/150 段、8m/100 段）**不对齐** ——
+ *      板缝边界落在两个顶点之间，哪个顶点都采不到「正好在缝上」的位置，
+ *      插值出来的暗线随行号左右游走，远看就是歪歪扭扭的波浪线；
+ *   ② `sin` 高频木纹（波长 0.70m）叠加每板随机相位，在透视压缩下变成
+ *      一团斑驳的明暗云。
+ * 修复：
+ *   · 板宽改 **0.40m = 5×0.08**、板长 1.60m = 20×0.08 —— 板缝**严格落在
+ *     顶点行/列上**，插值出的暗线是绝对笔直的软线；
+ *   · 删掉 sin 木纹与随机相位，板间只用 hash 低频明度差（参考图的板条
+ *     几乎同色，只是极轻的深浅交替）；
+ *   · 板缝半宽 0.012→0.06m：与顶点间距同量级，缝线柔和可见且不混叠。
+ */
 function roomFloor(out: Color, x: number, y: number, r: number): void {
-  const PW = 0.24
-  const PL = 1.15
+  const PW = 0.40 // 板宽（沿 Y 累进）= 5 × 顶点间距 0.08m
+  const PL = 1.60 // 板长（沿 X 累进）= 20 × 0.08m
   const row = Math.floor(y / PW)
-  const sx = x + row * PL * 0.37 // 错缝
+  const sx = x + row * PL * 0.5 // 隔行错缝半板长（0.8m 也是 0.08 的整倍数）
   const col = Math.floor(sx / PL)
   const fy = y / PW - row
   const fx = sx / PL - col
   const h = hash2(col, row)
-  out.copy(RM_OAK_A).lerp(RM_OAK_B, h)
-  // 木纹：沿板长的高频条纹 + 低频色差
-  const grain = 0.5 + 0.5 * Math.sin(sx * 47 + h * 31.4)
-  out.offsetHSL(0, 0, (grain - 0.5) * 0.045 + (h - 0.5) * 0.05)
-  // 板缝：靠近边界压暗（顶点插值出来是柔和暗线，不会摩尔纹）
+
+  // 主色 ↔ 色差板（弱差），偶发浅板 —— 参考图的板条几乎均匀，只留极轻差异
+  out.copy(RM_FLOOR_A).lerp(RM_FLOOR_B, h * 0.5)
+  if (h > 0.86) out.lerp(RM_FLOOR_C, (h - 0.86) / 0.14 * 0.5)
+
+  // 板缝（横向长缝 + 端头错缝）：靠近边界柔和压暗。
+  // 半宽 0.06m ≈ 顶点间距 —— 边界顶点全暗、相邻顶点全亮，插值出一条
+  // 笔直的软暗线；再窄就会重新混叠出波浪（v1.3.97 实测）。
   const seam = Math.min(Math.min(fx, 1 - fx) * PL, Math.min(fy, 1 - fy) * PW)
-  out.lerp(RM_SEAM, (1 - smoothstep(0, 0.016, seam)) * 0.75)
-  // 地毯（椭圆，长轴沿 X）：球桌四周那一圈，俯视下唯一能看清的软装
-  const e = Math.sqrt((x / 3.55) * (x / 3.55) + (y / 2.55) * (y / 2.55))
-  if (e < 1) {
-    const dia = 0.5 + 0.5 * Math.sin((x + y) * 7.5)
-    out.copy(RM_RUG).lerp(RM_RUG_D, dia * 0.35)
-    if (e > 0.9) out.lerp(RM_RUG_EDGE, smoothstep(0.9, 0.93, e))
-    out.offsetHSL(0, 0, (hash2(Math.round(x * 26), Math.round(y * 26)) - 0.5) * 0.05)
+  out.lerp(RM_SEAM, (1 - smoothstep(0, 0.06, seam)) * 0.32)
+
+  // 球桌下方一圈自然压暗（实时阴影之外的补底，让球桌有接地感）
+  const e = Math.sqrt((x / 3.30) * (x / 3.30) + (y / 2.35) * (y / 2.35))
+  if (e < 1) out.lerp(RM_SEAM, (1 - e) * 0.10)
+
+  // ── v1.3.98：烘焙软阴影（替代地板上的实时阴影接收）──
+  // 【为什么】实时方向光仰角低（参考图的长影），地板自阴影 acne 沿阴影贴图
+  // 纹素网格出波浪状明暗带，normalBias/radius 怎么调都有残留。参考图的
+  // 「大软阴影」本来就是无边界的弥散渐变 —— 直接烘进地板顶点色：
+  // 无 acne、绝对稳定、边缘任意软。方向与实时灯一致（光从 -Y 上方来 →
+  // 影子朝 +Y/镜头方向倒）。
+  const blob = (cx: number, cy: number, rx: number, ry: number, a: number): void => {
+    const dx = (x - cx) / rx
+    const dy = (y - cy) / ry
+    const d = Math.sqrt(dx * dx + dy * dy)
+    if (d < 1) out.lerp(RM_SHADOW, a * (1 - smoothstep(0.35, 1.0, d)))
   }
+  blob(0, 0.9, 4.3, 3.5, 0.46) // 球桌主影（朝镜头倒，参考图阴影铺得很开）
+  blob(-5.5, -0.7, 1.5, 1.0, 0.22) // 左沙发影
+  blob(5.5, -0.7, 1.5, 1.0, 0.22) // 右沙发影
+  blob(-4.4, -2.7, 0.7, 0.6, 0.18) // 左边几影
+  blob(4.4, -2.7, 0.7, 0.6, 0.18) // 右边几影
+  blob(-5.38, -3.0, 0.5, 0.45, 0.15) // 左落地灯影
+  blob(5.38, -3.0, 0.5, 0.45, 0.15) // 右落地灯影
+
   // 掠射抗摩尔：远处拼花淡出成一片中间色
-  out.lerp(RM_OAK_B, smoothstep(4.5, 9.0, r) * 0.65)
+  out.lerp(RM_FLOOR_B, smoothstep(4.5, 9.0, r) * 0.6)
 }
 
-const RM_SKIRT = new Color(0xf1ebe0)
-const RM_WAINSCOT = new Color(0x6d4a2e)
-const RM_BEAD = new Color(0x4e3520)
-const RM_RAIL = new Color(0x8a5f3c)
-const RM_UPPER = new Color(0xe4dac9)
+/**
+ * 统一纯色浅米色墙（v1.3.97）。
+ *
+ * 【为什么是完全平涂】参考图的墙没有任何装饰：无踢脚线、无斑驳、无墙根
+ * 渐变 —— v1.3.96 的「低频斑驳 + 墙根压暗 + 踢脚线」全部按用户要求移除。
+ * 墙的照明 = 纯 AMB（法线水平 → 灯项/反弹项全为 0），所以最终显示色
+ * = RM_WALL × AMB，两面墙、四个方位完全一致，「整体亮度均匀」。
+ */
+const RM_WALL = new Color(0xf5d8a4) // 统一浅米色（v1.3.98 加暖，显示 ≈#eed1a0 对齐参考图）
 
-/** 踢脚线 + 木墙裙 + 米白涂料（只有下沿 0.5m 入画，细节都压在这里） */
-function roomWall(out: Color, s: number, u: number): void {
-  if (s < 0.11) {
-    out.copy(RM_SKIRT)
-    if (s > 0.095) out.lerp(RM_BEAD, 0.4)
-    return
-  }
-  if (s < 0.98) {
-    out.copy(RM_WAINSCOT)
-    // 竖向企口板：每 0.16m 一道凹线
-    const t = Math.abs(((u / 0.16) % 1) - 0.5) * 2
-    out.lerp(RM_BEAD, (1 - smoothstep(0.55, 0.95, t)) * 0.55)
-    out.offsetHSL(0, 0, (hash2(Math.round(u * 9), Math.round(s * 22)) - 0.5) * 0.06)
-    if (s > 0.9) out.lerp(RM_RAIL, smoothstep(0.9, 0.95, s)) // 顶部压条
-    return
-  }
-  out.copy(RM_UPPER)
-  out.offsetHSL(0, 0, (hash2(Math.round(u * 5), Math.round(s * 5)) - 0.5) * 0.035)
+/**
+ * 统一纯色浅米色墙（v1.3.97 平涂版）。
+ *
+ * `s` = 归一化高度（0 在脚、1 在顶），`u` = 沿墙归一化横向坐标。
+ * 两参数都被刻意忽略 —— 「无装饰」就是不随位置变化。
+ */
+function roomWall(out: Color, _s: number, _u: number): void {
+  out.copy(RM_WALL)
 }
 
 const ROOM_PAL: IndoorPalette = {
   name: "Room",
-  AMB: [0.30, 0.285, 0.255],
-  SUN: [0.88, 0.82, 0.71],
-  GAMMA: 1.25,
   /**
-   * v1.3.84l：补第二盏「窗光」。
+   * v1.3.97：按参考图做「柔和漫射、亮度均匀」标定。
    *
-   * 原来只有一盏吊灯（暖光，位于球桌正上方），两面侧墙亮度几乎一样 ——
-   * 画面读不出「进深方向」。加一盏位于 −X 侧的冷光（模拟窗光/落地灯）
-   * 之后：近墙偏暖、远墙偏冷，同一块地面从右到左有一条自然的亮暗过渡，
-   * 房间立刻有了方向感。
+   * 【墙面】法线水平 → N·L=0、−nz=0 → 灯/反弹贡献全为 0，墙色 = 纯 AMB ×
+   * 反照率。取 AMB≈1.0，让显示色 ≈ albedo 本身（#f2dfba 浅米色）。
    *
-   * 位置 (−3.6, −1.6, 2.10) 落在 room 的落地灯（−3.20, 2.90）附近，
-   * 与那件道具呼应，不会显得是凭空多出来的光。
+   * 【地板】朝上的面额外吃灯项：中心光近桌处 ≈ +0.12 → 显示 ≈0.97（参考图
+   * 桌旁地板的亮度），远处回落到 AMB 基线，整体均匀无强光池。
+   *
+   * 【SUN 压低】0.34→0.20：「没有刺眼强光、没有高光溢色」，光池只做
+   * 轻微的暖色起伏，不做戏剧化明暗。
+   */
+  AMB: [1.0, 0.982, 0.948],
+  SUN: [0.20, 0.19, 0.168],
+  GAMMA: 1.1,
+  /**
+   * 三处烘焙光源（均与场景里的家具体):
+   *   · 中央顶光（原吊灯位置的柔光，无实体灯具）—— 把房间照均匀；
+   *   · 两盏落地灯灯罩内（±5.38,−3.42,高 1.24）—— 罩下地面一圈暖色微光池。
+   * `floor` 是灯项保底权重：三盏都给 0.30+，保证远角也有贡献（均匀）。
    */
   lamps: [
-    { pos: [0, 0, 2.32], near: 1.5, far: 10.5, floor: 0.30 },
-    { pos: [-3.6, -1.6, 2.10], near: 1.2, far: 8.0, floor: 0.16 },
+    { pos: [0, 0, 2.30], near: 1.6, far: 4.4, floor: 0.14 },
+    { pos: [-5.38, -3.42, 1.24], near: 0.7, far: 3.4, floor: 0.26 },
+    { pos: [5.38, -3.42, 1.24], near: 0.7, far: 3.4, floor: 0.26 },
   ],
-  bounce: [0.10, 0.088, 0.075],
-  haze: { color: [0.30, 0.25, 0.21], start: 3.5, end: 10.5, max: 0.34 },
+  /** 地面反弹：米黄地板把暖光轻微弹回家具下沿 */
+  bounce: [0.105, 0.095, 0.075],
+  /** 大气透视收到极轻（参考图远墙依然明亮），只做一点点暖色统一 */
+  haze: { color: [0.94, 0.84, 0.66], start: 4.5, end: 11.0, max: 0.10 },
   floor: roomFloor,
   wall: roomWall,
-  ceil: (out) => out.setHex(0xdad3c6),
+  ceil: (out) => out.setHex(0xf0e4c6),
+}
+
+/**
+ * 墙 / 顶棚专用的「无灯」调色板（v1.3.97）。
+ *
+ * 【为什么墙不能共用 ROOM_PAL】烘焙灯项 = SUN × max(0,N·L)^γ × 距离衰减。
+ * 中央灯到墙面各点的 N·L 与衰减随位置变化 → 墙面出现「中心暖亮、两角冷暗」
+ * 的径向色温差（实测中心 #f4e3b7、墙角 #e2e2c7）—— 与「统一纯色、亮度
+ * 均匀」直接冲突。墙/顶棚改用 lamps:[] 的派生调色板烘焙后，墙色 =
+ * 纯 albedo × AMB，**每一面墙、每一个顶点严格同色**；地板仍用 ROOM_PAL
+ * 保留落地灯的柔和光池。AMB 略提到 1.05 补回灯项被移除的亮度差。
+ */
+const ROOM_PAL_FLAT: IndoorPalette = {
+  ...ROOM_PAL,
+  // 按 Basic 直出反解 + v1.3.98 像素校色：目标显示 #f7d6a7（参考图墙采样）
+  AMB: [1.0, 0.96, 0.99],
+  lamps: [],
+}
+
+/**
+ * 布艺沙发（v1.3.98 按参考图重做：**带木腿的抬升式扶手椅**）。
+ *
+ * v1.3.97 版是「无腿落地座箱 + 一摞盒子」，实机看起来粗糙。参考图的沙发
+ * 结构清晰可读：
+ *   ① 4 条深棕色方木腿（沙发抬离地面 ~0.13m，腿下有接触阴影）；
+ *   ② 落在腿上的座箱（布艺深色包边）；
+ *   ③ 通长厚坐垫（奶白，顶面略高于扶手之间的座面）；
+ *   ④ 整片靠背（与坐垫同色，顶缘 ~0.73m）；
+ *   ⑤ 两侧方扶手（深一档，顶面高于坐垫）。
+ *
+ * 【v1.3.97 修复旋转偏移】旧版把「沿长度 / 沿深度」的偏移直接加在世界
+ * 坐标上（`y - 0.04`、`y + 0.25`），rot=0 时碰巧正确；一旦 rot=±π/2
+ * （本版沙发贴 ±X 墙必须横转），偏移方向就错了。现在先在**局部坐标系**
+ * （du 沿长度、dv 沿深度）取偏移，再旋转到世界 —— 任意朝向都正确。
+ *
+ * @param rot 绕 Z 旋转；0 = 长边沿 X、靠背朝 +Y
+ */
+const RM_SOFA_LEG = 0x6f4f30 // 深棕木腿（参考图沙发脚）
+function addSofa(
+  p: Props,
+  x: number,
+  y: number,
+  rot: number,
+  len: number,
+  clothHex: number,
+  clothDk: number
+): void {
+  const F = ROOM_FLOOR_Z
+  const HL = len / 2
+  // 局部（du 沿长度、dv 沿深度，− = 朝前）→ 世界坐标
+  const at = (du: number, dv: number): [number, number] => [
+    x + Math.cos(rot) * du - Math.sin(rot) * dv,
+    y + Math.sin(rot) * du + Math.cos(rot) * dv,
+  ]
+  let ax: number, ay: number
+  // ① 四条方木腿（0.13m，收回体内不外凸）
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      ;[ax, ay] = at(sx * (HL - 0.14), sy * 0.24)
+      p.add(boxGeo(0.07, 0.07, 0.13), ax, ay, F + 0.004, rot, RM_SOFA_LEG)
+    }
+  }
+  // ② 座箱（腿上平台，F+0.13 → 0.35）
+  ;[ax, ay] = at(0, 0)
+  p.add(boxGeo(len, 0.78, 0.22), ax, ay, F + 0.13, rot, clothDk)
+  // ③ 通长厚坐垫（F+0.35 → 0.52，四周缩进露出一圈座箱边）
+  ;[ax, ay] = at(0, -0.06)
+  p.add(boxGeo(len - 0.14, 0.64, 0.17), ax, ay, F + 0.35, rot, clothHex)
+  // ④ 靠背（F+0.13 → 0.73）
+  ;[ax, ay] = at(0, 0.29)
+  p.add(boxGeo(len, 0.22, 0.60), ax, ay, F + 0.13, rot, clothHex)
+  // ⑤ 两侧方扶手（F+0.13 → 0.68，顶面高于坐垫）
+  for (const sx of [-1, 1]) {
+    ;[ax, ay] = at(sx * (HL - 0.11), 0)
+    p.add(boxGeo(0.22, 0.84, 0.55), ax, ay, F + 0.13, rot, clothDk)
+  }
+}
+
+/**
+ * 落地灯（参考图定稿：奶白锥形灯罩 + 细浅色灯杆 + 圆盘底座）。
+ *
+ * 全部 z 以 ROOM_FLOOR_Z 为基线 —— 底盘贴地（v1.3.97 落地修复）。
+ * 灯罩 1.10~1.38m，瞄准视角只见灯杆下段，俯视/平视见灯罩。
+ */
+function addFloorLamp(
+  p: Props,
+  x: number,
+  y: number,
+  shadeHex: number,
+  metalHex: number
+): void {
+  const F = ROOM_FLOOR_Z
+  p.add(cylGeo(0.19, 0.21, 0.028, 16), x, y, F + 0.008, 0, metalHex) // 底盘
+  p.add(cylGeo(0.020, 0.024, 1.12, 8), x, y, F + 0.034, 0, metalHex) // 灯杆
+  p.add(cylGeo(0.145, 0.185, 0.28, 14), x, y, F + 1.10, 0, shadeHex) // 灯罩（锥）
+  p.add(
+    cylGeo(0.145, 0.145, 0.012, 14),
+    x,
+    y,
+    F + 1.368,
+    0,
+    (out: Color) => out.setRGB(1, 0.972, 0.90) // 罩顶微光面
+  )
+}
+
+/** 方腿小木边几（参考图定稿：四条方腿 + 一块薄木台面），z 以地坪为基线 */
+function addSideTable(
+  p: Props,
+  x: number,
+  y: number,
+  topHex: number,
+  legHex: number,
+  s = 1
+): void {
+  const F = ROOM_FLOOR_Z
+  const HW = 0.30 * s
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      p.add(boxGeo(0.05, 0.05, 0.42), x + sx * (HW - 0.03), y + sy * (HW - 0.03), F + 0.012, 0, legHex)
+    }
+  }
+  p.add(boxGeo(HW * 2, HW * 2, 0.05), x, y, F + 0.432, 0, topHex)
 }
 
 function buildRoom(): Group {
   const g = new Group()
   g.name = "Room"
-  // 橡木地板：贴图周期 0.55m（比板宽 0.24m 大，让细木纹落在板面内部）
-  g.add(buildIndoorFloor(ROOM_PAL, floorTex("wood", 0.55), INDOOR_AO))
-  g.add(buildIndoorWalls(ROOM_PAL, INDOOR_AO))
-  g.add(buildIndoorCeiling(ROOM_PAL))
+  // 浅色木地板：贴图周期 0.60m（比板宽 0.34m 大，细木纹落在板面内部）
+  // 地板 AO 无效（法线朝上被豁免），但仍传 ao 以便将来若改用遮挡体列表；
+  // 墙**不传 AO** —— 墙是房间外壳，每个墙顶点都在 dWall=0（最贴墙处），
+  // 传 AO 会把整面墙按最大遮蔽压暗，与「亮度均匀的纯色米黄墙」相悖。
+  g.add(buildIndoorFloor(ROOM_PAL, null, INDOOR_AO))
+  g.add(buildIndoorWalls(ROOM_PAL_FLAT))
+  g.add(buildIndoorCeiling(ROOM_PAL_FLAT))
   const p = new Props(ROOM_PAL, INDOOR_AO)
 
-  // 沙发（贴 +Y 墙）
-  p.add(boxGeo(2.30, 0.92, 0.42), 0, 3.32, 0, 0, 0x54626f)
-  p.add(boxGeo(2.30, 0.24, 0.56), 0, 3.78, 0.42, 0, 0x4b5866)
-  p.add(boxGeo(0.24, 0.92, 0.62), -1.03, 3.32, 0, 0, 0x5c6a78)
-  p.add(boxGeo(0.24, 0.92, 0.62), 1.03, 3.32, 0, 0, 0x5c6a78)
-  p.add(blobGeo(0.20, 0.62, 0.55), -0.52, 3.10, 0.50, 0.3, 0xb2705a)
-  p.add(blobGeo(0.20, 0.62, 0.55), 0.52, 3.10, 0.50, -0.3, 0x9c8a6a)
+  /**
+   * 【v1.3.97 关键修复：家具落地】
+   *
+   * v1.3.95 把地坪从 z=−0.203 下沉到 GROUND_Z=−0.80（真实桌高 0.80m），
+   * 但道具构件的 z 仍按**旧地坪（z≈0）**摆放 —— 全部家具悬空 0.80m，
+   * 连 AO 上下文的 floorZ 都停在旧值。这就是用户指出「家具、灯具浮空」
+   * 的根因。本版所有道具统一以 ROOM_FLOOR_Z 为基线摆放（add* 函数内部
+   * 已改为 `ROOM_FLOOR_Z + 高度`），并同步修正 INDOOR_AO.floorZ。
+   */
 
-  // 电视柜 + 电视（贴 −Y 墙）。屏幕给一点冷色自发光，画面右下角有个亮点
-  p.add(boxGeo(2.40, 0.46, 0.50), 0, -3.48, 0, 0, 0x5b3d28)
-  p.add(boxGeo(1.50, 0.06, 0.86), 0, -3.50, 0.50, 0, 0x171a1e)
-  p.add(boxGeo(1.34, 0.012, 0.72), 0, -3.442, 0.55, 0, 0x2b3a44, emissiveMix(0x4d7a92, 0.5))
+  /**
+   * 【布局：左右完全镜像对称（参考图定稿）】
+   *
+   *   ±X 墙：米色沙发（背靠墙、面向球桌），中心 y=−1.30、长 2.30m
+   *   −Y 墙两角：落地灯（±5.38, −3.42）；边几在其内侧（±4.40, −3.18）
+   *
+   * 只有这 6 件家具 —— 不摆球杆架、盆栽、格架、扶手椅、抱枕、几上小物
+   * 等任何杂物。坐标写死（无随机），「房间物体相对位置固定不变」。
+   * 全部在道具禁区（|x|<2.2 且 |y|<1.75）之外，永远不会挡瞄准相机。
+   */
+  const SOFA_CLOTH = 0xe9d6b0 // 米色布艺（v1.3.98 校色：压绿对齐参考图奶油色）
+  const SOFA_DK = 0xd6c098 // 同色系暗部（座箱/扶手）
+  addSofa(p, -5.50, -1.30, Math.PI / 2, 2.30, SOFA_CLOTH, SOFA_DK)
+  addSofa(p, 5.50, -1.30, -Math.PI / 2, 2.30, SOFA_CLOTH, SOFA_DK)
 
-  // 书架（贴 −X 墙），只摆下面两层书 —— 更高的层不入画
-  p.add(boxGeo(0.36, 3.20, 1.85), -5.70, 0, 0, 0, 0x4a3a2a)
-  for (let i = 0; i < 4; i++) {
-    p.add(boxGeo(0.34, 3.10, 0.035), -5.70, 0, 0.34 + i * 0.44, 0, 0x5e4a34)
-  }
-  {
-    const rng = makeSeededRng(2024)
-    for (let s = 0; s < 2; s++) {
-      let bx = -1.45
-      while (bx < 1.45) {
-        const w = 0.035 + rng() * 0.05
-        const h = 0.24 + rng() * 0.10
-        const c = [0x8c4a3c, 0x3f5d52, 0x6b5a2e, 0x7a4a68, 0x4a4f58][
-          Math.floor(rng() * 5)
-        ]
-        p.add(boxGeo(w, 0.24, h), -5.70, bx + w / 2, 0.375 + s * 0.44, 0, c)
-        bx += w + 0.004
-      }
-    }
-  }
+  const TABLE_TOP = 0x9c6f47 // 边几台面（暖棕木）
+  const TABLE_LEG = 0x7a5535 // 边几腿（深棕）
+  addSideTable(p, -4.40, -3.18, TABLE_TOP, TABLE_LEG, 0.9)
+  addSideTable(p, 4.40, -3.18, TABLE_TOP, TABLE_LEG, 0.9)
 
-  // 落地灯：只做灯杆与底座（灯罩在 1.4m 处不入画）
-  p.add(cylGeo(0.17, 0.20, 0.035, 14), -3.20, 2.90, 0, 0, 0x3c3a36)
-  p.add(cylGeo(0.022, 0.022, 1.50, 8), -3.20, 2.90, 0.035, 0, 0x6b6257)
-
-  // 茶几
-  p.add(boxGeo(0.95, 0.60, 0.06), 2.85, -2.45, 0.40, 0, 0x8a6440)
-  for (const sx of [-0.42, 0.42])
-    for (const sy of [-0.24, 0.24])
-      p.add(boxGeo(0.05, 0.05, 0.40), 2.85 + sx, -2.45 + sy, 0, 0, 0x6f4d30)
-
-  // 球杆架（贴 +X 墙）：杆子 1.34m 立着，只有下截入画
-  p.add(boxGeo(0.34, 1.10, 0.06), 5.20, -1.20, 0, 0, 0x6b4a2e)
-  p.add(boxGeo(0.05, 0.05, 1.02), 5.06, -1.70, 0.06, 0, 0x5a3d24)
-  p.add(boxGeo(0.05, 0.05, 1.02), 5.06, -0.70, 0.06, 0, 0x5a3d24)
-  p.add(boxGeo(0.30, 1.10, 0.05), 5.20, -1.20, 1.08, 0, 0x7a5636)
-  {
-    const rng = makeSeededRng(778)
-    for (let i = 0; i < 7; i++) {
-      const yy = -1.62 + (i / 6) * 0.84
-      const jx = 5.06 + (rng() - 0.5) * 0.02
-      const dl = (rng() - 0.5) * 0.09
-      p.add(cylGeo(0.008, 0.016, 1.34, 6), jx, yy, 0.11, 0, (out: Color) =>
-        out.setHex(0xc09153).offsetHSL(0, 0, dl)
-      )
-      p.add(cylGeo(0.016, 0.018, 0.44, 6), jx, yy, 0.11, 0, 0x33241a)
-    }
-  }
-
-  // 盆栽 ×3
-  addPlant(p, 3.10, -3.00, 0x8a5a44, 0x2f6b3a)
-  addPlant(p, -3.40, -3.05, 0x7d5a4a, 0x3f8a4a, 0.85)
-  addPlant(p, 4.60, 2.40, 0x8a5a44, 0x356f42, 1.1)
+  const LAMP_SHADE = 0xfaf4e2 // 奶白灯罩（v1.3.98 提亮，参考图灯罩很亮）
+  const LAMP_POLE = 0xe6e0d2 // 浅色灯杆（参考图灯杆是浅色而非黑）
+  addFloorLamp(p, -5.38, -3.42, LAMP_SHADE, LAMP_POLE)
+  addFloorLamp(p, 5.38, -3.42, LAMP_SHADE, LAMP_POLE)
 
   g.add(p.mesh("RoomProps"))
 
-  // 第二遍：把家具几何灌进 AO 采样器后统一烘焙
-
   return g
 }
 
-// ───────────────────────── office：开放式办公室 ─────────────────────────
-
-const OF_CARPET = new Color(0x59636f)
-const OF_CARPET_L = new Color(0x6d7784)
-const OF_GROUT = new Color(0x3d444d)
-
 /**
- * 方块地毯 0.60m + 一圈浅色走道。
+ * 室内场景的唯一入口。
  *
- * 走道（r∈[2.2,3.4] 的环带）不只是装饰：地面是画面里面积最大的面，纯色
- * 地毯在掠射下会糊成一片，加一条大尺度环带才能看出纵深。
+ * v1.3.96：`office`（办公室）与 `cybercafe`（网吧）两个场景已下线，室内只剩
+ * `room` 一种。保留 switch 结构是为了将来再加室内场景时改动最小。
  */
-function officeFloor(out: Color, x: number, y: number, r: number): void {
-  const T = 0.6
-  const fx = x / T - Math.floor(x / T)
-  const fy = y / T - Math.floor(y / T)
-  const i = Math.floor(x / T)
-  const j = Math.floor(y / T)
-  out.copy(OF_CARPET)
-  out.offsetHSL(0, 0, (hash2(i, j) - 0.5) * 0.07)
-  // 走道环带
-  out.lerp(OF_CARPET_L, smoothstep(2.0, 2.5, r) * (1 - smoothstep(3.3, 3.8, r)))
-  // 砖缝
-  const seam = Math.min(Math.min(fx, 1 - fx), Math.min(fy, 1 - fy)) * T
-  out.lerp(OF_GROUT, (1 - smoothstep(0, 0.022, seam)) * 0.6)
-  out.lerp(OF_CARPET, smoothstep(5.0, 9.5, r) * 0.6)
-}
-
-const OF_SKIRT = new Color(0x8f979f)
-const OF_GLASS = new Color(0x7fa8bd)
-/** v1.3.84l：玻璃的「反射天光」上沿色 —— 比玻璃本体亮，做出竖向渐变 */
-const OF_GLASS_TOP = new Color(0xa8c8d8)
-/** v1.3.84l：隔断后面透出来的「对面空间」色（微亮、偏中性） */
-const OF_BEYOND = new Color(0x93a3ac)
-const OF_MULLION = new Color(0xb6bcc2)
-const OF_PANEL = new Color(0xa9b0b7)
-const OF_UPPER = new Color(0xd7dce0)
-
-/**
- * 玻璃隔断：下沿 0.5m 是玻璃（瞄准视角唯一能看到的墙面部分）。
- *
- * ══════════════════════════════════════════════════════════════════════
- * v1.3.84l：给玻璃补「透视感」
- * ══════════════════════════════════════════════════════════════════════
- *
- * 原来玻璃区（s < 0.5）是一块**纯色** `0x7fa8bd`（只加了竖梃）。问题不在于
- * 颜色不对，而在于它读起来像「磨砂塑料板」而不是玻璃 —— 玻璃之所以是玻璃，
- * 靠的是「能看到/猜到后面有东西」。这里补三层信息：
- *
- *   1. **竖向渐变** —— 玻璃是靠反射天光变亮的，越靠上反射角越大、越亮。
- *      由上沿 `OF_GLASS_TOP` 向中段 `OF_GLASS` 过渡，玻璃立刻有了「面」。
- *   2. **横向分格线** —— 只加竖梃（每 1.5m 一道）会像一排竖条；补一道
- *      0.42 处的横梃后变成「上下两块玻璃」，这是办公隔断最常见的做法。
- *   3. **对面空间的微亮底** —— 在玻璃下沿压一层 `OF_BEYOND`，模拟隔断那头
- *      的地面反光。哪怕是纯色，也让「后面有空间」这件事有了依据。
- *
- * 全部是着色函数改动，零几何风险。
- */
-function officeWall(out: Color, s: number, u: number, _onX: boolean): void {
-  if (s < 0.10) {
-    out.copy(OF_SKIRT)
-    return
-  }
-  if (s < 0.50) {
-    // 玻璃带：0.10~0.50 映射到 t ∈ [0,1]（下沿→上沿）
-    const t = smoothstep(0.10, 0.50, s)
-    out.copy(OF_GLASS).lerp(OF_GLASS_TOP, t)
-    // 对面空间：靠下沿最明显（那里能看到对面的地面），向上迅速衰减
-    out.lerp(OF_BEYOND, (1 - smoothstep(0.0, 0.45, t)) * 0.34)
-    // 竖梃：每 1.5m 一道
-    const tv = Math.abs(((u / 1.5) % 1) - 0.5) * 2
-    out.lerp(OF_MULLION, (1 - smoothstep(0.6, 0.95, tv)) * 0.8)
-    // 横梃：在 t = 0.42 处一道（把玻璃分成上下两块）
-    const th = Math.abs(t - 0.42) / 0.42
-    out.lerp(OF_MULLION, (1 - smoothstep(0.85, 1.0, th)) * 0.7)
-    out.offsetHSL(0, 0, (hash2(Math.round(u * 4), Math.round(s * 10)) - 0.5) * 0.05)
-    return
-  }
-  if (s < 0.95) {
-    out.copy(OF_PANEL)
-    const t = Math.abs(((u / 0.6) % 1) - 0.5) * 2
-    out.lerp(OF_MULLION, (1 - smoothstep(0.7, 0.98, t)) * 0.45)
-    return
-  }
-  out.copy(OF_UPPER)
-  out.offsetHSL(0, 0, (hash2(Math.round(u * 5), Math.round(s * 5)) - 0.5) * 0.03)
-}
-
-const OFFICE_PAL: IndoorPalette = {
-  name: "Office",
-  AMB: [0.34, 0.35, 0.37],
-  SUN: [0.78, 0.80, 0.84],
-  GAMMA: 1.15,
-  // 主灯在球桌正上方，副灯偏 −X 侧 —— 两面侧墙亮度不同才有体积感
-  lamps: [
-    { pos: [0, 0, 2.55], near: 1.8, far: 11.0, floor: 0.38 },
-    { pos: [-4.0, 1.6, 2.40], near: 2.0, far: 9.0, floor: 0.14 },
-  ],
-  bounce: [0.09, 0.095, 0.10],
-  haze: { color: [0.42, 0.45, 0.49], start: 3.5, end: 10.5, max: 0.30 },
-  floor: officeFloor,
-  wall: officeWall,
-  ceil: (out) => out.setHex(0xe8eaec),
-}
-
-function buildOffice(): Group {
-  const g = new Group()
-  g.name = "Office"
-  // 方块地毯：贴图周期 0.60m —— 与 officeFloor 的砖块尺寸（T = 0.6）对齐，
-  // 这样贴图的绒面颗粒正好落在每一块地毯内部，不会横跨砖缝
-  g.add(buildIndoorFloor(OFFICE_PAL, floorTex("carpet", 0.6)))
-  g.add(buildIndoorWalls(OFFICE_PAL))
-  g.add(buildIndoorCeiling(OFFICE_PAL))
-  const p = new Props(OFFICE_PAL, INDOOR_AO)
-
-  /** 办公桌 + 挡板。桌面 0.77m，只有桌腿与挡板入画 —— 这是刻意的 */
-  const desk = (x: number, y: number, ry: number) => {
-    p.add(boxGeo(1.55, 0.72, 0.05), x, y, 0.72, 0, 0x9c7a52)
-    for (const sx of [-0.72, 0.72])
-      for (const sy of [-0.31, 0.31])
-        p.add(boxGeo(0.05, 0.05, 0.72), x + sx, y + sy, 0, 0, 0x6f747a)
-    p.add(boxGeo(1.36, 0.035, 0.55), x, y + ry * 0.33, 0.05, 0, 0x8a6a45)
-  }
-  desk(-2.90, 2.55, 1)
-  desk(2.90, 2.55, 1)
-  desk(-2.90, -2.55, -1)
-  desk(2.90, -2.55, -1)
-
-  /**
-   * v1.3.88：显示器（底座 + 支架 + 亮屏）—— 办公室的黄金特征物。
-   *
-   * ## 为什么要加
-   *
-   * 实测可见性（probe-visible.js，aim 机位相机 z=0.295、v1.3.85 抬注视点后）：
-   * 桌子 (±2.9, ±2.55) 距相机 5.1m，可见上边界 **1.12m** —— 0.72m 的桌面
-   * 完整入画。旧注释「只有桌腿与挡板入画」是 R*2 注视点时代的结论，早已
-   * 过时。桌子在画面里却空无一物，是 office 看起来像仓库的直接原因。
-   *
-   * ## 尺寸约束（同样来自实测）
-   *
-   * 外壳顶 = 0.74（底座顶）+ 0.10（支架）+ 0.30（外壳高）= 1.14m，
-   * 比上限 1.12 只出 0.02 —— 顶边被裁掉一条细缝，肉眼无感，换来的是
-   * 接近真实 24" 显示器的比例（0.48m 宽）。
-   *
-   * 屏幕朝椅子（faceTo），从相机方向看屏幕面与视线的夹角约 60°，
-   * 亮着的屏幕正面可辨 —— 一眼读出「有人在用的办公室」。
-   */
-  const monitor = (x: number, y: number, faceTo: number) => {
-    p.add(boxGeo(0.24, 0.16, 0.02), x, y, 0.77, 0, 0x31363d)
-    p.add(boxGeo(0.05, 0.04, 0.10), x, y, 0.79, 0, 0x31363d)
-    p.add(boxGeo(0.48, 0.035, 0.30), x, y, 0.84, 0, 0x22262c)
-    p.add(
-      boxGeo(0.44, 0.012, 0.26),
-      x,
-      y + faceTo * 0.024,
-      0.85,
-      0,
-      0x000000,
-      emissive(0xaebfd4, 0.9)
-    )
-  }
-  // 屏幕朝各自的椅子（±y 相向）：y=+2.55 桌的椅子在 -y 侧，faceTo=-1
-  monitor(-2.90, 2.72, -1)
-  monitor(2.90, 2.72, -1)
-  monitor(-2.90, -2.72, 1)
-  monitor(2.90, -2.72, 1)
-
-  // 办公椅：五爪底座 + 气压柱，低视角下最有辨识度
-  addChair(p, -2.90, 1.80, 0.4, 0x3f454d, 0x2f343a)
-  addChair(p, 2.90, 1.80, -0.4, 0x3f454d, 0x2f343a)
-  addChair(p, -2.90, -1.80, 2.4, 0x3f454d, 0x2f343a)
-  addChair(p, 2.90, -1.80, -2.4, 0x3f454d, 0x2f343a)
-
-  /**
-   * v1.3.88：近景大件 —— **画面中上带（py 35~220）的主体**。
-   *
-   * 遮挡普查（probe-occlusion.js）的两个决定性结论：
-   *   ① 画面下半（py>240）永远被球桌占据 —— 环境物只能活在 py<240；
-   *   ② 体量 ∝ 近×高：x=2.35 处 1.1m 高的物体投影贯穿 py 35~160，
-   *     是画面里最大的单件体量；x=3.3 的同物体缩到 py 10~105 还贴顶。
-   *
-   * 所以「远处桌子上的显示器」注定是小点缀，近景矮高件才是主角：
-   * 复印机 (2.35, 0.65)（桌角 1.65 之外 0.7m，不挡球也不进禁区）、
-   * 饮水机 (-2.35, 0.7) 对称、纸箱堆 (2.6, -0.9)。三者连成一道
-   * 「办公室纵深」，与远景的桌椅/白板分层。
-   */
-  // 复印机：机身 + 顶部进纸器 + 出纸斜面 + 绿色指示灯
-  p.add(boxGeo(0.62, 0.66, 0.98), 2.35, 0.65, 0, 0.06, 0xd6d9dc)
-  p.add(boxGeo(0.52, 0.50, 0.16), 2.35, 0.65, 0.98, 0.06, 0xb9bec4)
-  p.add(boxGeo(0.30, 0.34, 0.10), 2.31, 0.69, 1.14, 0.06, 0x9aa0a6)
-  p.add(boxGeo(0.46, 0.012, 0.20), 2.03, 0.67, 0.52, 0, 0x000000, emissive(0x9fc86a, 0.5))
-  // 近景纸箱堆（右中带）
-  p.add(boxGeo(0.55, 0.42, 0.38), 2.60, -0.90, 0, 0.35, 0xb08a63)
-  p.add(boxGeo(0.48, 0.36, 0.32), 2.60, -0.90, 0.38, 0.5, 0xa07c58)
-  p.add(boxGeo(0.52, 0.40, 0.34), 3.05, -0.70, 0, -0.4, 0xa8825c)
-  // 近景饮水机（左中带）：机身 + 水桶
-  p.add(boxGeo(0.36, 0.36, 1.00), -2.35, 0.70, 0, 0, 0xdfe3e6)
-  p.add(cylGeo(0.15, 0.13, 0.45, 12), -2.35, 0.70, 1.00, 0, 0x9fd4e8)
-
-  // 文件柜（贴 ±X 墙），抽屉缝靠顶点色横带做出来
-  for (const sx of [-1, 1]) {
-    p.add(
-      boxGeo(0.48, 0.90, 1.30),
-      sx * 5.68,
-      sx > 0 ? 1.90 : -1.90,
-      0,
-      0,
-      (out: Color) => out.setHex(0x8d949c)
-    )
-    for (let i = 1; i < 4; i++) {
-      p.add(
-        boxGeo(0.50, 0.86, 0.012),
-        sx * 5.68,
-        sx > 0 ? 1.90 : -1.90,
-        i * 0.32,
-        0,
-        0x5f666e
-      )
-    }
-  }
-
-  // 纸箱堆 + 饮水机 + 垃圾桶
-  p.add(boxGeo(0.55, 0.42, 0.38), -4.90, -3.30, 0, 0, 0xb08a63)
-  p.add(boxGeo(0.48, 0.36, 0.32), -4.90, -3.30, 0.38, 0.2, 0xa07c58)
-  p.add(boxGeo(0.36, 0.36, 1.00), 5.30, 3.30, 0, 0, 0xdfe3e6)
-  p.add(cylGeo(0.15, 0.13, 0.45, 12), 5.30, 3.30, 1.00, 0, 0x9fd4e8)
-  p.add(cylGeo(0.14, 0.11, 0.30, 10), -4.60, 3.30, 0, 0, 0x4a5058)
-  p.add(cylGeo(0.14, 0.11, 0.30, 10), 4.60, -3.30, 0, 0, 0x4a5058)
-
-  /**
-   * v1.3.88：白板（贴 +X 墙，相机可见侧）。
-   *
-   * 相机朝 +X 看，-X 墙在背后完全浪费；+X 墙上文件柜 (5.68, 1.90) 与
-   * 饮水机 (5.30, 3.30) 之间偏下的 y=-1.2 是空位。板面 0.55~1.45m ——
-   * d≈7.5 处可见上边界 1.52m，整块板完整入画。白板是「办公室」最直白的
-   * 符号之一，与显示器（桌上）配合，一眼读出场景身份。
-   */
-  p.add(boxGeo(0.05, 1.70, 0.90), 5.93, -1.20, 0.55, 0, 0xf2f4f0)
-  p.add(boxGeo(0.06, 1.74, 0.05), 5.92, -1.20, 0.53, 0, 0x8a8f96)
-  p.add(boxGeo(0.06, 1.74, 0.05), 5.92, -1.20, 1.45, 0, 0x8a8f96)
-  // 板面上的马克笔迹痕（几条淡色横带，顶点色画，远看像写过字的板）
-  p.add(boxGeo(0.005, 0.9, 0.035), 5.90, -0.80, 1.02, 0, 0x4a6a8a)
-  p.add(boxGeo(0.005, 1.2, 0.035), 5.90, -1.30, 0.92, 0, 0x8a4a4a)
-  p.add(boxGeo(0.005, 0.7, 0.035), 5.90, -1.00, 0.80, 0, 0x4a7a5a)
-
-  // 绿植 ×2（办公室里唯一的高饱和色，顺带给画面补一个绿相）
-  addPlant(p, -5.30, 3.10, 0x9aa0a6, 0x2f7d46)
-  addPlant(p, 5.30, -1.20, 0x9aa0a6, 0x357f4a, 0.9)
-
-  g.add(p.mesh("OfficeProps"))
-  return g
-}
-
-// ───────────────────────── cybercafe：网咖 ─────────────────────────
-
-const CY_TILE = new Color(0x2a2f38)
-const CY_GROUT = new Color(0x11141a)
-const CY_CYAN = 0x1fd8ff
-const CY_MAGENTA = 0xff3ea5
-/** v1.3.84l：第三个灯效色 —— 冷白。三色循环比两色交替更碎、更不规律 */
-const CY_WHITE = 0xd8e8f0
-
-/**
- * 深色地砖 + 发光地缝。
- *
- * 屏幕（0.79m 高）在两种视角下都在画面顶边之上，完全不入画 —— 所以网咖的
- * 视觉全靠**贴地的东西**：发光地缝、机箱侧透（0.04~0.42m）、墙根灯带。
- */
-function cyberFloor(out: Color, x: number, y: number, r: number): void {
-  const T = 0.55
-  const fy = y / T - Math.floor(y / T)
-  const fx = x / T - Math.floor(x / T)
-  out.copy(CY_TILE)
-  out.offsetHSL(0, 0, (hash2(Math.floor(x / T), Math.floor(y / T)) - 0.5) * 0.06)
-  const seam = Math.min(Math.min(fx, 1 - fx), Math.min(fy, 1 - fy)) * T
-  out.lerp(CY_GROUT, (1 - smoothstep(0, 0.024, seam)) * 0.7)
-  out.lerp(CY_TILE, smoothstep(5.0, 9.5, r) * 0.5)
-}
-
-/**
- * 地面发光缝：每 3 条横缝里挑 1 条，颜色按 x 分段在青/品红之间交替。
- * 用 smoothstep 做软边（顶点间距 0.08m，硬边会闪）。
- *
- * ══════════════════════════════════════════════════════════════════════
- * v1.3.84l：加「呼吸」—— 让灯带不再是等亮直线
- * ══════════════════════════════════════════════════════════════════════
- *
- * 原实现是同一条缝上**亮度完全一致**的一根亮线，整片地面 20 多条缝
- * 完全等亮 —— 合成感很强，像画上去的。真实的 LED 灯带会因供电、老化、
- * 反射角度差异而逐段不同亮。这里叠两条沿 x 的正弦（频率不同、相位错开），
- * 让同一根缝在不同位置有 0.62~1.0 的亮度浮动，且**相邻缝之间不同步**。
- *
- * 关键是「相邻缝不同步」：相位里带上了 `row`，所以第 3、6、9 条缝
- * 的明暗分布各不相同，视觉上就不会读成一组平行线。
- */
-function cyberFloorGlow(out: number[], x: number, y: number): void {
-  const T = 0.55
-  const row = Math.round(y / T)
-  if (row % 3 !== 0) return
-  const d = Math.abs(y - row * T)
-  const w = 1 - smoothstep(0.012, 0.062, d)
-  if (w <= 0) return
-  const seg = Math.floor((x + 6) / 2.2) % 2
-  // 呼吸：两条不同频率的正弦，相位随 row 偏移 → 相邻缝明暗错开
-  const breath =
-    0.62 +
-    0.24 * Math.sin(x * 0.85 + row * 1.7) +
-    0.14 * Math.sin(x * 2.3 - row * 0.9)
-  emissiveMix(seg === 0 ? CY_CYAN : CY_MAGENTA, w * 0.85 * breath)(out)
-}
-
-const CY_SKIRT = new Color(0x101318)
-const CY_WALLP = new Color(0x23282f)
-const CY_SLOT = new Color(0x0d1014)
-const CY_UPPER = new Color(0x191d24)
-
-function cyberWall(out: Color, s: number, u: number): void {
-  if (s < 0.10) {
-    out.copy(CY_SKIRT)
-    return
-  }
-  if (s < 1.05) {
-    out.copy(CY_WALLP)
-    // 每 1.5m 一条竖向灯槽
-    const t = Math.abs(((u / 1.5) % 1) - 0.5) * 2
-    out.lerp(CY_SLOT, (1 - smoothstep(0.55, 0.9, t)) * 0.85)
-    out.offsetHSL(0, 0, (hash2(Math.round(u * 7), Math.round(s * 14)) - 0.5) * 0.05)
-    return
-  }
-  out.copy(CY_UPPER)
-}
-
-/**
- * 墙根横向灯带（0.10~0.19m）+ 竖向灯槽发光：墙面唯一入画的部分。
- *
- * v1.3.84l：灯带改为**段状**（每 2m 一段，段间留 0.18m 暗口），并在段内
- * 叠一条正弦亮度起伏。原实现是环房间一整圈连续等亮的线，那是「发光条」，
- * 不是「LED 灯带」——真实灯带由一米一米拼接而成，接口处必然有暗口，
- * 供电端也更亮。补上这层不均匀后，墙根从「一条亮线」变成「一串灯」，
- * 且因为暗口位置固定，反而强化了房间的尺度感。
- */
-function cyberWallGlow(out: number[], s: number, u: number): void {
-  if (s >= 0.095 && s <= 0.20) {
-    const band =
-      smoothstep(0.095, 0.125, s) * (1 - smoothstep(0.165, 0.20, s))
-    // 段状：2m 一段，段间 0.18m 暗口
-    const segU = ((u + 6) % 2.0 + 2.0) % 2.0
-    const gap = smoothstep(0.0, 0.10, segU) * (1 - smoothstep(1.82, 1.92, segU))
-    if (gap <= 0) return
-    const seg = Math.floor((u + 6) / 1.5) % 2
-    // 段内亮度起伏：让每段不是等亮
-    const breath = 0.80 + 0.20 * Math.sin(u * 1.9)
-    emissiveMix(seg === 0 ? CY_CYAN : CY_MAGENTA, band * 0.9 * gap * breath)(out)
-    return
-  }
-  if (s > 0.20 && s < 1.05) {
-    const t = Math.abs(((u / 1.5) % 1) - 0.5) * 2
-    const w = (1 - smoothstep(0.02, 0.34, t)) * 0.55
-    if (w <= 0) return
-    const seg = Math.floor((u + 6) / 1.5) % 2
-    emissiveMix(seg === 0 ? CY_CYAN : CY_MAGENTA, w)(out)
-  }
-}
-
-const CYBER_PAL: IndoorPalette = {
-  name: "Cybercafe",
-  // 整体压暗：网咖的亮点靠自发光（灯带/机箱），而不是靠灯照
-  AMB: [0.20, 0.21, 0.26],
-  SUN: [0.62, 0.64, 0.76],
-  GAMMA: 1.2,
-  lamps: [{ pos: [0, 0, 2.30], near: 2.0, far: 11.0, floor: 0.26 }],
-  bounce: [0.07, 0.075, 0.09],
-  haze: { color: [0.16, 0.17, 0.22], start: 3.5, end: 10.5, max: 0.34 },
-  floor: cyberFloor,
-  wall: cyberWall,
-  ceil: (out) => out.setHex(0x14171c),
-}
-
-function buildCybercafe(): Group {
-  const g = new Group()
-  g.name = "Cybercafe"
-  const floorGeo = new PlaneGeometry(ROOM_HX * 2, ROOM_HY * 2, 150, 100)
-  floorGeo.translate(0, 0, ROOM_FLOOR_Z)
-  bakeIndoor(
-    floorGeo,
-    CYBER_PAL,
-    (out, P) => cyberFloor(out, P.x, P.y, Math.sqrt(P.x * P.x + P.y * P.y)),
-    (rgb, P) => cyberFloorGlow(rgb, P.x, P.y)
-  )
-  const fm = new Mesh(
-    floorGeo,
-    // v1.3.85：同 buildIndoorFloor —— 换受光材质，避免与 CyberWalls 割裂
-    new MeshStandardMaterial({
-      vertexColors: true,
-      roughness: 0.92,
-      metalness: 0,
-      toneMapped: false,
-      fog: false,
-      // v1.3.84l：深色地砖的哑光颗粒。周期 0.55m —— 与 cyberFloor 的
-      // 砖块尺寸（T = 0.55）对齐，颗粒落在每块砖内部而不横跨砖缝。
-      // 注意：这张贴图的明度仍是 ≥0.8 的「细节层」，砖的深色来自顶点色
-      // （CY_TILE = 0x2a2f38），不受贴图影响。
-      map: floorTex("stone", 0.55),
-    })
-  )
-  fm.name = "CyberFloor"
-  g.add(fm)
-
-  // 墙面：走一遍定制烘焙（多了发光后处理）
-  const H = INDOOR_CEIL_Z - ROOM_FLOOR_Z
-  const ax = new Vector3()
-  const ay = new Vector3(0, 0, 1)
-  const az = new Vector3()
-  const wgeos: BufferGeometry[] = []
-  for (const w of [
-    { onX: true, sign: 1, len: ROOM_HY * 2 },
-    { onX: true, sign: -1, len: ROOM_HY * 2 },
-    { onX: false, sign: 1, len: ROOM_HX * 2 },
-    { onX: false, sign: -1, len: ROOM_HX * 2 },
-  ]) {
-    const geo = new PlaneGeometry(w.len, H, Math.round(w.len * 8), 26)
-    if (w.onX) {
-      ax.set(0, w.sign > 0 ? -1 : 1, 0)
-      az.set(w.sign > 0 ? -1 : 1, 0, 0)
-    } else {
-      ax.set(w.sign > 0 ? 1 : -1, 0, 0)
-      az.set(0, w.sign > 0 ? -1 : 1, 0)
-    }
-    geo.applyMatrix4(new Matrix4().makeBasis(ax, ay, az))
-    geo.translate(
-      w.onX ? w.sign * ROOM_HX : 0,
-      w.onX ? 0 : w.sign * ROOM_HY,
-      ROOM_FLOOR_Z + H / 2
-    )
-    bakeIndoor(
-      geo,
-      CYBER_PAL,
-      (out, P) => cyberWall(out, P.z - ROOM_FLOOR_Z, w.onX ? P.y : P.x),
-      (rgb, P) => cyberWallGlow(rgb, P.z - ROOM_FLOOR_Z, w.onX ? P.y : P.x)
-    )
-    const ni = geo.index ? geo.toNonIndexed() : geo
-    if (ni !== geo) geo.dispose()
-    wgeos.push(ni)
-  }
-  const wm = new Mesh(mergeColored(wgeos), envMaterial({ roughness: 0.9 }))
-  wm.name = "CyberWalls"
-  g.add(wm)
-  g.add(buildIndoorCeiling(CYBER_PAL))
-
-  const p = new Props(CYBER_PAL, INDOOR_AO)
-  // 两排电脑桌（沿 ±Y），每排 9 个机箱位
-  for (const sy of [1, -1]) {
-    const dy = sy * 2.55
-    p.add(boxGeo(10.4, 0.70, 0.05), 0, dy, 0.74, 0, 0x1e222a)
-    p.add(boxGeo(10.4, 0.035, 0.55), 0, dy + sy * 0.33, 0.05, 0, 0x171b21)
-    for (let i = 0; i < 9; i++) {
-      const x = -4.6 + i * 1.15
-      p.add(boxGeo(0.20, 0.44, 0.46), x, dy - sy * 0.06, 0, 0, 0x14181e)
-      /**
-       * 侧透板（朝向过道）：这排发光机箱是网咖画面里最主要的内容。
-       *
-       * v1.3.84l：由「两色硬切 + 全等亮」改为「三档亮度」。
-       *
-       * 原来只有 `i % 2` 决定青或品红、亮度完全一致 —— 18 个机箱看起来像
-       * 一排同款灯箱。真实机房里每台机器的 RGB 灯效亮度、颜色都不同：
-       *   ① 色相：`i % 3` 让青/品红/冷白三色循环，比两色交替更碎；
-       *   ② 亮度：三档 0.62 / 0.82 / 1.0，按 `(i * 7) % 3` 打散，避免
-       *      与色相同步（否则会变成「亮的一定是青色」这种规律）；
-       *   ③ 两排之间再错开一档（`sy > 0` 时索引 +4），左右两排不会镜像
-       *      对称 —— 对称是「一眼看出是程序生成」的最强信号。
-       */
-      const hue = i % 3
-      const bright = [0.62, 0.82, 1.0][(i * 7 + (sy > 0 ? 4 : 0)) % 3]
-      const ledColor =
-        hue === 0 ? CY_CYAN : hue === 1 ? CY_MAGENTA : CY_WHITE
-      p.add(
-        boxGeo(0.20, 0.012, 0.38),
-        x,
-        dy - sy * 0.29,
-        0.04,
-        0,
-        0x000000,
-        emissive(ledColor, bright)
-      )
-      addChair(p, x, dy - sy * 0.62, (i % 2 ? 0.3 : -0.3), 0x2b3038, 0x22262c)
-      /**
-       * v1.3.88：亮屏显示器 —— 网咖真正的黄金特征物。
-       *
-       * 机箱灯带只有 0.04~0.42m 高，在画面下缘一小条；隔着 5m 的相机
-       * （d=4~6 处可见上边界 0.94~1.28m）里，**发光的屏幕**才是网咖
-       * 一眼可辨的符号。屏幕挂在隔断背板前（背板 dy+sy*0.72）、面朝
-       * 过道的椅子（-sy 方向），底座坐在桌面（0.79）上，屏幕中心 0.95m、
-       * 顶 1.13m —— 正好压在 d=5 的上边界 1.10 附近，顶边裁掉细缝无感。
-       *
-       * 屏幕色与同位机箱的 LED 同色（bright 压到 0.55）—— 真实网咖的
-       * RGB 氛围里屏幕显示内容本就被灯光染色，同色还能让「机位 ↔ 屏幕」
-       * 读成一组。
-       */
-      p.add(boxGeo(0.22, 0.15, 0.02), x, dy - sy * 0.10, 0.79, 0, 0x1a1e24)
-      p.add(boxGeo(0.05, 0.04, 0.09), x, dy - sy * 0.10, 0.81, 0, 0x1a1e24)
-      p.add(boxGeo(0.46, 0.035, 0.28), x, dy - sy * 0.10, 0.85, 0, 0x14171c)
-      p.add(
-        boxGeo(0.42, 0.012, 0.24),
-        x,
-        dy - sy * 0.122,
-        0.86,
-        0,
-        0x000000,
-        emissive(ledColor, bright * 0.55)
-      )
-    }
-    // 隔断背板
-    p.add(boxGeo(10.4, 0.04, 0.95), 0, dy + sy * 0.72, 0, 0, 0x1a1e25)
-  }
-
-  // 饮料冷藏柜（贴 −X 墙）：正面一条竖向自发光
-  p.add(boxGeo(0.62, 1.30, 1.85), -5.62, 0, 0, 0, 0x232830)
-  p.add(boxGeo(0.012, 0.10, 1.55), -5.31, 0, 0.15, 0, 0x000000, emissive(CY_CYAN))
-  // 吧台（贴 +X 墙）+ 一条暖色灯（给画面补第三个色相，避免只有青/品红）
-  p.add(boxGeo(0.70, 2.60, 1.05), 5.60, 2.20, 0, 0, 0x2a2520)
-  p.add(boxGeo(0.012, 2.30, 0.06), 5.24, 2.20, 0.92, 0, 0x000000, emissive(0xffb457))
-  addPlant(p, 5.45, -2.60, 0x2c3138, 0x2c6b52, 0.95)
-
-  /**
-   * v1.3.88：近景 RGB 灯柱 —— 画面中上带（py 150~210）的网咖签名。
-   *
-   * 遮挡普查（probe-occlusion.js）：画面下半被球桌占死，近景（x 1.8~2.8、
-   * |y|≤1.4）贴地物投在 py 150~220 —— 画面正中。机箱排（y=±2.55）投影
-   * 贴顶（py≈35~50），只有灯带在画面下缘一小条。过道两侧的立式灯柱
-   * （0.55m 高、三段变色）把「网咖 RGB」直接怼进玩家视野正中。
-   * (±2.3, ±1.2)：|x|>2.2 在禁区外，y=±1.2 不会穿球桌（半宽 0.93+库边）。
-   */
-  const lampPost = (x: number, y: number, seed: number) => {
-    p.add(boxGeo(0.16, 0.16, 0.05), x, y, 0, 0, 0x14171c)
-    p.add(boxGeo(0.09, 0.09, 0.50), x, y, 0.05, 0, 0x1c2128)
-    // 三段发光：青 → 品红 → 冷白，按 seed 错开（两侧柱子不同步）
-    const segs = [CY_CYAN, CY_MAGENTA, CY_WHITE]
-    for (let s = 0; s < 3; s++) {
-      p.add(
-        boxGeo(0.095, 0.095, 0.14),
-        x,
-        y,
-        0.08 + s * 0.15,
-        0,
-        0x000000,
-        emissive(segs[(s + seed) % 3], 0.85)
-      )
-    }
-  }
-  lampPost(2.30, 1.20, 0)
-  lampPost(-2.30, -1.20, 1)
-
-  g.add(p.mesh("CyberProps"))
-  return g
-}
-
-/** 室内三件套的统一入口 */
 export function buildIndoorScene(sceneId: string): Group | null {
   let g: Group | null
   switch (sceneId) {
     case "room":
       g = buildRoom()
-      break
-    case "office":
-      g = buildOffice()
-      break
-    case "cybercafe":
-      g = buildCybercafe()
       break
     default:
       return null
@@ -4572,9 +4126,9 @@ export function buildIndoorScene(sceneId: string): Group | null {
  *
  * ## 为什么要在这里统一设置，而不是逐个 Mesh 改
  *
- * 室内三件套由 `buildRoom/buildOffice/buildCybercafe` 三个函数各自拼装，
- * 内部另有 `IndoorBuilder.mesh()`、`buildIndoorFloor/Walls/Ceiling` 等多个
- * 出口。逐个改要动 5~6 处，且**将来新增室内场景极易漏**。这里在唯一出口
+ * 室内场景由 `buildRoom` 拼装，内部另有 `IndoorBuilder.mesh()`、
+ * `buildIndoorFloor/Walls/Ceiling` 等多个出口。逐个改要动 5~6 处，且
+ * **将来新增室内场景极易漏**。这里在唯一出口
  * 上递归一次，覆盖全部既有与未来构件。
  *
  * ## 例外：地面与天花板只「接收」不「投影」
@@ -4594,7 +4148,20 @@ function applyIndoorShadows(g: Group) {
     const n = m.name || ""
     const isFloor = n === "IndoorFloor"
     const isCeiling = n === "Ceiling"
-    m.receiveShadow = true
+    const isWall = n === "IndoorWalls"
+    /**
+     * v1.3.96：墙**不接收**阴影。
+     * 球桌/家具会把方向光挡在背墙上，投出一条参考图里没有的暗带，
+     * 让米黄墙出现不自然的竖向明暗。墙的立体感交给烘焙光照（AMB+灯池）
+     * 就够了，接地感由「地面接收阴影」单独负责。
+     *
+     * v1.3.98：地面也**不接收**实时阴影 —— 低仰角方向光下地板的阴影采样
+     * 沿阴影贴图纹素网格出波浪状 acne（normalBias/radius 调不掉，A/B 探针
+     * 实锤）。参考图的桌影/家具影本就是弥散软影，已改为在 roomFloor 顶点色
+     * 里直接烘焙（blob 系列，方向与实时灯一致），实时阴影只负责家具/桌体
+     * 自身的明暗。
+     */
+    m.receiveShadow = !(isWall || isCeiling || isFloor)
     m.castShadow = !(isFloor || isCeiling)
   })
 }

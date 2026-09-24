@@ -27,11 +27,11 @@ import { LineData } from "../events/chatevent"
 import { AimEvent } from "../events/aimevent"
 import { Table } from "../model/table"
 import { Grid } from "./grid"
-import { renderer, ensureWebRenderer } from "../utils/webgl"
+import { renderer, ensureWebRenderer, refreshPixelRatio } from "../utils/webgl"
 import { Assets } from "./assets"
 import { Snooker } from "../controller/rules/snooker"
 import { Settings, getEnvScene } from "../utils/settings"
-import { getEnvSpec, INDOOR_CEIL_Z } from "./sceneenvironment"
+import { getEnvSpec, INDOOR_CEIL_Z, setEnvFogEnabled } from "./sceneenvironment"
 
 /* ══════════════════════════════════════════════════════════════════════
  * v1.3.85 室内三件套光照常量
@@ -50,29 +50,40 @@ import { getEnvSpec, INDOOR_CEIL_Z } from "./sceneenvironment"
  * ══════════════════════════════════════════════════════════════════════ */
 
 /**
- * 室内环境光强度：0.58 × π。
+ * 室内环境光强度：0.62 × π。
  *
- * ⚠️ v1.3.86 重大调整：从 1.08×π（占 90% 照度）降到 0.58×π（占 58%）。
+ * ⚠️ v1.3.96：从 0.58×π 提到 **0.62×π**，同时把 室内方向光 / 半球光 各自
+ * 削掉一档（见 `INDOOR_DIR_I` / `INDOOR_HEMI_I`），**合计仍 ≈ π**。
  *
- * 原设计（v1.3.85）刻意让环境光承担 90% 照度，理由是「各向同性的光给每个
- * 顶点乘同一个常数，不引入任何空间明暗差异，逐像素保持零变形」。这个论证
- * 本身没错 —— 但它同时也是**画面「平涂、像 2D」的根因**：
- * AmbientLight 没有方向、不产生阴影、对每个面的贡献完全相同，90% 的光来自
- * 它，等于「用一盏均匀的灯把房间照亮」，结果必然是没有一处明暗变化。
+ * 【为什么必须动】v1.3.96 把「室内」场景按参考图复刻成**米黄涂料墙**。而
+ * `bakeIndoor` 烘焙的墙面法线是水平的、灯在房间正中上方 ⟹ 墙面 N·L ≈ 0，
+ * 灯项贡献为 0，墙面最终色 = albedo × AMB。旧 AMB 只有 0.30 一档，于是
+ * 米黄（#e6d9b8）被压成暗橄榄褐 —— 与参考图明亮的奶油米黄完全不符。
+ * 把墙面照度抬到 ≈0.62 后，米黄才回到 #d8cdb4 一带（见 `ROOM_PAL` 注释里
+ * 的标定过程）。
  *
- * 用户实测反馈「还是以前版本糟糕的情况」「期望效果：不再是糟糕的 2d 场景」
- * 之后，**「零变形」这条旧约束正式让位给立体感**。
+ * 【为什么从 amb 里出而不是直接加总照度】总照度一旦超过 π，朝上的面
+ * （地面、桌面）就会过曝成白片。从 dir/hemi 里挪是最省事的做法：墙面对
+ * dir 本就吃不到（N·L≈0），削它不心疼；同时朝上/水平的明暗比从 1.88 降到
+ * 1.67（3.30/1.98），仍远强于 v1.3.85 的 1.35 —— 立体感不丢。
  *
- * 新的配比（保持总照度 ≈ π 不变，防止画面整体变暗/变亮）：
- *   amb  = 0.58·π = 1.8221   （58%）
- *   dir  = 1.10    = 1.1000   （29%）  ← 见 INDOOR_DIR_I
- *   hemi = 0.50    = 0.5000   （13%）  ← 见 indoorHemi
- *   合计 = 3.4221 ≈ π·1.089
+ * 新的配比（合计 ≈ π，保持不变）：
+ *   amb  = 0.62·π = 1.9478   （62%）
+ *   dir  = 0.94    = 0.9400   （28%）  ← 见 INDOOR_DIR_I
+ *   hemi = 0.41    = 0.4100   （13%）  ← 见 INDOOR_HEMI_I
+ *   合计 = 3.2978 ≈ π·1.050
  *
- * 配比依据：环境光仍占多数（>50%）以保证暗部不会死黑、场景整体不发闷；
- * 但方向光+半球光合计 42%，足以在墙面/家具侧面/地面之间拉开可见的亮度梯度。
+ * 校验各朝向的亮度倍数：
+ *   朝上（地面）   1.948 + 0.940 × 0.351 + 0.410 × 1.00 = 3.218
+ *   朝水平受光面   1.948 + 0.940 × 0.627 + 0.410 × 0.50 = 2.735
+ *   朝水平背光面   1.948 + 0               + 0.410 × 0.50 = 2.153
+ *   朝下（天花板） 1.948 + 0               + 0            = 1.948
+ *   最亮/最暗 = 3.218 / 1.948 = 1.65 倍
+ *
+ * ⚠️ 旧的「环境光占 90% 保证零变形」论述在 v1.3.86 已明确让位给立体感，
+ * 此处沿用 v1.3.86 的总照度守恒约定，不再追求逐像素零变形。
  */
-const INDOOR_AMB_I = 0.58 * Math.PI // 1.82212
+const INDOOR_AMB_I = 0.62 * Math.PI // 1.94779
 
 /**
  * 室内方向光强度。
@@ -93,19 +104,21 @@ const INDOOR_AMB_I = 0.58 * Math.PI // 1.82212
  *   L = normalize(0.75, -0.85, 0.42)，模长 = 1.19648
  *   L = (0.62684, -0.71042, 0.35102)
  *   朝上表面 N·L = 0.35102
- *   要 dir 贡献 1.10 的照度 ⟹ intensity = 1.10 / 0.35102 = 3.1337
+ *   要 dir 贡献 0.94 的照度（v1.3.96 值）⟹ intensity = 0.94 / 0.35102 = 2.678
+ *
+ * ⚠️ v1.3.96：贡献从 1.10 削到 0.94，因为环境光从 0.58·π 提到 0.62·π。
+ * 削 dir 而不是加总照度，是为了避免朝上的面过曝 —— 详见 `INDOOR_AMB_I`。
  *
  * 校验各朝向的亮度倍数（含 hemi 贡献，见 indoorHemi 的 hemi(N)）：
- *   朝上（地面）    amb + dir×0.351 + hemi×1.00 = 1.822 + 1.100 + 0.500 = 3.422
- *   朝水平受光面   amb + dir×0.627 + hemi×0.50 = 1.822 + 0.690 + 0.250 = 2.762
- *   朝水平背光面   amb + dir×0     + hemi×0.50 = 1.822 + 0.000 + 0.250 = 2.072
- *   朝下（天花板） amb + dir×0     + hemi×0    = 1.822 + 0.000 + 0.000 = 1.822
+ *   朝上（地面）    amb + dir×0.351 + hemi×1.00 = 1.948 + 0.940 + 0.410 = 3.298
+ *   朝水平受光面   amb + dir×0.627 + hemi×0.50 = 1.948 + 0.589 + 0.205 = 2.742
+ *   朝水平背光面   amb + dir×0     + hemi×0.50 = 1.948 + 0.000 + 0.205 = 2.153
+ *   朝下（天花板） amb + dir×0     + hemi×0    = 1.948 + 0.000 + 0.000 = 1.948
  *
- * 即：最亮面 3.422 / 最暗面 1.822 = **1.88 倍**的明暗比。
- * 对比旧方案（朝上 3.815 / 水平背光 2.827 = 1.35 倍，且地面上各处几乎相同），
- * 新方案的立体层次显著更强。
+ * 即：最亮面 3.298 / 最暗面 1.948 = **1.69 倍**的明暗比。
+ * 对比 v1.3.85 旧方案（1.35 倍，且地面上各处几乎相同），立体层次仍显著更强。
  */
-const INDOOR_DIR_I = 1.1 / 0.35102 // 3.1337
+const INDOOR_DIR_I = 0.94 / 0.35102 // v1.3.96: 1.10 → 0.94（amb 升档的补偿）
 
 /**
  * 室内半球光强度（v1.3.86 新增）。
@@ -120,12 +133,13 @@ const INDOOR_DIR_I = 1.1 / 0.35102 // 3.1337
  *   N.z =  0（水平）→ 各半    → 系数 0.50
  *   N.z = −1（朝下）→ 全 ground → 系数 0.00
  *
- * 0.50 这个值的选取：它单独贡献朝上/朝下 0.50 的亮度差，
- * 约占总照度 15%，与方向光的 29% 叠加后共同撑起立体感，
- * 同时不至于让天花板死黑（天花板仍有 amb 的 1.822 托底）。
+ * 0.41 这个值的选取（v1.3.96，原 0.50）：它单独贡献朝上/朝下 0.41 的亮度差，
+ * 约占总照度 12%，与方向光的 28% 叠加后共同撑起立体感，
+ * 同时不至于让天花板死黑（天花板仍有 amb 的 1.948 托底）。
  */
-const INDOOR_HEMI_I = 0.5
+const INDOOR_HEMI_I = 0.41 // v1.3.96: 0.50 → 0.41（amb 升档的补偿）
 import { TableGeometry } from "./tablegeometry"
+import { buildTableLegs } from "./tablelegs"
 
 export class View {
   readonly scene = new Scene()
@@ -143,6 +157,14 @@ export class View {
   private lastFov = 0
   readonly element
   table: Table
+  /**
+   * v1.3.95：真实高度的桌腿。
+   * 物理台面保持 z=0、地面已下沉到 GROUND_Z，桌子会悬空 0.597m，
+   * 用这组立柱把桌子接到地面。桌型尺寸可被 `configureForRule` 改写，
+   * 故用 key 缓存并在尺寸变化时重建。
+   */
+  private tableLegs?: Group
+  private tableLegsKey = ""
   loadAssets = true
   assets: Assets
   drawing: Drawing
@@ -188,8 +210,8 @@ export class View {
    * 第 ② 条才是关键 —— 垂直光打在地面上各处 N·L 都接近 1，
    * 产生不了可见的明暗对比，所以旧方案虽然「有方向光」画面依然平。
    *
-   * ⚠️ 颜色必须是纯白：顶点色已烘焙了各场景色偏（room 暖黄 /
-   * cybercafe 冷蓝），带色光会二次染色。
+   * ⚠️ 颜色必须是纯白：顶点色已烘焙了各场景色偏（room 暖黄），
+   * 带色光会二次染色。
    */
   private indoorDir?: DirectionalLight
   /**
@@ -379,10 +401,16 @@ export class View {
     }
 
     if (sizeChanged) {
-      this.renderer?.setSize(width, height)
-      this.renderer?.setViewport(0, 0, width, height)
-      this.renderer?.setScissor(0, 0, width, height)
-      this.renderer?.setScissorTest(true)
+      // v1.3.93：resize 时一并刷新像素比。
+      // 旋转屏幕 / 折叠屏变换后 devicePixelRatio 可能改变，而像素比此前只在
+      // 创建渲染器时设定过一次，导致渲染分辨率与当前屏幕不匹配（画质偏糊）。
+      if (this.renderer) {
+        refreshPixelRatio(this.renderer)
+        this.renderer.setSize(width, height)
+        this.renderer.setViewport(0, 0, width, height)
+        this.renderer.setScissor(0, 0, width, height)
+        this.renderer.setScissorTest(true)
+      }
 
       cam.camera.aspect = width / height
     }
@@ -423,7 +451,9 @@ export class View {
     this.sun.shadow.mapSize.set(1024, 1024)
     const sc = this.sun.shadow.camera
     sc.near = 0.1
-    sc.far = 14
+    // v1.3.95：地面由 -0.203 下沉到 -0.80，光线到达地面的路程变长，
+    // far 相应放宽，否则桌子的投影会在半空中被裁掉。
+    sc.far = 16
     sc.left = -4
     sc.right = 4
     sc.top = 4
@@ -449,13 +479,16 @@ export class View {
     this.scene.add(this.indoorAmb)
 
     // 半球光：朝上亮、朝下暗的基础梯度，立体感的第一层来源。
-    this.indoorHemi = new HemisphereLight(0xffffff, 0xb8bcc4, INDOOR_HEMI_I)
+    this.indoorHemi = new HemisphereLight(0xffffff, 0xcfc4ab, INDOOR_HEMI_I) // v1.3.97: 地色暖化
     this.indoorHemi.visible = false
     this.scene.add(this.indoorHemi)
 
     // 方向光：低仰角斜射（z 分量仅 0.351），负责制造可见的明暗对比。
     this.indoorDir = new DirectionalLight(0xffffff, INDOOR_DIR_I)
-    this.indoorDir.position.set(0.75, -0.85, 0.42)
+    // v1.3.98：z 0.42→0.55 —— 仰角 17.5°太掠射，地板自阴影 acne 沿阴影贴图
+    // 纹素网格出「波浪状明暗带」（关灯 A/B 探针实锤）；抬高到 23°明显缓解，
+    // 桌影长度仍有 ~1.8m（参考图的大软阴影）。
+    this.indoorDir.position.set(0.75, -0.85, 0.55)
     this.indoorDir.target.position.set(0, 0, 0)
     this.indoorDir.visible = false
     // v1.3.86：开启阴影 —— 球桌投影到地面是「接地感」的关键，
@@ -466,17 +499,26 @@ export class View {
     this.indoorDir.shadow.mapSize.set(1024, 1024)
     const dsc = this.indoorDir.shadow.camera
     dsc.near = 0.1
-    dsc.far = 12
-    // frustum 收窄到球桌周围 ±3m：场景环境物体在 6m 外，不需要参与投影，
-    // 收窄可显著减少 shadow pass 的几何量。3m 足以覆盖球桌 + 近处家具。
-    dsc.left = -3
-    dsc.right = 3
-    dsc.top = 3
-    dsc.bottom = -3
+    dsc.far = 18
+    // v1.3.97：±3 → ±6.5 —— 参考图要求「落地灯产生柔和弥散阴影」，即沙发/
+    // 落地灯也要投影。旧 ±3 只覆盖球桌，家具（|x|≈4.4~5.5）全在锥外。
+    dsc.left = -6.5
+    dsc.right = 6.5
+    dsc.top = 6.5
+    dsc.bottom = -6.5
     this.indoorDir.shadow.bias = -0.0008
     // 斜射光下自阴影（shadow acne）更明显，normalBias 沿法线推移采样点，
     // 对「桌面投影到地面」这种大面积平铺阴影尤其有效。
-    this.indoorDir.shadow.normalBias = 0.02
+    // v1.3.98：normalBias 0.02→0.06 —— 掠射自阴影 acne 的主修复（配合抬高
+    // 光仰角）。沿法线把采样点推离表面 6cm，桌影边缘仍锐利（桌高 0.8m）。
+    this.indoorDir.shadow.normalBias = 0.06
+    /**
+     * v1.3.97：柔和阴影边缘。
+     * 室内 shadowMap 是 PCFShadowMap（见 applyScene），`radius` 对它生效：
+     * 4 = 采样核扩大 4 个纹素，桌面/家具投影边缘从硬切边变成参考图那种
+     * 「柔和弥散」过渡。13m 视锥下 1024² 的纹元 ≈1.3cm，radius 4 不会露噪。
+     */
+    this.indoorDir.shadow.radius = 4
     this.scene.add(this.indoorDir)
     this.scene.add(this.indoorDir.target)
 
@@ -485,6 +527,9 @@ export class View {
     if (this.assets.background) this.scene.add(this.assets.background)
     this.scene.add(this.assets.table)
     this.table.mesh = this.assets.table
+    // v1.3.95：真实高度的桌腿 —— 物理台面保持 z=0、地面已下沉到 GROUND_Z，
+    // 桌子会悬空，这里把 0.597m 的支撑补出来。
+    this.rebuildTableLegs()
     // v1.3.46：删除桌面网格线（用户要求桌面不显示网格）。
     // const isSnooker = this.assets.rules.asset === Snooker.tablemodel
     // this.scene.add(new Grid().generateLineSegments(isSnooker))
@@ -651,7 +696,31 @@ export class View {
    */
 
   /** 应用环境场景（item 4 / Request D-v3）：3D 几何场景或立方体房间 + 环境光 + 兜底色 */
+  /**
+   * v1.3.95：重建真实高度的桌腿。
+   *
+   * 为什么不只建一次：`TableGeometry.configureForRule()` 会按规则改写
+   * tableX/tableY（三库 / 沙狐是不同的 UMB 桌型），桌腿必须跟着挪，否则换
+   * 规则后会出现「桌腿悬在桌角外」或「缩进桌底」的错位。
+   * 以 tableX|tableY 为 key，尺寸没变就不做无用功。
+   */
+  private rebuildTableLegs() {
+    const key = `${TableGeometry.tableX}|${TableGeometry.tableY}`
+    if (this.tableLegs && this.tableLegsKey === key) return
+    if (this.tableLegs) this.scene.remove(this.tableLegs)
+    this.tableLegs = buildTableLegs()
+    this.tableLegsKey = key
+    this.scene.add(this.tableLegs)
+  }
+
   applyScene(sceneId: string) {
+    // v1.3.94：先告诉环境材质工厂本场景是否有雾，再建几何。
+    // 环境材质在**创建时**读取该标志（见 sceneenvironment.envMaterial），
+    // 因此必须在 getSceneEnvironment() 之前设置 —— 否则首次进入有雾场景
+    // 时材质仍是旧标志。已缓存的环境 Group 材质不重建，仅当 LRU 淘汰后
+    // 重新构建才会取到新值；由于每个场景的雾设定是固定的，切回同一场景
+    // 时命中的缓存本身就是正确标志，无需失效。
+    setEnvFogEnabled(!!getEnvSpec(sceneId).fog)
     // Request D-v3：足球场/篮球场/雪山用真正搭建的几何 3D 环境，
     // 其他场景继续用立方体房间（贴图天空盒）。
     if (this.sceneEnv) {
@@ -748,6 +817,10 @@ export class View {
 
     // 非黑兜底色
     this.renderer?.setClearColor(new Color(def.wallA), 1)
+
+    // v1.3.95：桌腿跟着桌型尺寸走 —— 换规则 / 换场景后 configureForRule
+    // 可能已经改写过 tableX/tableY。
+    this.rebuildTableLegs()
   }
 
   /** 切换所有球的程序化接触阴影显隐（雪景隐藏，改用真实太阳光阴影） */

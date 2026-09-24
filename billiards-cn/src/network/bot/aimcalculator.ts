@@ -10,6 +10,67 @@ import { TableGeometry } from "../../view/tablegeometry"
 import { Ball } from "../../model/ball"
 
 /**
+ * v1.4.0：「目标球 → 中袋」连线在库面上的穿越点超出中袋口多少（米）。
+ *
+ * 【几何原理】中袋（N/S）是上下长库**中间开的豁口**，口半宽 =
+ * PocketGeometry.middleKnuckleInset（2.6R，即两个膝盖中心距袋心的距离）。
+ * 目标球沿直线滚向袋心，这条线与库面（y = ±tableY）的交点若落在口外，
+ * 球会先撞上库面/膝盖弹回 —— 与力度无关，几何上必失。
+ *
+ * 角袋不适用本判据：角袋开在库的**端点**，球沿库滚动时被库面约束贴库滑行，
+ * 滑到库尽头自然坠入袋 jaw（实测贴库球沿库打角袋 100%，而同样的
+ * 「穿越点在库面上」的连线画法对角袋也成立 —— 不能用它否决角袋）。
+ *
+ * 【实测标定】tools/harness/railpocket.ts（每格 32 杆，power = 95R）：
+ *   球贴上库（y = 21R − 1.5R），母球贴同库：
+ *     球x=−2R  穿越点 1.41R（口内）→ 打中袋 100%
+ *     球x=−6R  穿越点 4.23R（口外）→ 打中袋   0%
+ *     球x=−10R 穿越点 7.08R（口外）→ 打中袋   0%
+ *     球x=−14R 穿越点 9.90R（口外）→ 打中袋 18.8%（噪声尾巴挤进）
+ *   判据与全部实测吻合。
+ *
+ * @returns 穿越点超出中袋口的距离（米）；≤ 0 表示口内（可打）。
+ *          非中袋（角袋）或几何上无意义（袋在库内侧 / 连线不朝库外）时
+ *          返回 null（不适用）。
+ */
+export function railMidMouthExcess(
+  ballPos: Vector3,
+  pocket: Vector3
+): number | null {
+  // 中袋判定：N/S 袋的 |x| ≈ 0，角袋 |x| ≈ PX ≈ tableX + 2.6R
+  if (Math.abs(pocket.x) > TableGeometry.tableX * 0.5) return null
+  // 袋在库外哪一侧（N = +y，S = −y）
+  const side = Math.sign(pocket.y)
+  if (side === 0) return null
+  const lineY = side * TableGeometry.tableY
+  const dy = pocket.y - ballPos.y
+  // 连线必须朝「袋所在的那半场」延伸，否则无穿越意义
+  if ((lineY - ballPos.y) * dy <= 0) return null
+  const t = (lineY - ballPos.y) / dy
+  const crossX = ballPos.x + t * (pocket.x - ballPos.x)
+  return Math.abs(crossX) - PocketGeometry.middleKnuckleInset
+}
+
+/**
+ * v1.4.0：findBestPocket 用的「贴库/跨库打中袋」罚分。
+ *
+ * 穿越点在口外 → 罚 2.0（切角分值域 [0,2]，任何切角优势都翻不过）；
+ * 口内但贴近膝盖（0 ~ 1.3R）→ 渐进罚 0~0.6，让「贴着膝盖的侥幸球」
+ * 也让位给干净的角袋线路。null（不适用）→ 0。
+ */
+export function railMidMouthPenalty(
+  ballPos: Vector3,
+  pocket: Vector3
+): number {
+  const excess = railMidMouthExcess(ballPos, pocket)
+  if (excess === null) return 0
+  if (excess > 0) return 2.0
+  // 口内但贴膝盖：excess ∈ (−2.6R, 0]，越接近 0 越悬
+  const near = 1 - Math.min(1, -excess / (1.3 * R))
+  return near * 0.6
+}
+
+/**
  * AimCalculator provides logic for the bot to calculate shot angles and power.
  * It uses a "ghost ball" method to determine where the cue ball should hit the target ball
  * to send it into a pocket.
@@ -110,13 +171,23 @@ export class AimCalculator {
 
   /**
    * Generates a HitEvent for a shot towards a target position, optionally adding noise.
+   *
+   * v1.3.91：新增 elevation / elevationNoise 两个**带默认值**的参数，用于
+   * 专业级 AI 在贴球场景下打扎杆。默认 0，既有调用点（clawbreak/thefarjaw/
+   * professional 的普通杆）行为完全不变。
+   *
+   * 注意 elevation 走的是与玩家完全相同的物理通道（cueStrike 的
+   * velCos = vel·cos(elevation) 牺牲平动、spinRate ∝ 1/cos 放大旋转），
+   * AI 不拥有任何特权。
    */
   public generateShot(
     table: Table,
     noise: number,
     power: number,
     targetPos: Vector3 = new Vector3().random(),
-    spinOffset: Vector3 = AimCalculator.randomSpin()
+    spinOffset: Vector3 = AimCalculator.randomSpin(),
+    elevation: number = 0,
+    elevationNoise: number = 0
   ): HitEvent {
     const { cueball, cue, balls } = table
     const { aim } = cue
@@ -128,6 +199,10 @@ export class AimCalculator {
     aim.angle = atan2(lineTo.y, lineTo.x) + (Math.random() - 0.5) * noise * this.noiseScale
     aim.power = power
     aim.offset = spinOffset
+    // v1.3.91：抬杆角（扎杆）。噪声只加在扎杆场景，普通杆保持精确 0。
+    aim.elevation =
+      elevation +
+      (elevationNoise > 0 ? (Math.random() - 0.5) * elevationNoise : 0)
 
     // v1.3.66：原逻辑在「球杆后方被挡」时会把打点强行覆盖成 (0, +offCenterLimit)，
     // 即 +0.45 高杆/跟杆——这会把 AI 精心算好的「低杆防摔袋」抹掉，反而把母球
@@ -157,6 +232,19 @@ export class AimCalculator {
 
   /**
    * Calculates a score based on the cut angle.
+   *
+   * v1.4.0：叠加「贴库/跨库打中袋」的可行性惩罚（见 railMidMouthExcess）。
+   *
+   * 【为什么必须加在 findBestPocket 这一层】
+   *   用户反馈：「当白球和击打球靠边库时，电脑还是选择打中袋，而不是打
+   *   远处的边袋」。稳健/激进两档的选袋完全走本函数（按切角分挑袋），
+   *   专业档的出杆 ghost 也经由 getAimPoint 单袋调用本路径 —— 若只改
+   *   decision/offense.ts 的评分层，稳健/激进档根本不受影响。
+   *
+   *   实测标定（tools/harness/railpocket.ts，每格 32 杆，power = 95R）：
+   *   贴上长库的目标球打中袋，只要球→袋心连线与库面的穿越点超出中袋口
+   *   （middleKnuckleInset = 2.6R），进球率 0~19%；同一颗球打角袋（沿库
+   *   滚入袋 jaw）100%。罚 2.0 分保证任何切角优势都翻不过这道墙。
    */
   private calculateCutScore(
     cuePos: Vector3,
@@ -165,7 +253,7 @@ export class AimCalculator {
   ): number {
     const shotLine = this.getDirectionVector(cuePos, targetPos)
     const pocketLine = this.getDirectionVector(targetPos, pocket)
-    return 1 - shotLine.dot(pocketLine)
+    return 1 - shotLine.dot(pocketLine) + railMidMouthPenalty(targetPos, pocket)
   }
 
   /**

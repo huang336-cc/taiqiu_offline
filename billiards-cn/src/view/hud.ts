@@ -266,14 +266,17 @@ export class Hud {
     table: Table
   ) {
     if (!container) return
-    // 排序保证稳定的视觉顺序
-    const sorted = Array.from(labels).sort((a, b) => a - b)
-    // 仅在内容变化时重建（按 label 序列作为 key）
-    const key = sorted.join(",")
+    // v1.4.0：按实际进球顺序展示 —— Set 迭代序 = 插入序（JS 规范保证），
+    // 球落袋时按时间先后 add 进 playerPocketed，直接遍历即为进球顺序。
+    // 旧实现 sort((a,b)=>a-b) 按球号重排，用户反馈「比分栏球体排列要
+    // 以实际进球顺序为准，不要以球号大小排序」。
+    const ordered = Array.from(labels)
+    // 仅在内容变化时重建（按进球顺序序列作为 key）
+    const key = ordered.join(",")
     if (container.dataset.key === key) return
     container.dataset.key = key
     container.innerHTML = ""
-    for (const label of sorted) {
+    for (const label of ordered) {
       const ball = table.balls.find((b) => b.label === label)
       const hex = ball?.ballmesh?.color
         ? "#" + ball.ballmesh.color.getHexString()

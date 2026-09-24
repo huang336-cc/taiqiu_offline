@@ -38,9 +38,20 @@ fi
 # 这里直接从 menu.html 的 __BILLIARDS_VERSION__ 反推，构建时自动改写 AndroidManifest.xml，
 # 不再依赖手动维护 manifest（避免再次遗忘迭代）。
 if [ -n "$VERSION" ]; then
-  PATCH="${VERSION##*.}"                       # 1.3.22 -> 22
-  VC_DATE="$(date +%y%m%d)"                    # 2026-08-25 -> 260825
-  VERSION_CODE="${VC_DATE}${PATCH}"            # -> 26082522
+  # v1.4.0：versionCode 支持显式覆盖（FORCE_VERSION_CODE）。
+  # 默认算法「日期 YYMMDD + 语义版本末位」在次版本跳跃时会**倒退**：
+  #   v1.3.104 → 260923104（9 位）；v1.4.0 → 2609230（末位只有 1 位，7 位）
+  # 数值上 2609230 < 260923104，安卓会拒绝覆盖安装。跨越次版本时必须用
+  #   FORCE_VERSION_CODE=260923400 ./build-apk.sh
+  # 显式给一个比上一版大的值（400 = v1.4.0 的 4×100，同日期内递增可读）。
+  if [ -n "${FORCE_VERSION_CODE:-}" ]; then
+    VERSION_CODE="$FORCE_VERSION_CODE"
+    echo "[版本] 使用显式 versionCode：$VERSION_CODE"
+  else
+    PATCH="${VERSION##*.}"                       # 1.3.22 -> 22
+    VC_DATE="$(date +%y%m%d)"                    # 2026-08-25 -> 260825
+    VERSION_CODE="${VC_DATE}${PATCH}"            # -> 26082522
+  fi
   echo "[版本] 将 AndroidManifest 的 versionName/versionCode 同步为 $VERSION / $VERSION_CODE"
   sed -i -E "s/android:versionName=\"[^\"]*\"/android:versionName=\"$VERSION\"/" AndroidManifest.xml
   sed -i -E "s/android:versionCode=\"[^\"]*\"/android:versionCode=\"$VERSION_CODE\"/" AndroidManifest.xml

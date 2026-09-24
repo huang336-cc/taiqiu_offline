@@ -23,6 +23,7 @@ import { StartAimEvent } from "../../events/startaimevent"
 import { RerackEvent } from "../../events/rerackevent"
 import { scaleTableModel } from "../../utils/table-scaler"
 import { t, foulReason } from "../../utils/i18n"
+import { respotOffTable } from "../../utils/offtable"
 
 const tableModelStretchBySize: Record<number, { x: number; y: number }> = {
   // 6ft values copied from the 12ft table for manual tuning.
@@ -346,7 +347,13 @@ export class Snooker implements Rules {
   }
 
   respot(outcome: Outcome[]): Ball[] {
-    return SnookerUtils.respotAllPottedColours(this.container.table, outcome)
+    // v1.3.95：先把本杆出界的球放回原位（在场的沧回到 spotted/colours 之前处理）
+    const offMoved = respotOffTable(this.container.table, outcome)
+    const colours = SnookerUtils.respotAllPottedColours(
+      this.container.table,
+      outcome
+    )
+    return offMoved.length > 0 ? [...offMoved, ...colours] : colours
   }
 
   private respotColours(outcome: Outcome[]): void {

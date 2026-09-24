@@ -47,6 +47,27 @@ export class AimSlider {
    */
   private dragViewSign = 1
 
+  // ---- v1.4.2：贴边自转已从本控件移除（左右两端一律「只跟随手指」）----
+  //
+  // v1.4.0 曾给这条滑条加上与画布拖拽同款的「贴边自转」：指针停在屏幕
+  // 左右边缘带内（max(36px, 屏宽 12%)）时，每帧注入虚拟位移让角度继续转。
+  // 画布拖拽没问题（画布铺满全屏，屏幕边缘就是它的边缘），但**这条滑条
+  // 不是** —— 实测（tools/harness/_edgeprobe.ts，5 种视口）：
+  //
+  //   · 滑条位于底栏最右侧，右端距屏幕右边缘恒为 **37px**，
+  //     而触发带宽 = max(36, 视口宽 12%) = 101~153px —— 于是
+  //     **右半条整段都落在触发带内**，手指一进去就开始自转；
+  //   · 带内速度 = 2.4px × (0.6~2.0) ≈ 3.58px/帧，按本条灵敏度
+  //     （一整条轨宽 = 2°）折算 ≈ **3.4°/秒** —— 对一条量程只有 ±1° 的
+  //     「细微」瞄准条来说，这是手指不动也一路狂奔；
+  //   · 左端距屏幕左边缘 633~1110px，**永远进不了触发带**，左端不会自转。
+  //
+  // 结果就是两端行为不一致：右端自己跑、左端不跑。用户要求「右边缘逻辑
+  // 改为左边缘同样逻辑」，故按左端口径统一 —— 两端都只跟随手指真实位移。
+  // 画布拖拽（events/keyboard.ts 的 edgeSpin）不受影响，保留原样。
+  /** 拖动中最近一次指针屏幕 X */
+  private lastClientX = 0
+
   constructor(container: Container) {
     this.container = container
     this.bar = id("aimAngleBar")
@@ -135,6 +156,7 @@ export class AimSlider {
     // 记录起点：屏幕 X 与当时的真实瞄准角，后续用相对增量（不截断）
     this.dragStartX = e.clientX
     this.dragStartAngle = this.cue.aim.angle
+    this.lastClientX = e.clientX
     // v1.3.76：锁死本次手势的视角符号，避免拖动中因符号翻转而抽搐
     this.dragViewSign = this.viewSign()
     this.cue.beginAimInteraction()
@@ -153,30 +175,47 @@ export class AimSlider {
 
   private onDragMove = (e: PointerEvent) => {
     if (!this.dragging || this.isDisabled()) return
+    this.lastClientX = e.clientX
+    this.applyDrag()
+  }
+
+  /**
+   * 拖动核心换算：手指的真实位移 → 瞄准角增量（v1.3.101 起的相对增量映射）。
+   *
+   * v1.4.2：不再叠加任何「虚拟位移」。此前叠加的贴边自转量使右端自己跑、
+   * 左端不跑（详见 lastClientX 处的注释），现两端一律只吃真实位移。
+   */
+  private applyDrag() {
     const track = this.track
     if (!track) return
     const rect = track.getBoundingClientRect()
     if (rect.width <= 0) return
-    const dx = e.clientX - this.dragStartX
+    const dx = this.lastClientX - this.dragStartX
     // 移动超过阈值即判定为「拖动」，不再视作轻点
     if (Math.abs(dx) > 3) this.didDrag = true
     // 一条满轨宽 = ±AIM_FINE_HALF_RANGE（与旧 range 灵敏度一致，但不再夹住两端）
     const HALF = Math.PI / 180
-    // v1.3.76：拖出轨道两端后**停止继续转动**。
-    // 旧代码的角度增量没有上限，手指滑到条子最边缘甚至滑出条子外面时，
-    // 角度会一路继续转，辅助线在两个目标球 / 库边之间反复切换，
-    // 观感就是「多出一根示意线、其中一根不停抽搐」。
-    // 上限取 2×HALF（= 拖满一整条轨宽），与滑块 frac 的 ±1 完全对齐：
-    // 滑块到头 = 角度到头，再往外拖不再有任何变化。
-    const MAX_DELTA = 2 * HALF
-    const delta =
-      Math.max(-MAX_DELTA, Math.min(MAX_DELTA, (dx / rect.width) * 2 * HALF * this.dragViewSign))
+    // v1.3.101：拖出轨道两端后**继续转动瞄准角度**（不再夹在 2×HALF）。
+    //
+    // v1.3.76 曾把角度增量硬夹在 ±2×HALF（= 拖满一整条轨宽）以治
+    // 「辅助线抽搐」，但副作用是「滑到边缘就转不动了」——手指想继续
+    // 微调角度、却已经顶到条子尽头，很别扭。现在改为：
+    //   · 滑块的**视觉位置**仍夹在轨道内（frac ∈ [-1,1]）：拉杆到头即贴边，
+    //     符合滑条直觉，不会跑出画面；
+    //   · **实际瞄准角度**按手指的绝对位移线性映射（不设上限），继续转。
+    // 这样「滑块设上限、实际角度继续」，兼顾滑条手感与瞄准自由。
+    // rate 取 2×HALF/轨宽 = 拖满一整条轨宽对应 2°——与旧灵敏度一致，
+    // 超出轨宽后按同一斜率继续换算角度。
+    const rate = (2 * HALF) / rect.width
+    const delta = dx * rate * this.dragViewSign
     const target = this.dragStartAngle + delta
     this.cue.setAimAngle(target, this.container.table)
     this.container.lastEventTime = performance.now()
-    // 视觉填充仅作方向提示（轨道中心=本杆初始方向），角度本身不截断
-    const frac = Math.max(-1, Math.min(1, (dx / rect.width) * 2))
-    const pct = Math.max(0, Math.min(100, 50 + (dx / rect.width) * 50))
+    // 视觉填充仅作方向提示（轨道中心=本杆初始方向）；**滑块位置夹在轨道内**。
+    // 与角度增量共用同一 rate（两者线性同源），故拖满轨宽时滑块恰好到端、
+    // 角度恰好转了 2°，再往外拖滑块贴边不动、角度继续。
+    const frac = Math.max(-1, Math.min(1, dx * rate / HALF))
+    const pct = Math.max(0, Math.min(100, 50 + (dx * rate / HALF) * 50))
     if (this.slider) {
       // v1.2.17 #6：同步更新滑块 value，让旋钮（拉杆）在拖动时跟随手指移动，
       // 否则旋钮永远 Snap 回中心、手指拖它不动，表现为「无法拖动拉杆」。

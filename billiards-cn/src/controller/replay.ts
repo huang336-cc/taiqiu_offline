@@ -65,6 +65,58 @@ interface ShotMeta {
   cueTrack?: [number, number, number][]
 }
 
+/**
+* v1.3.93：把本杆白球轨迹采样点并入框定点集。
+*
+* 轨迹点按 weight 向「三点质心」收缩后再并入 —— 相当于给轨迹打了折扣的
+* 取景权重，既保证白球走位不滚出画面，又不会让长台走位把镜头拉到俯视感。
+*
+* 采样点可能很多（预演时按固定间隔记录），这里做等距抽稀，避免把
+* buildReplayAnchor 的包围圆计算和相机插值无谓地拖慢。
+*
+* 独立成模块级函数（而非类静态私有方法）是为了能在 harness 里直接单测。
+*/
+export function expandFocusWithTrack(
+  base: Vector3[],
+  track?: [number, number, number][]
+): Vector3[] {
+  if (!track || track.length === 0) return base
+  // 质心（只用基础三点，作为收缩基准，避免被轨迹自身带偏）
+  let cx = 0
+  let cy = 0
+  for (const p of base) {
+    cx += p.x
+    cy += p.y
+  }
+  cx /= base.length
+  cy /= base.length
+  const WEIGHT = 0.55
+  // 抽稀：最多取 8 个轨迹点，均匀分布
+  const step = Math.max(1, Math.ceil(track.length / 8))
+  const out = base.slice()
+  for (let i = 0; i < track.length; i += step) {
+    const t = track[i]
+    // 已与某基础点几乎重合的轨迹点无信息量，跳过
+    let dup = false
+    for (const p of base) {
+      if (Math.hypot(p.x - t[0], p.y - t[1]) < R * 0.5) {
+        dup = true
+        break
+      }
+    }
+    if (dup) continue
+    out.push(
+      new Vector3(
+        cx + (t[0] - cx) * WEIGHT,
+        cy + (t[1] - cy) * WEIGHT,
+        0
+      )
+    )
+  }
+  return out
+}
+
+
 export class Replay extends ControllerBase {
   override get name() {
     return "Replay"
@@ -745,6 +797,19 @@ this.frameCameraForShot(this.container.table.cue.aim)
       this.container.table.advance(step)
     }
     this.container.table.updateBallMesh(0)
+    // v1.3.93：按目标杆重建相机框定并立即定位。
+    //
+    // 修的问题：原先 seek 只还原球局布局 + 确定性重跑物理，**完全不碰相机**。
+    // 相机锚点 replayAnchor 只在 setReplayFrame 里被清空，而 seek 不调它，
+    // 于是 replayFrameView 里的 `this.replayAnchor ?? build(...)` 一直复用
+    // **拖动前那一杆**的锚点 —— 用户看到的「进度条往回滑动后视角又定死在
+    // 滑之前的视角，啥也看不见」就是这个。
+    // 更难看的是两段跳：seek 后镜头卡旧机位，等球一动、playNextShot 调
+    // frameCameraForShot 重建锚点，画面才「啪」地跳到正确位置。
+    //
+    // instant=true 走 reframeReplayNow：重建锚点 + fraction=1 一次性到位，
+    // 且不改相机 mode / 按钮状态（当前是跟随还是俯视由用户之前的选择决定）。
+    this.frameCameraForShot(meta.aim, true)
     this.container.view.update(0, this.container.table.cue.aim)
     this.container.view.render()
   }
@@ -827,7 +892,7 @@ this.frameCameraForShot(this.container.table.cue.aim)
 * 不像跟随模式那样用「白球 / 被击球 / 球袋」框三点，俯视主要看的是「走位
 * 轨迹」，所以两三点已经够，三点反而会偏移镜头。
 */
-private frameCameraForShot(aim: AimEvent): void {
+private frameCameraForShot(aim: AimEvent, instant = false): void {
 const cam = this.container.view.camera
 if (this.diagram || this.container.rules.rulename === "threecushion") {
   cam.suggestMode(cam.topView)
@@ -838,17 +903,30 @@ if (this.diagram || this.container.rules.rulename === "threecushion") {
 // 即「下一杆」的默认框定来摆当前杆的机位——两者 aim 不同，机位因此常常
 // 对着错误的一侧。本杆没有预计算时（如图解模式）才退回现场计算。
 const mine = this.shotMeta[this.currentShotIndex]
-const focus =
+const baseFocus =
   mine && mine.defaultFocus && mine.defaultFocus.length > 0
     ? mine.defaultFocus
     : this.computeFocusPoints(aim)
 if (this.camTopDown) {
-  const { center, radius } = this.topDownBounds(focus, mine)
+  const { center, radius } = this.topDownBounds(baseFocus, mine)
   cam.setReplayNudge(null)
   cam.forceMode(cam.topView)
   cam.topViewAtCenter(center, radius)
   return
 }
+// v1.3.93：跟随机位把「本杆白球真实轨迹」一并纳入框定。
+//
+// 修的问题：用户反馈「经常看不见白球或者看不见被击球」「视角方向定死在击球
+// 方向后又看不见球进另一边的袋」。根因是跟随模式只框「白球 / 被击球 / 袋口」
+// 三个**静态**点：白球撞完目标球后常常横穿半张台去走位，目标球也可能滚向
+// 远端袋口，两者都会直接滚出这三点的包围圆。而 cueTrack（本杆白球轨迹采样，
+// 预演时已经记好）此前**只喂给俯视模式**，跟随模式完全没用上。
+//
+// 取景策略：主看三点（保证击球瞬间的主体清晰），轨迹作为扩展视野并入，
+// 但轨迹权重只有 0.55 —— 全额并入会让长走位把镜头拉成半个俯视图、
+// 远近感尽失；完全不并入又会丢白球。0.55 是「球始终在画面内、又不失跟随感」
+// 的折中。
+const focus = expandFocusWithTrack(baseFocus, mine?.cueTrack)
 // v1.3.66：回退到 v1.3.58 之前的跟随相机——每杆用「白球→被击球→袋口」三点框定，
 // 相机每帧以 0.12 系数平滑飞向该机位；出杆后不做「锁机位」、也不「追袋口」。
 // 旧版的 forceMove(aim)（fraction=1 瞬间摆位）与 cueTrack 稀释、进球后微调
@@ -858,12 +936,20 @@ if (this.camTopDown) {
 // 偏 68.3°（tools/harness/replayyaw.ts，600 杆采样），用袋口方向摆机位会让
 // 画面里的击球方向和玩家实际打的方向对不上（用户反馈「回放模式下摄像头方向
 // 应与出杆方向一致」）。传入 aim.angle 后这部分误差为 0。
-cam.setReplayFrame(focus, (aim as { angle?: number } | undefined)?.angle)
+const angle = (aim as { angle?: number } | undefined)?.angle
+if (instant) {
+  // v1.3.93：seek 专用 —— 按目标杆重建锚点并一次性定位，不经过 mode 切换。
+  cam.reframeReplayNow(focus, angle)
+  return
+}
+cam.setReplayFrame(focus, angle)
 }
 
 /**
  * v1.3.66：diluteTrack（v1.3.60 的白球轨迹稀释）已随「跟随镜头回退每帧三点框定」
  * 一并移除——跟随模式不再掺入轨迹采样点，故该方法无调用方。
+ * v1.3.93：轨迹重新用于跟随框定，但实现改为上面的 expandFocusWithTrack
+ * （按权重收缩后并入三点，而非等距重采样），此说明保留以记录沿革。
  */
 
 /**

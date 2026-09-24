@@ -1,6 +1,6 @@
 /** 查特定世界点在屏幕上的投影位置（v1.3.88 调试用） */
 const puppeteer = require("puppeteer-core")
-const DIST = "/workspace/project/source/billiards-cn/dist"
+const DIST = "/workspace/dev/source/billiards-cn/dist"
 
 async function main() {
   const browser = await puppeteer.launch({

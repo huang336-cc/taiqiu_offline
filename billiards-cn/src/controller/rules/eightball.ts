@@ -23,6 +23,7 @@ import { roundVec } from "../../utils/three-utils"
 import { Respot } from "../../utils/respot"
 import { RerackEvent } from "../../events/rerackevent"
 import { t, foulReason } from "../../utils/i18n"
+import { respotOffTable, OFF_TABLE_FOUL } from "../../utils/offtable"
 
 const flipType = (t: number) => {
   if (t === 1) return 2
@@ -134,8 +135,10 @@ export class EightBall implements Rules {
     return Outcome.potCount(outcome)
   }
 
-  respot(_outcome: Outcome[]): Ball[] {
-    return []
+  respot(outcome: Outcome[]): Ball[] {
+    // v1.3.95：把本杆被打出界的目标球放回它们原来的位置。
+    // 母球出界不在此处理（交给 handleFoul 给对方自由球）。
+    return respotOffTable(this.container.table, outcome)
   }
 
   private wrongBallHitReason(
@@ -167,6 +170,17 @@ export class EightBall implements Rules {
   foulReason(outcome: Outcome[], type?: number): string | null {
     const table = this.container.table
     const cueball = table.cueball
+
+    /**
+     * v1.3.95：跳台犯规 —— 有球飞出台面即判犯规。
+     *
+     * 放在最前面：出界是「球已经不在台上了」，比母球落袋更根本，
+     * 且不应被「本杆有没有进球」之类的后续判据掩盖。
+     * 母球出界 → 对方获自由球（见 handleFoul）；目标球出界 → 见 respot 放回原位。
+     */
+    if (Outcome.offTableBalls(outcome).length > 0) {
+      return OFF_TABLE_FOUL
+    }
 
     if (Outcome.isCueBallPotted(cueball, outcome)) {
       return "母球落袋"
@@ -261,7 +275,13 @@ export class EightBall implements Rules {
       return this.handleGameEnd(false, "8-ball pocketed on foul")
     }
 
-    const startPos = cueball.onTable() ? cueball.pos.clone() : this.placeBall()
+    // v1.3.95：出界的母球虽已被夹回台面内侧（`checkOffTable` 为了让球看起来
+    // 留在桌上），但它**不等于仍在台上** —— 必须靠 offTable 标记区分，
+    // 否则会走到「用母球当前位置当起点」的分支，让对方的自由球失效。
+    const startPos =
+      cueball.onTable() && !cueball.offTable
+        ? cueball.pos.clone()
+        : this.placeBall()
     roundVec(startPos)
     const placeBallEvent = new PlaceBallEvent(startPos, undefined, true)
     this.container.sendEvent(placeBallEvent)

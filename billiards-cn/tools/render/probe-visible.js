@@ -9,7 +9,7 @@
  */
 const puppeteer = require("puppeteer-core")
 
-const DIST = "/workspace/project/source/billiards-cn/dist"
+const DIST = "/workspace/dev/source/billiards-cn/dist"
 
 function arg(name, def) {
   const i = process.argv.indexOf(`--${name}`)

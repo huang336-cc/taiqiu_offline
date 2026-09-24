@@ -14,6 +14,7 @@ import { Rules } from "./rules"
 import { isFirstShot } from "../../utils/utils"
 import { zero } from "../../utils/three-utils"
 import { Respot } from "../../utils/respot"
+import { respotOffTable, OFF_TABLE_FOUL } from "../../utils/offtable"
 import { StartAimEvent } from "../../events/startaimevent"
 import { MatchResultHelper } from "../../network/client/matchresult"
 import { Session } from "../../network/client/session"
@@ -159,7 +160,15 @@ export class ThreeCushion implements Rules {
     }
   }
 
-  foulReason(_outcome: Outcome[]): string | null {
+  foulReason(outcome: Outcome[]): string | null {
+    /**
+     * v1.3.95：球飞出台面判犯规。
+     * 旧实现恒返回 null（三库本来就没有传统意义的犯规），
+     * 但「球不翼而飞」必须终止本杆收益，否则这一杆会被当成有效画。
+     */
+    if (Outcome.offTableBalls(outcome).length > 0) {
+      return OFF_TABLE_FOUL
+    }
     return null
   }
 
@@ -173,7 +182,8 @@ export class ThreeCushion implements Rules {
     return Outcome.getProximityScore(this.cueball, outcome) || 1
   }
 
-  respot(_outcome: Outcome[]): Ball[] {
-    return []
+  respot(outcome: Outcome[]): Ball[] {
+    // v1.3.95：把出界的球放回原位。Sagu 继承本类，同样受益。
+    return respotOffTable(this.container.table, outcome)
   }
 }

@@ -21,6 +21,15 @@ import { getCueTheme } from "../utils/settings"
  *   - 杆身贴图（getCueTexture）     ：画布上=杆头方向，画布下=接缝方向
  *   - 杆尾贴图（getCueButtTexture）：画布上=接缝方向，画布下=杆尾端
  *     分区：0 → GRIP_END 握把；GRIP_END → DECOR_END 杆尾装饰带；DECOR_END → 1 端盖
+ *
+ * 【v1.4.3 统一的定向光照层（实现见文件末段的 enhance）】
+ * 此前所有主题的贴图都只是「平涂图案 + 颗粒」，展开图沿周向没有任何明暗分布，
+ * 贴到圆柱后各角度亮度几乎一致 —— 看上去是一根没有体积的色管。
+ * 实测 dist/previews/cue-*.jpg（260×120）后发现更严重的问题：12 款深色主题的
+ * 有效像素仅占整图 1.2%~3.7%，最亮像素只有 79~190/255（亮色主题为 8.5%~9.1%、
+ * 240），即"设计描述华丽、渲染结果却近于黑棍"。
+ * 故在 19 款之上统一烘焙一层圆柱光照：背光暗面 + 受光亮面 + 镜面高光带 +
+ * 边缘轮廓反光，强度随底图明度自适应（越暗越强，避免形体信息量为 0）。
  */
 
 const W = 256 // 周向分辨率
@@ -29,6 +38,17 @@ const H = 1024 // 轴向（杆长）分辨率
 /** 杆尾（butt）贴图的分区比例 */
 const GRIP_END = Math.floor(H * 0.58) // 握把结束
 const DECOR_END = Math.floor(H * 0.84) // 装饰带结束（之后为端盖）
+
+/**
+ * 【v1.4.3】接缝金属接环宽度（单位：贴图像素）。
+ * 由 cuemesh 的几何换算而来：cueShaft 段映射 0.71L → 1024px，
+ * cueButt 段映射 0.28L → 1024px。于是
+ *   18px ÷ (0.71L/1024) = 0.0125L    46px ÷ (0.28L/1024) = 0.0126L
+ * 二者几乎相等 —— shaft 贴图画布底端的半枚 + butt 贴图画布顶端的半枚，
+ * 拼起来正好是一整枚宽度一致的接环，不会在两段 mesh 上出现粗细跳变。
+ */
+const JOINT_SHAFT = 18
+const JOINT_BUTT = 46
 
 const cache = new Map<string, Texture>()
 
@@ -51,11 +71,12 @@ function rr(a: number, b: number) {
 export function getCueTexture(themeId: string): Texture | null {
   if (themeId === "auto") return null
   if (cache.has(themeId)) return cache.get(themeId)!
-  const tex = build(themeId)
-  if (tex) {
-    finalize(tex)
-    cache.set(themeId, tex)
-  }
+  const raw = build(themeId)
+  if (!raw) return null
+  // v1.4.3：接缝接环 + 轴向形体 + 周向定向光照
+  const tex = enhance(raw, themeId, "shaft")
+  finalize(tex)
+  cache.set(themeId, tex)
   return tex
 }
 
@@ -64,11 +85,12 @@ export function getCueButtTexture(themeId: string): Texture | null {
   if (themeId === "auto") return null
   const key = "butt:" + themeId
   if (cache.has(key)) return cache.get(key)!
-  const tex = buildButt(themeId)
-  if (!tex) {
-    // 遗留主题（dragon/azure/minions/peppa/qilin/ultraman）沿用整根统一贴图，行为不变
+  const raw = buildButt(themeId)
+  if (!raw) {
+    // 未单独绘制杆尾的主题沿用整根统一贴图，行为不变
     return getCueTexture(themeId)
   }
+  const tex = enhance(raw, themeId, "butt")
   finalize(tex)
   cache.set(key, tex)
   return tex
@@ -181,7 +203,7 @@ function ring(
   }
 }
 
-/** 在画布上平铺菱形鳞片 */
+/** 在画布上平铺菱形鳞片（v1.4.3：跨接缝的鳞片自动补画，保证左右缝合连续） */
 function drawScales(
   ctx: CanvasRenderingContext2D,
   rows: number,
@@ -197,24 +219,47 @@ function drawScales(
     for (let c = 0; c < cols; c++) {
       const x = c * sw + (r % 2 ? sw / 2 : 0)
       const y = y0 + r * sh
-      ctx.beginPath()
-      ctx.moveTo(x + sw / 2, y)
-      ctx.lineTo(x + sw, y + sh / 2)
-      ctx.lineTo(x + sw / 2, y + sh)
-      ctx.lineTo(x, y + sh / 2)
-      ctx.closePath()
-      ctx.fillStyle = fill(r, c)
-      ctx.fill()
-      if (stroke) {
-        ctx.strokeStyle = stroke
-        ctx.lineWidth = 1.5
-        ctx.stroke()
+      const one = (px: number) => {
+        ctx.beginPath()
+        ctx.moveTo(px + sw / 2, y)
+        ctx.lineTo(px + sw, y + sh / 2)
+        ctx.lineTo(px + sw / 2, y + sh)
+        ctx.lineTo(px, y + sh / 2)
+        ctx.closePath()
+        ctx.fillStyle = fill(r, c)
+        ctx.fill()
+        if (stroke) {
+          ctx.strokeStyle = stroke
+          ctx.lineWidth = 1.5
+          ctx.stroke()
+        }
       }
+      one(x)
+      // 交错行最后一枚鳞片的右半会越过 x=W 接缝：在左侧补画一份
+      if (x + sw > W) one(x - W)
     }
   }
 }
 
-/** 连绵云纹：沿杆身环绕分布（横向波浪线 = 环绕一周） */
+/**
+ * 【v1.4.3】wrap 安全绘制：把 draw 以 x 平移 -W / 0 / +W 各执行一遍，
+ * 越界部分被画布自动裁剪。任何可能跨越 x=0/W 接缝的图案都必须经过它，
+ * 否则圆柱 UV 缝合处会出现一道可见的断纹（贴图左右边缘亮度不一致）。
+ */
+function drawWrapped(
+  ctx: CanvasRenderingContext2D,
+  draw: () => void
+) {
+  for (const dx of [-W, 0, W]) {
+    ctx.save()
+    ctx.translate(dx, 0)
+    draw()
+    ctx.restore()
+  }
+}
+
+/** 连绵云纹：沿杆身环绕分布（横向波浪线 = 环绕一周）。
+ *  v1.4.3：终点 y 与起点 y 相同（周期化），保证接缝处云纹连续 */
 function cloudRibbon(
   ctx: CanvasRenderingContext2D,
   y: number,
@@ -223,11 +268,12 @@ function cloudRibbon(
   lineWidth: number,
   phase = 0
 ) {
+  const y0 = y + Math.sin(phase) * amp * 0.3
   ctx.strokeStyle = color
   ctx.lineWidth = lineWidth
   ctx.beginPath()
-  ctx.moveTo(0, y + Math.sin(phase) * amp * 0.3)
-  ctx.bezierCurveTo(W * 0.3, y - amp, W * 0.62, y + amp, W, y + Math.sin(phase + 1.2) * amp * 0.4)
+  ctx.moveTo(0, y0)
+  ctx.bezierCurveTo(W * 0.3, y - amp, W * 0.62, y + amp, W, y0)
   ctx.stroke()
 }
 
@@ -355,16 +401,17 @@ function gripCeramic(
   ctx.restore()
 }
 
-/** 防滑橡胶细密点阵 */
+/** 防滑橡胶细密点阵（v1.4.3：底色可参数化，奥特曼银灰款复用） */
 function gripRubberDots(
   ctx: CanvasRenderingContext2D,
   y0: number,
-  y1: number
+  y1: number,
+  base: [string, string, string] = ["#23262e", "#15171d", "#0e1014"]
 ) {
   vBand(ctx, y0, y1, [
-    [0, "#23262e"],
-    [0.5, "#15171d"],
-    [1, "#0e1014"],
+    [0, base[0]],
+    [0.5, base[1]],
+    [1, base[2]],
   ])
   const step = 9
   for (let y = y0 + 4; y < y1; y += step) {
@@ -900,6 +947,121 @@ function capGoldMedallion(ctx: CanvasRenderingContext2D, y: number) {
   capBase(ctx, discY + discH, "rgba(8,6,3,0.5)")
 }
 
+/** 主色环 + 细鳞纹端盖（屠龙斩 / 青龙 / 火麒麟共用，颜色参数化） */
+function capScaleRing(
+  ctx: CanvasRenderingContext2D,
+  y: number,
+  baseDark: string,
+  scaleA: string,
+  scaleB: string,
+  ringColor: string
+) {
+  vBand(ctx, y, H, [
+    [0, baseDark],
+    [0.6, "rgba(0,0,0,0.35)"],
+    [1, "rgba(0,0,0,0.5)"],
+  ])
+  const h = H - y
+  // 主色金属环
+  ring(ctx, y + h * 0.24, h * 0.14, ringColor, { edge: "rgba(255,255,255,0.4)" })
+  // 端面细鳞（呼应杆身母题）
+  drawScales(
+    ctx,
+    5,
+    8,
+    (r, c) => ((r + c) % 2 ? scaleA : scaleB),
+    "rgba(0,0,0,0.45)",
+    y + h * 0.46,
+    H
+  )
+  capBase(ctx, y + h * 0.88, "rgba(0,0,0,0.4)")
+}
+
+/** 护目镜圆盘端盖（小黄人）：黑带 + 蓝圈白睛 + 高光点 */
+function capGoggleDisc(ctx: CanvasRenderingContext2D, y: number) {
+  vBand(ctx, y, H, [
+    [0, "#1a1a1a"],
+    [1, "#0d0d0d"],
+  ])
+  const h = H - y
+  band(ctx, y, y + h * 0.16, "#1f6fb2")
+  const cy = y + h * 0.55
+  ctx.fillStyle = "#1f6fb2"
+  ctx.beginPath()
+  ctx.arc(W / 2, cy, W * 0.3, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = "#bfe3ff"
+  ctx.beginPath()
+  ctx.arc(W / 2, cy, W * 0.2, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = "#0a1a2a"
+  ctx.beginPath()
+  ctx.arc(W / 2, cy, W * 0.1, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = "rgba(255,255,255,0.55)"
+  ctx.beginPath()
+  ctx.arc(W / 2 - W * 0.08, cy - W * 0.07, W * 0.035, 0, Math.PI * 2)
+  ctx.fill()
+  capBase(ctx, y + h * 0.9, "rgba(0,0,0,0.4)")
+}
+
+/** 爱心粉盖（小猪佩奇）：粉色端面 + 居中大爱心 + 珠光点 */
+function capHeartCap(ctx: CanvasRenderingContext2D, y: number) {
+  vBand(ctx, y, H, [
+    [0, "#ff8fbb"],
+    [1, "#e86a9c"],
+  ])
+  const h = H - y
+  const heart = (cx: number, cy: number, s: number) => {
+    ctx.save()
+    ctx.translate(cx, cy)
+    ctx.scale(s, s)
+    ctx.fillStyle = "#ffffff"
+    ctx.beginPath()
+    ctx.moveTo(0, 8)
+    ctx.bezierCurveTo(-12, -6, -22, 8, 0, 24)
+    ctx.bezierCurveTo(22, 8, 12, -6, 0, 8)
+    ctx.closePath()
+    ctx.fill()
+    ctx.restore()
+  }
+  heart(W / 2, y + h * 0.42, 1.7)
+  heart(W * 0.18, y + h * 0.16, 0.7)
+  heart(W * 0.84, y + h * 0.2, 0.6)
+  capBase(ctx, y + h * 0.88, "rgba(0,0,0,0.22)")
+}
+
+/** 六边形护甲银盖（奥特曼）：银底 + 红色能量环 + 六角块阵 */
+function capHexPlates(ctx: CanvasRenderingContext2D, y: number) {
+  vBand(ctx, y, H, [
+    [0, "#c9d3da"],
+    [0.6, "#9fabb4"],
+    [1, "#77828c"],
+  ])
+  const h = H - y
+  ring(ctx, y + h * 0.14, h * 0.07, "#c81f1f", { edge: "rgba(255,255,255,0.35)" })
+  const hex = (cx: number, cy: number, r: number) => {
+    ctx.beginPath()
+    for (let k = 0; k < 6; k++) {
+      const a = (Math.PI / 3) * k - Math.PI / 6
+      const x = cx + r * Math.cos(a)
+      const yy = cy + r * Math.sin(a)
+      k === 0 ? ctx.moveTo(x, yy) : ctx.lineTo(x, yy)
+    }
+    ctx.closePath()
+    ctx.fillStyle = "#d7dde2"
+    ctx.fill()
+    ctx.strokeStyle = "#8d99a2"
+    ctx.lineWidth = 2
+    ctx.stroke()
+  }
+  for (let r = 0; r < 3; r++) {
+    hex(W * 0.28, y + h * (0.4 + r * 0.2), 22)
+    hex(W * 0.72, y + h * (0.5 + r * 0.2), 22)
+  }
+  capBase(ctx, y + h * 0.92, "rgba(0,0,0,0.35)")
+}
+
 // ==================== 主题构建（杆身） ====================
 
 function build(themeId: string): Texture | null {
@@ -946,10 +1108,22 @@ function build(themeId: string): Texture | null {
   }
 }
 
-/** 主题构建（杆尾：握把 + 装饰 + 端盖）。仅 12 款新区主题有独立杆尾。 */
+/** 主题构建（杆尾：握把 + 装饰 + 端盖）。19 款全部有独立杆尾（v1.4.3 补齐遗留 6 款）。 */
 function buildButt(themeId: string): Texture | null {
   const kind = getCueTheme(themeId).kind
   switch (kind) {
+    case "dragon":
+      return buildDragonButt()
+    case "azure":
+      return buildAzureButt()
+    case "minions":
+      return buildMinionsButt()
+    case "peppa":
+      return buildPeppaButt()
+    case "qilin":
+      return buildQilinButt()
+    case "ultraman":
+      return buildUltramanButt()
     case "moyunlongque":
       return buildMoyunlongqueButt()
     case "qingzhutingfeng":
@@ -999,15 +1173,17 @@ function buildDragon(): Texture {
       (r + c) % 2 ? "#caa23a" : "#9c7a1e",
     "rgba(40,20,0,0.5)"
   )
-  // 剑光斜纹
-  ctx.strokeStyle = "rgba(255,240,200,0.55)"
-  ctx.lineWidth = 6
-  for (let i = -1; i < 4; i++) {
-    ctx.beginPath()
-    ctx.moveTo(i * 90, 0)
-    ctx.lineTo(i * 90 + H * 0.32, H)
-    ctx.stroke()
-  }
+  // 剑光斜纹（wrap 安全：跨接缝自动补画）
+  drawWrapped(ctx, () => {
+    ctx.strokeStyle = "rgba(255,240,200,0.55)"
+    ctx.lineWidth = 6
+    for (let i = -1; i < 4; i++) {
+      ctx.beginPath()
+      ctx.moveTo(i * 90, 0)
+      ctx.lineTo(i * 90 + H * 0.32, H)
+      ctx.stroke()
+    }
+  })
   // 尾部金属金箍
   ctx.fillStyle = "#e8c878"
   ctx.fillRect(0, H - 60, W, 60)
@@ -1032,7 +1208,7 @@ function buildAzure(): Texture {
       (r + c) % 2 ? "#5fd0e0" : "#2f9fc0",
     "rgba(5,30,45,0.55)"
   )
-  // 青色流光
+  // 青色流光（左右对称，天然 wrap 安全）
   ctx.strokeStyle = "rgba(180,255,255,0.4)"
   ctx.lineWidth = 4
   ctx.beginPath()
@@ -1093,13 +1269,15 @@ function buildPeppa(): Texture {
     ctx.fill()
     ctx.restore()
   }
-  for (let r = 0; r < 9; r++) {
-    for (let c = 0; c < 3; c++) {
-      const x = 50 + c * 80 + (r % 2 ? 40 : 0)
-      const y = 60 + r * 110
-      heart(x, y, 1.1)
+  drawWrapped(ctx, () => {
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 3; c++) {
+        const x = 50 + c * 80 + (r % 2 ? 40 : 0)
+        const y = 60 + r * 110
+        heart(x, y, 1.1)
+      }
     }
-  }
+  })
   ctx.fillStyle = "#ff6fa8"
   ctx.fillRect(0, H - 60, W, 60)
   return toTexture(cv)
@@ -1115,18 +1293,20 @@ function buildQilin(): Texture {
   g.addColorStop(1, "#7a1404")
   ctx.fillStyle = g
   ctx.fillRect(0, 0, W, H)
-  // 火舌
-  ctx.fillStyle = "rgba(255,220,120,0.85)"
-  for (let i = 0; i < 18; i++) {
-    const x = (i * 53) % W
-    const y = (i * 137) % H
-    ctx.beginPath()
-    ctx.moveTo(x, y + 40)
-    ctx.quadraticCurveTo(x + 22, y - 10, x + 40, y + 30)
-    ctx.quadraticCurveTo(x + 18, y + 20, x, y + 40)
-    ctx.closePath()
-    ctx.fill()
-  }
+  // 火舌（wrap 安全）
+  drawWrapped(ctx, () => {
+    ctx.fillStyle = "rgba(255,220,120,0.85)"
+    for (let i = 0; i < 18; i++) {
+      const x = (i * 53) % W
+      const y = (i * 137) % H
+      ctx.beginPath()
+      ctx.moveTo(x, y + 40)
+      ctx.quadraticCurveTo(x + 22, y - 10, x + 40, y + 30)
+      ctx.quadraticCurveTo(x + 18, y + 20, x, y + 40)
+      ctx.closePath()
+      ctx.fill()
+    }
+  })
   ctx.fillStyle = "#ffd24a"
   ctx.fillRect(0, H - 60, W, 60)
   return toTexture(cv)
@@ -1142,15 +1322,17 @@ function buildUltraman(): Texture {
   g.addColorStop(1, "#8c98a2")
   ctx.fillStyle = g
   ctx.fillRect(0, 0, W, H)
-  // 金属高光竖纹
-  ctx.strokeStyle = "rgba(255,255,255,0.45)"
-  ctx.lineWidth = 3
-  for (let i = 0; i < W; i += 24) {
-    ctx.beginPath()
-    ctx.moveTo(i, 0)
-    ctx.lineTo(i + 8, H)
-    ctx.stroke()
-  }
+  // 金属高光竖纹（wrap 安全）
+  drawWrapped(ctx, () => {
+    ctx.strokeStyle = "rgba(255,255,255,0.45)"
+    ctx.lineWidth = 3
+    for (let i = 0; i < W; i += 24) {
+      ctx.beginPath()
+      ctx.moveTo(i, 0)
+      ctx.lineTo(i + 8, H)
+      ctx.stroke()
+    }
+  })
   // 红色能量环带
   ctx.fillStyle = "#c81f1f"
   ctx.fillRect(0, H * 0.22, W, H * 0.05)
@@ -1307,41 +1489,43 @@ function buildFengyuliujinShaft(): Texture {
     lines: 120,
     wave: 3,
   })
-  // 幻彩鲍鱼贝贴片：排布模拟凤凰羽翼形态（沿杆身呈羽列）
-  for (let r = 0; r < 11; r++) {
-    for (let c = 0; c < 3; c++) {
-      const x = 46 + c * 84 + (r % 2 ? 42 : 0)
-      const y = 54 + r * 92
+  // 幻彩鲍鱼贝贴片：排布模拟凤凰羽翼形态（沿杆身呈羽列；wrap 安全）
+  drawWrapped(ctx, () => {
+    for (let r = 0; r < 11; r++) {
+      for (let c = 0; c < 3; c++) {
+        const x = 46 + c * 84 + (r % 2 ? 42 : 0)
+        const y = 54 + r * 92
       // 弧形羽片
-      ctx.save()
-      ctx.translate(x, y)
-      ctx.rotate(-0.35 + (c - 1) * 0.22)
-      const g = ctx.createLinearGradient(-26, -34, 26, 34)
-      const hue = (r * 31 + c * 74) % 360
-      g.addColorStop(0, `hsla(${hue},72%,78%,0.92)`)
-      g.addColorStop(0.45, `hsla(${(hue + 55) % 360},68%,66%,0.88)`)
-      g.addColorStop(1, `hsla(${(hue + 130) % 360},62%,52%,0.8)`)
-      ctx.fillStyle = g
-      ctx.beginPath()
-      ctx.moveTo(0, -40)
-      ctx.bezierCurveTo(24, -22, 24, 22, 0, 40)
-      ctx.bezierCurveTo(-10, 22, -10, -22, 0, -40)
-      ctx.closePath()
-      ctx.fill()
-      // 自然虹彩光泽（斜向高光）
-      ctx.strokeStyle = "rgba(255,255,255,0.4)"
-      ctx.lineWidth = 1.4
-      ctx.beginPath()
-      ctx.moveTo(-7, -26)
-      ctx.lineTo(7, 24)
-      ctx.stroke()
-      // 边缘细鎏金线勾边
-      ctx.strokeStyle = "rgba(232,200,120,0.9)"
-      ctx.lineWidth = 1.6
-      ctx.stroke()
-      ctx.restore()
+        ctx.save()
+        ctx.translate(x, y)
+        ctx.rotate(-0.35 + (c - 1) * 0.22)
+        const g = ctx.createLinearGradient(-26, -34, 26, 34)
+        const hue = (r * 31 + c * 74) % 360
+        g.addColorStop(0, `hsla(${hue},72%,78%,0.92)`)
+        g.addColorStop(0.45, `hsla(${(hue + 55) % 360},68%,66%,0.88)`)
+        g.addColorStop(1, `hsla(${(hue + 130) % 360},62%,52%,0.8)`)
+        ctx.fillStyle = g
+        ctx.beginPath()
+        ctx.moveTo(0, -40)
+        ctx.bezierCurveTo(24, -22, 24, 22, 0, 40)
+        ctx.bezierCurveTo(-10, 22, -10, -22, 0, -40)
+        ctx.closePath()
+        ctx.fill()
+        // 自然虹彩光泽（斜向高光）
+        ctx.strokeStyle = "rgba(255,255,255,0.4)"
+        ctx.lineWidth = 1.4
+        ctx.beginPath()
+        ctx.moveTo(-7, -26)
+        ctx.lineTo(7, 24)
+        ctx.stroke()
+        // 边缘细鎏金线勾边
+        ctx.strokeStyle = "rgba(232,200,120,0.9)"
+        ctx.lineWidth = 1.6
+        ctx.stroke()
+        ctx.restore()
+      }
     }
-  }
+  })
   return toTexture(cv)
 }
 
@@ -1462,50 +1646,57 @@ function buildNihongsuguangShaft(): Texture {
     [0.7, "#241046"],
     [1, "#180a30"],
   ])
-  // 通透玻璃质感：竖向高光 + 内部层次
+  // 通透玻璃质感：竖向高光 + 内部层次（wrap 安全）
   ctx.save()
-  for (let i = 0; i < 26; i++) {
-    const x = rr(0, W)
-    ctx.fillStyle = `rgba(255,255,255,${rr(0.03, 0.11)})`
-    ctx.fillRect(x, 0, rr(2, 7), H)
-  }
+  drawWrapped(ctx, () => {
+    for (let i = 0; i < 26; i++) {
+      const x = rr(0, W)
+      ctx.fillStyle = `rgba(255,255,255,${rr(0.03, 0.11)})`
+      ctx.fillRect(x, 0, rr(2, 7), H)
+    }
+  })
   ctx.restore()
-  // 内部粉蓝渐变带状结构（沿杆身螺旋延展）
+  // 内部粉蓝渐变带状结构（沿杆身螺旋延展；wrap 安全——辉光跨界补画）
   ctx.save()
   ctx.shadowColor = "#ff5fd0"
   ctx.shadowBlur = 14
-  for (let i = 0; i < 3; i++) {
-    const g = ctx.createLinearGradient(0, 0, W, H)
-    g.addColorStop(0, "rgba(255,123,224,0.85)")
-    g.addColorStop(0.5, "rgba(150,140,255,0.8)")
-    g.addColorStop(1, "rgba(90,200,255,0.85)")
-    ctx.strokeStyle = g
-    ctx.lineWidth = 22
-    ctx.beginPath()
-    const x0 = i * (W / 3)
-    for (let t = 0; t <= 1; t += 0.01) {
-      const x = (x0 + t * W * 0.9) % W
-      const y = t * H
-      t === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+  drawWrapped(ctx, () => {
+    for (let i = 0; i < 3; i++) {
+      const x0 = i * (W / 3)
+      // 渐变相对「带自身起点」而非画布对角线：跨接缝补画的份与原件颜色一致
+      const g = ctx.createLinearGradient(x0, 0, x0 + W * 0.9, H)
+      g.addColorStop(0, "rgba(255,123,224,0.85)")
+      g.addColorStop(0.5, "rgba(150,140,255,0.8)")
+      g.addColorStop(1, "rgba(90,200,255,0.85)")
+      ctx.strokeStyle = g
+      ctx.lineWidth = 22
+      ctx.beginPath()
+      for (let t = 0; t <= 1; t += 0.01) {
+        const x = (x0 + t * W * 0.9) % W
+        const y = t * H
+        t === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+      }
+      ctx.stroke()
     }
-    ctx.stroke()
-  }
+  })
   ctx.restore()
-  // 内部色带层次通透分明：叠加细亮线
+  // 内部色带层次通透分明：叠加细亮线（wrap 安全）
   ctx.save()
   ctx.globalAlpha = 0.5
-  for (let i = 0; i < 3; i++) {
-    ctx.strokeStyle = i % 2 ? "rgba(160,230,255,0.8)" : "rgba(255,190,240,0.8)"
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    const x0 = i * (W / 3) + 8
-    for (let t = 0; t <= 1; t += 0.01) {
-      const x = (x0 + t * W * 0.9) % W
-      const y = t * H
-      t === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+  drawWrapped(ctx, () => {
+    for (let i = 0; i < 3; i++) {
+      ctx.strokeStyle = i % 2 ? "rgba(160,230,255,0.8)" : "rgba(255,190,240,0.8)"
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      const x0 = i * (W / 3) + 8
+      for (let t = 0; t <= 1; t += 0.01) {
+        const x = (x0 + t * W * 0.9) % W
+        const y = t * H
+        t === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+      }
+      ctx.stroke()
     }
-    ctx.stroke()
-  }
+  })
   ctx.restore()
   return toTexture(cv)
 }
@@ -1568,31 +1759,33 @@ function buildYouciyeyingShaft(): Texture {
   // 金属细磨砂
   speckle(ctx, 0, H, 2400, "rgba(255,255,255,0.06)", 1.3)
   speckle(ctx, 0, H, 1800, "rgba(0,0,0,0.3)", 1.3)
-  // 放射状尖刺暗纹（顺着杆身排布，尖刺朝杆头方向）
+  // 放射状尖刺暗纹（顺着杆身排布，尖刺朝杆头方向；wrap 安全）
   ctx.save()
-  for (let i = 0; i < 76; i++) {
-    const x = rr(0, W)
-    const y = rr(-40, H)
-    const h = rr(30, 74)
-    const w = rr(9, 20)
-    const g = ctx.createLinearGradient(x, y, x, y + h)
-    g.addColorStop(0, "rgba(6,6,9,0.9)")
-    g.addColorStop(1, "rgba(6,6,9,0.15)")
-    ctx.fillStyle = g
-    ctx.beginPath()
-    ctx.moveTo(x - w / 2, y + h)
-    ctx.lineTo(x, y)
-    ctx.lineTo(x + w / 2, y + h)
-    ctx.closePath()
-    ctx.fill()
-    // 尖刺侧边微光（金属冷光）
-    ctx.strokeStyle = "rgba(180,190,215,0.16)"
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.moveTo(x - w / 2, y + h)
-    ctx.lineTo(x, y)
-    ctx.stroke()
-  }
+  drawWrapped(ctx, () => {
+    for (let i = 0; i < 76; i++) {
+      const x = rr(0, W)
+      const y = rr(-40, H)
+      const h = rr(30, 74)
+      const w = rr(9, 20)
+      const g = ctx.createLinearGradient(x, y, x, y + h)
+      g.addColorStop(0, "rgba(6,6,9,0.9)")
+      g.addColorStop(1, "rgba(6,6,9,0.15)")
+      ctx.fillStyle = g
+      ctx.beginPath()
+      ctx.moveTo(x - w / 2, y + h)
+      ctx.lineTo(x, y)
+      ctx.lineTo(x + w / 2, y + h)
+      ctx.closePath()
+      ctx.fill()
+      // 尖刺侧边微光（金属冷光）
+      ctx.strokeStyle = "rgba(180,190,215,0.16)"
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(x - w / 2, y + h)
+      ctx.lineTo(x, y)
+      ctx.stroke()
+    }
+  })
   ctx.restore()
   // 局部点缀小块深海贝母（低调幻彩珠光）
   for (let i = 0; i < 16; i++) {
@@ -1692,21 +1885,23 @@ function buildYuntianghuanmengShaft(): Texture {
     [0.62, "#fbd5e6"],
     [1, "#e9d6ff"],
   ])
-  // 朦胧柔和云朵暗纹
+  // 朦胧柔和云朵暗纹（wrap 安全）
   ctx.save()
   ctx.filter = "blur(3px)"
-  for (let r = 0; r < 10; r++) {
-    for (let c = 0; c < 3; c++) {
-      const x = 52 + c * 82 + (r % 2 ? 41 : 0)
-      const y = 58 + r * 104
-      ctx.fillStyle = "rgba(255,255,255,0.62)"
-      ctx.beginPath()
-      ctx.arc(x - 17, y, 23, 0, Math.PI * 2)
-      ctx.arc(x + 17, y, 23, 0, Math.PI * 2)
-      ctx.arc(x, y - 15, 27, 0, Math.PI * 2)
-      ctx.fill()
+  drawWrapped(ctx, () => {
+    for (let r = 0; r < 10; r++) {
+      for (let c = 0; c < 3; c++) {
+        const x = 52 + c * 82 + (r % 2 ? 41 : 0)
+        const y = 58 + r * 104
+        ctx.fillStyle = "rgba(255,255,255,0.62)"
+        ctx.beginPath()
+        ctx.arc(x - 17, y, 23, 0, Math.PI * 2)
+        ctx.arc(x + 17, y, 23, 0, Math.PI * 2)
+        ctx.arc(x, y - 15, 27, 0, Math.PI * 2)
+        ctx.fill()
+      }
     }
-  }
+  })
   ctx.restore()
   // 果冻半透：柔和珠光 + 内部通透层次
   for (let i = 0; i < 22; i++) {
@@ -1759,23 +1954,25 @@ function buildBingjingxuepoShaft(): Texture {
     ctx.stroke()
   }
   ctx.restore()
-  // 杆边缘薄冰切面轮廓（沿周向的清脆切面线）
+  // 杆边缘薄冰切面轮廓（沿周向的清脆切面线；wrap 安全）
   ctx.save()
-  for (let i = 0; i < 16; i++) {
-    const x = (i * W) / 16 + rr(-5, 5)
-    ctx.strokeStyle = "rgba(255,255,255,0.85)"
-    ctx.lineWidth = rr(1, 2.6)
-    ctx.beginPath()
-    ctx.moveTo(x, 0)
-    ctx.lineTo(x + rr(-10, 10), H)
-    ctx.stroke()
-    ctx.strokeStyle = "rgba(150,195,225,0.35)"
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.moveTo(x + 3, 0)
-    ctx.lineTo(x + 3 + rr(-10, 10), H)
-    ctx.stroke()
-  }
+  drawWrapped(ctx, () => {
+    for (let i = 0; i < 16; i++) {
+      const x = (i * W) / 16 + rr(-5, 5)
+      ctx.strokeStyle = "rgba(255,255,255,0.85)"
+      ctx.lineWidth = rr(1, 2.6)
+      ctx.beginPath()
+      ctx.moveTo(x, 0)
+      ctx.lineTo(x + rr(-10, 10), H)
+      ctx.stroke()
+      ctx.strokeStyle = "rgba(150,195,225,0.35)"
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(x + 3, 0)
+      ctx.lineTo(x + 3 + rr(-10, 10), H)
+      ctx.stroke()
+    }
+  })
   ctx.restore()
   // 通透干净：整体提亮 + 冷调
   band(ctx, 0, H, "rgba(230,245,255,0.14)")
@@ -2215,4 +2412,358 @@ function buildWanxiangquanzhangButt(): Texture {
   }
   capGoldMedallion(ctx, DECOR_END)
   return toTexture(cv)
+}
+
+// ==================== 遗留 6 款主题 · 杆尾（v1.4.3 补齐独立分区） ====================
+// 此前这 6 款没有独立杆尾贴图（buildButt 返回 null → 整根共用一张贴图），
+// 握把/装饰带/端盖三分区完全缺失，图案在杆尾段被拉伸错位。
+// 现按各自母题补齐：握把（grip 工具）+ 装饰带（呼应杆身图案）+ 端盖（专属造型）。
+
+/** 屠龙斩：暗红木握把 + 金鳞装饰带 + 鎏金鳞环端盖 */
+function buildDragonButt(): Texture {
+  srand(3111)
+  const { cv, ctx } = newCanvas()
+  vBand(ctx, 0, 46, [
+    [0, "#3a0d0d"],
+    [1, "#4a1212"],
+  ])
+  gripWood(ctx, 46, GRIP_END, "#4a1414", "#2a0b0b", "rgba(215,170,110,0.4)")
+  vBand(ctx, GRIP_END, DECOR_END, [
+    [0, "#331010"],
+    [0.5, "#230a0a"],
+    [1, "#160606"],
+  ])
+  // 金鳞装饰带（呼应杆身龙鳞）
+  drawScales(
+    ctx,
+    5,
+    8,
+    (r, c) => ((r + c) % 2 ? "#caa23a" : "#9c7a1e"),
+    "rgba(40,20,0,0.5)",
+    GRIP_END + 10,
+    DECOR_END - 10
+  )
+  capScaleRing(ctx, DECOR_END, "#2a0d0d", "#caa23a", "#9c7a1e", "#e8c878")
+  return toTexture(cv)
+}
+
+/** 青龙：青蓝木握把 + 青鳞装饰带 + 青玉鳞环端盖 */
+function buildAzureButt(): Texture {
+  srand(3222)
+  const { cv, ctx } = newCanvas()
+  vBand(ctx, 0, 46, [
+    [0, "#0e4a6e"],
+    [1, "#12557a"],
+  ])
+  gripWood(ctx, 46, GRIP_END, "#0f4a68", "#09324a", "rgba(140,220,235,0.35)")
+  vBand(ctx, GRIP_END, DECOR_END, [
+    [0, "#0d4260"],
+    [0.5, "#09344c"],
+    [1, "#062838"],
+  ])
+  drawScales(
+    ctx,
+    5,
+    8,
+    (r, c) => ((r + c) % 2 ? "#5fd0e0" : "#2f9fc0"),
+    "rgba(5,30,45,0.55)",
+    GRIP_END + 10,
+    DECOR_END - 10
+  )
+  capScaleRing(ctx, DECOR_END, "#0a3a52", "#5fd0e0", "#2f9fc0", "#3fe0c0")
+  return toTexture(cv)
+}
+
+/** 小黄人：蓝色工装橡胶点阵握把 + 黄色装饰带（蓝口袋线）+ 护目镜圆盘端盖 */
+function buildMinionsButt(): Texture {
+  srand(3333)
+  const { cv, ctx } = newCanvas()
+  vBand(ctx, 0, 46, [
+    [0, "#f4d000"],
+    [1, "#e0bd00"],
+  ])
+  gripRubberDots(ctx, 46, GRIP_END)
+  vBand(ctx, GRIP_END, DECOR_END, [
+    [0, "#f4d000"],
+    [0.5, "#e5c400"],
+    [1, "#cfae00"],
+  ])
+  // 工装裤口袋线（双蓝条）
+  const dh = DECOR_END - GRIP_END
+  band(ctx, GRIP_END + dh * 0.4, GRIP_END + dh * 0.46, "#1f6fb2")
+  band(ctx, GRIP_END + dh * 0.56, GRIP_END + dh * 0.62, "#1f6fb2")
+  capGoggleDisc(ctx, DECOR_END)
+  return toTexture(cv)
+}
+
+/** 小猪佩奇：粉色柔雾硅胶握把 + 深粉装饰带 + 白色爱心端盖 */
+function buildPeppaButt(): Texture {
+  srand(3444)
+  const { cv, ctx } = newCanvas()
+  vBand(ctx, 0, 46, [
+    [0, "#ff9ec4"],
+    [1, "#ff8fbb"],
+  ])
+  gripSiliconeMatte(ctx, 46, GRIP_END, "#ffaed0", "#f790ba")
+  vBand(ctx, GRIP_END, DECOR_END, [
+    [0, "#ff86b4"],
+    [0.5, "#f2739f"],
+    [1, "#e2618e"],
+  ])
+  speckle(ctx, GRIP_END, DECOR_END, 500, "rgba(255,255,255,0.18)", 1.4)
+  capHeartCap(ctx, DECOR_END)
+  return toTexture(cv)
+}
+
+/** 火麒麟：深红粗纹橡胶握把 + 火舌装饰带 + 鎏金鳞环端盖 */
+function buildQilinButt(): Texture {
+  srand(3555)
+  const { cv, ctx } = newCanvas()
+  vBand(ctx, 0, 46, [
+    [0, "#d8320a"],
+    [1, "#b82a08"],
+  ])
+  gripCoarseRubber(ctx, 46, GRIP_END)
+  vBand(ctx, GRIP_END, DECOR_END, [
+    [0, "#a32608"],
+    [0.5, "#8a1f06"],
+    [1, "#6e1804"],
+  ])
+  // 火舌点缀（呼应杆身）
+  ctx.fillStyle = "rgba(255,220,120,0.72)"
+  for (let i = 0; i < 10; i++) {
+    const x = (i * 61 + 17) % W
+    const y = GRIP_END + 12 + ((i * 53) % (DECOR_END - GRIP_END - 30))
+    ctx.beginPath()
+    ctx.moveTo(x, y + 26)
+    ctx.quadraticCurveTo(x + 15, y - 6, x + 27, y + 20)
+    ctx.quadraticCurveTo(x + 12, y + 13, x, y + 26)
+    ctx.closePath()
+    ctx.fill()
+  }
+  capScaleRing(ctx, DECOR_END, "#7a1404", "#ffd24a", "#ff9a2a", "#e8c878")
+  return toTexture(cv)
+}
+
+/** 奥特曼：银灰橡胶点阵握把 + 红色能量环装饰带 + 六角护甲端盖 */
+function buildUltramanButt(): Texture {
+  srand(3666)
+  const { cv, ctx } = newCanvas()
+  vBand(ctx, 0, 46, [
+    [0, "#c3ccd4"],
+    [1, "#b3bec8"],
+  ])
+  gripRubberDots(ctx, 46, GRIP_END, ["#aeb9c2", "#8f9aa4", "#6f7a84"])
+  vBand(ctx, GRIP_END, DECOR_END, [
+    [0, "#b9c4cc"],
+    [0.5, "#9aa6ae"],
+    [1, "#7e8a92"],
+  ])
+  // 红色能量环带（呼应杆身）
+  const dh = DECOR_END - GRIP_END
+  ring(ctx, GRIP_END + dh * 0.26, dh * 0.09, "#c81f1f", {
+    edge: "rgba(255,255,255,0.4)",
+  })
+  ring(ctx, GRIP_END + dh * 0.6, dh * 0.06, "#c81f1f")
+  capHexPlates(ctx, DECOR_END)
+  return toTexture(cv)
+}
+
+// ==================== v1.4.3 统一视觉增强层 ====================
+// 背景见文件头注。所有主题（19 款 × 杆身/杆尾）构建完成后都经过 enhance()：
+//   接缝金属接环 → 轴向形体 → 周向定向光照（强度自适应）。
+
+/** 0xRRGGBB → "r,g,b" */
+function rgbOf(a: number): string {
+  return `${(a >> 16) & 255},${(a >> 8) & 255},${a & 255}`
+}
+
+/**
+ * 周向周期的横向**灰度**渐变（供 multiply / screen 合成使用）：
+ * 展开图 x 轴对应周向 0~360°，fn(t) 必须满足 fn(0) === fn(1)，
+ * 否则贴图左右缝合处会出现一道硬边。
+ * 用 33 个 colorstop 采样，对余弦型的明暗函数足够平滑。
+ */
+function hGray(
+  ctx: CanvasRenderingContext2D,
+  fn: (t: number) => number,
+  n = 32
+) {
+  const g = ctx.createLinearGradient(0, 0, W, 0)
+  for (let i = 0; i <= n; i++) {
+    const t = i / n
+    const v = Math.round(255 * Math.max(0, Math.min(1, fn(t))))
+    g.addColorStop(t, `rgb(${v},${v},${v})`)
+  }
+  return g
+}
+
+type ReliefOpts = {
+  /** 主光方位（0~1 周向；默认 0.30，略偏左上、接近场景主光方向） */
+  theta?: number
+  /** 总强度倍率（主题 relief 配置） */
+  gain?: number
+  /** 背光暗面峰值（multiply：最暗处乘 1-dark） */
+  dark?: number
+  /** 高光总能量（拆成宽受光面 + 窄镜面带两层，screen） */
+  spec?: number
+  /** 轮廓反光峰值（screen，主题 accent 色） */
+  rim?: number
+  /** 镜面高光锐度（越大越窄） */
+  power?: number
+  /** 轮廓反光颜色（"r,g,b"） */
+  rimRgb?: string
+}
+
+/**
+ * 圆柱定向光照：Lambert 暗面 + 宽受光面 + 窄镜面高光带 + 背光侧轮廓反光。
+ *
+ * 【合成模式】暗面用 multiply（乘性压暗：保持下层图案与饱和度，只是变暗）、
+ * 亮面用 screen（提亮但封顶 255，不会过曝）—— 两者都会**扩大**明度动态
+ * 范围。第一版曾用 source-over 的黑/白半透明叠加，实测（260×120 缩略图）
+ * 亮色主题 rms 对比度全线下滑（p98-p2 收缩 34~103）：黑叠灰、白漂白，
+ * 整体被压向中间灰，必须用乘性/加性合成。
+ *
+ * 四层全为周期 1 的周向函数，左右缝合无痕。
+ */
+function cylinderRelief(ctx: CanvasRenderingContext2D, o: ReliefOpts = {}) {
+  const th = o.theta ?? 0.3
+  const gain = o.gain ?? 1
+  const dark = Math.min(0.72, (o.dark ?? 0.3) * gain)
+  const spec = Math.min(0.85, (o.spec ?? 0.4) * gain)
+  const rim = Math.min(0.5, (o.rim ?? 0.14) * gain)
+  const pw = o.power ?? 6
+  const cs = (t: number) => Math.cos(2 * Math.PI * (t - th))
+  ctx.save()
+  // ① 背光暗面（主光正对面最暗，向两侧平滑回升）
+  ctx.globalCompositeOperation = "multiply"
+  ctx.fillStyle = hGray(ctx, (t) => 1 - (0.5 - 0.5 * cs(t)) * dark)
+  ctx.fillRect(0, 0, W, H)
+  // ② 受光亮面（宽而柔）+ ③ 镜面高光带（窄而亮）
+  ctx.globalCompositeOperation = "screen"
+  ctx.fillStyle = hGray(ctx, (t) => Math.pow(Math.max(0, cs(t)), 1.7) * spec * 0.3)
+  ctx.fillRect(0, 0, W, H)
+  ctx.fillStyle = hGray(ctx, (t) => Math.pow(Math.max(0, cs(t)), pw) * spec * 0.7)
+  ctx.fillRect(0, 0, W, H)
+  // ④ 背光侧轮廓反光（环境 bounce，用主题 accent 作色彩点缀）
+  const rc = (o.rimRgb ?? "190,215,255").split(",").map(Number)
+  const g4 = ctx.createLinearGradient(0, 0, W, 0)
+  for (let i = 0; i <= 32; i++) {
+    const t = i / 32
+    const a = Math.pow(Math.max(0, -cs(t)), 10) * rim
+    g4.addColorStop(
+      t,
+      `rgb(${Math.round(rc[0] * a)},${Math.round(rc[1] * a)},${Math.round(rc[2] * a)})`
+    )
+  }
+  ctx.fillStyle = g4
+  ctx.fillRect(0, 0, W, H)
+  ctx.restore()
+}
+
+/** 底图平均明度（0~1），供光照强度自适应 */
+function meanLuma(ctx: CanvasRenderingContext2D): number {
+  const d = ctx.getImageData(0, 0, W, H).data
+  let s = 0
+  let n = 0
+  for (let i = 0; i < d.length; i += 4 * 16) {
+    s += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
+    n++
+  }
+  return n ? s / n / 255 : 0.5
+}
+
+/** 轴向形体：两端轻收暗（multiply 乘性，保细节），避免"一根均匀塑料管"的观感 */
+function axialDepth(ctx: CanvasRenderingContext2D, part: "shaft" | "butt") {
+  const g = ctx.createLinearGradient(0, 0, 0, H)
+  if (part === "shaft") {
+    // 画布上=杆头，下=接缝
+    g.addColorStop(0, "rgb(214,214,214)")
+    g.addColorStop(0.24, "rgb(250,250,250)")
+    g.addColorStop(0.85, "rgb(243,243,243)")
+    g.addColorStop(1, "rgb(222,222,222)")
+  } else {
+    // 画布上=接缝，下=杆尾端
+    g.addColorStop(0, "rgb(226,226,226)")
+    g.addColorStop(0.16, "rgb(252,252,252)")
+    g.addColorStop(1, "rgb(234,234,234)")
+  }
+  ctx.save()
+  ctx.globalCompositeOperation = "multiply"
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, W, H)
+  ctx.restore()
+}
+
+/**
+ * 接缝金属接环：shaft 贴图画布底端画半枚 + butt 贴图画布顶端画半枚，
+ * 两段 mesh 拼合后正好一整枚（宽度换算见 JOINT_SHAFT / JOINT_BUTT 注释）。
+ * 用半透明叠加而非实色，让接环透出各主题的底色 —— 同一结构、各自成色。
+ */
+function jointCollar(
+  ctx: CanvasRenderingContext2D,
+  part: "shaft" | "butt",
+  accent: number
+) {
+  const ar = rgbOf(accent)
+  if (part === "shaft") {
+    const y0 = H - JOINT_SHAFT
+    band(ctx, y0 - 3, y0, "rgba(0,0,0,0.5)") // 与杆身图案的分界压边
+    vBand(ctx, y0, y0 + JOINT_SHAFT * 0.52, [
+      [0, `rgba(${ar},0.38)`],
+      [0.55, "rgba(255,255,255,0.45)"],
+      [1, `rgba(${ar},0.28)`],
+    ])
+    vBand(ctx, y0 + JOINT_SHAFT * 0.52, H, [
+      [0, `rgba(${ar},0.28)`],
+      [0.6, "rgba(0,0,0,0.26)"],
+      [1, `rgba(${ar},0.16)`],
+    ])
+    band(ctx, y0 + 1, y0 + 2.6, "rgba(255,255,255,0.7)") // 抛光亮线
+    band(ctx, H - 2.6, H - 0.6, "rgba(255,255,255,0.3)")
+    return
+  }
+  const y1 = JOINT_BUTT
+  vBand(ctx, 0, y1 * 0.48, [
+    [0, "rgba(255,255,255,0.38)"],
+    [0.55, `rgba(${ar},0.38)`],
+    [1, `rgba(${ar},0.28)`],
+  ])
+  vBand(ctx, y1 * 0.48, y1, [
+    [0, `rgba(${ar},0.28)`],
+    [0.5, "rgba(255,255,255,0.3)"],
+    [1, "rgba(0,0,0,0.32)"],
+  ])
+  band(ctx, y1 - 3, y1, "rgba(0,0,0,0.4)")
+}
+
+/**
+ * 统一后处理入口。光照强度 = 主题 relief × 底图明度自适应：
+ *   · 底图越暗 → 高光/轮廓越强（深色主题全靠明暗轮廓表达形体）；
+ *   · 底图越亮 → 暗面越深（亮色主题靠对比而不是提亮）。
+ */
+function enhance(
+  tex: Texture,
+  themeId: string,
+  part: "shaft" | "butt"
+): Texture {
+  const cv = (tex as CanvasTexture).image as HTMLCanvasElement
+  const ctx = cv.getContext("2d")!
+  const theme = getCueTheme(themeId)
+  jointCollar(ctx, part, theme.accent)
+  axialDepth(ctx, part)
+  const v = meanLuma(ctx)
+  cylinderRelief(ctx, {
+    gain: theme.relief ?? 1,
+    // 底图越暗 → 高光/轮廓越强（深色主题全靠明暗轮廓表达形体）
+    spec: 0.22 + 0.52 * Math.pow(1 - v, 1.2),
+    rim: 0.08 + 0.2 * (1 - v),
+    // 底图越亮 → 暗面越深，但系数压低：亮色主题的背光面若被压穿
+    // 缩略图背景阈值（L≈23），整根杆会"瘦一圈"（实测青龙掩膜 8.0→4.5%）
+    dark: 0.12 + 0.22 * v,
+    power: part === "butt" ? 5 : 6,
+    rimRgb: rgbOf(theme.accent),
+  })
+  tex.needsUpdate = true
+  return tex
 }

@@ -14,6 +14,24 @@ export interface NotificationDetail {
    * 用它告诉用户下一步操作（如「请到 设置 → Wi-Fi → 当前网络 查看 IP 地址」）。
    */
   hint?: string
+  /**
+   * v1.3.93：详情块左侧的**进度指示**，取值语义：
+   *   "spin"  → 转圈（正在连接 / 正在取 IP 等"等待中"状态）
+   *   "ok"    → 对勾（已连上）
+   *   "warn"  → 感叹号（连上了但有问题，如端口顺延）
+   *   "error" → 叉号（失败）
+   *   省略    → 不渲染指示，纯信息（本机房间地址这类"要抄给对手"的内容
+   *             不该带状态色，免得被误读成"出问题了"）
+   *
+   * 局域网对战的四个状态（取 IP / 连接中 / 已连接 / 失败）此前在视觉上
+   * **完全一样**，用户只能靠读文字分辦。加这个字段后一眼就能看出处于哪一步。
+   */
+  state?: "spin" | "ok" | "warn" | "error"
+  /**
+   * v1.3.93：把 value 渲染成**大号等宽可抄写**样式（IP 地址、目标主机）。
+   * 与 state 互斥使用于「本机房间地址」这种"给对方念"的场景。
+   */
+  mono?: boolean
 }
 
 export interface NotificationData {
@@ -225,21 +243,35 @@ export class Notification {
    * 对方即可 —— 按钮既占地方，在小屏上还容易误触。历史上 v1.3.68 曾按
    * value 是否匹配 `^[0-9a-zA-Z.:_-]{4,64}$` 来决定是否渲染该按钮，现整段删除；
    * 对应的事件处理分支仍保留（见下方 copy-ip），避免旧页面残留按钮时点击报错。
+   *
+   * v1.3.93：新增状态指示（转圈/对勾/警告/错误）与等宽大字两类渲染。
+   * 此前「取 IP 中 / 连接中 / 已连接 / 失败」四种状态在视觉上完全一致，
+   * 用户只能读文字分辨；现在左侧有图标、等待态有旋转动画，一眼可辨。
    */
   private renderDetail(data: NotificationData): string {
     if (!data.detail || !data.detail.value) return ""
     const label = data.detail.label
       ? `<div class="notification-detail-label">${this.escapeHtml(data.detail.label)}</div>`
       : ""
+    const valueClass = data.detail.mono
+      ? "notification-detail-value notification-detail-mono"
+      : "notification-detail-value"
     const value = this.escapeHtml(data.detail.value)
     const hint = data.detail.hint
       ? `<div class="notification-detail-hint">${this.escapeHtml(data.detail.hint)}</div>`
       : ""
+    const stateClass = data.detail.state
+      ? ` notification-detail-state-${data.detail.state}`
+      : ""
+    const indicator = data.detail.state
+      ? `<span class="notification-detail-state"><i class="notification-state-icon"></i></span>`
+      : ""
     return `
-      <div class="notification-detail">
+      <div class="notification-detail${stateClass}">
         ${label}
         <div class="notification-detail-row">
-          <span class="notification-detail-value">${value}</span>
+          ${indicator}
+          <span class="${valueClass}">${value}</span>
         </div>
         ${hint}
       </div>
@@ -379,6 +411,18 @@ export class Notification {
       ) as HTMLElement | null
       const action = button?.dataset.notificationAction
       if (!action) return
+      // v1.3.93：**按钮防连点**。
+      //
+      // 局域网失败弹窗上的「重新连接」会重走整个建链流程（关 ws → 清诊断 →
+      // startJoin → 起 6 秒超时）。用户在"没反应"的等待里习惯性连点，旧代码
+      // 每一下都会触发一次完整重连：反复 close/connect、反复重置 6 秒计时器，
+      // 结果是**永远等不到那一秒超时**，界面看起来就是"点了没反应"。
+      // 这里在点击瞬间把按钮置为忙碌态并停止响应，直到弹窗被下一次
+      // show()/clear() 整体重建（新 DOM 天然是可用状态）。
+      if (button.dataset.busy === "1") return
+      button.dataset.busy = "1"
+      button.setAttribute("disabled", "disabled")
+      button.classList.add("is-busy")
       this.handleAction(action, button.dataset.notificationUrl)
     })
   }

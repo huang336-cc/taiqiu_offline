@@ -6,6 +6,7 @@ import {
   sliding,
   surfaceVelocityFull,
 } from "../model/physics/physics"
+import { g } from "../model/physics/constants"
 import { BallMesh } from "../view/ballmesh"
 import { Pocket } from "./physics/pocket"
 import { BallAppearance } from "../view/ballappearance"
@@ -15,6 +16,13 @@ export enum State {
   Rolling = "Rolling",
   Sliding = "Sliding",
   Falling = "Falling",
+  /**
+   * v1.3.94：空中状态（跳球）。引擎此前严格 2D，此状态不存在；放开竖直
+   * 运动后必须有独立分支：空中的球不受台面摩擦、不被 forceRoll 强制前滚、
+   * 也不该被判为 Rolling。新增状态必须同步 inMotion()，否则
+   * Table.allStationary() 会在球还在空中时返回 true，导致本杆提前结算。
+   */
+  Airborne = "Airborne",
   InPocket = "InPocket",
 }
 
@@ -26,6 +34,36 @@ export class Ball {
   readonly ballmesh!: BallMesh
   state: State = State.Stationary
   pocket: Pocket
+  /** v1.3.94（斯登/跟杆/缩杆）：标识白球。碰撞冲量只把纵向自旋→速度作用于
+   *  白球，对象球间不施加，避免改变对象球碰撞行为（守住 AI 不退化红线）。
+   *  Table 构造时对 balls[0] 置 true（白球恒为 balls[0]，见 table.ts）。 */
+  isCue = false
+
+  /**
+   * v1.3.95：本杆开始时的位置，由 `Table.hit()` 写入。
+   * 球飞出台面后（跳台犯规）要按规则放回原处，就得知道「原处」在哪。
+   */
+  readonly shotStart: Vector3 = new Vector3()
+
+  /**
+   * v1.3.95：本杆是否已经飞出台面。
+   *
+   * 一旦置位，该球就不再参与后续的碰撞 / 库边判定 —— 否则一个位于库外的球
+   * 会被 `Cushion.bounceAny` 算出荒谬的速度（实测 vx 被翻到 -900 m/s），
+   * 一步横跨整张台并引发连锁碰撞，最终 `Depth exceeded` 抛错卡死。
+   * 由 `Table.checkOffTable` 写入，下一杆 `Table.hit()` 时清零。
+   */
+  offTable = false
+
+  /**
+   * v1.3.95：本杆是否曾经腾空过（哪怕已经落地）。
+   *
+   * 这是判「是不是真的飞出了球桌」的关键前提：**要离开台面就必须越过库边，
+   * 而越过库边只可能发生在腾空时**。因此出界判定只对曾腾空的球生效，
+   * 纯地面滚动 / 撞库的球永远不会走到界外，也就不会被误判。
+   * 由 `updateAirborne` 置位，下一杆 `Table.hit()` 时清零。
+   */
+  wasAirborne = false
 
   public static id = 0
   readonly id = Ball.id++
@@ -50,6 +88,13 @@ export class Ball {
    */
   static readonly haltSpeed = 0.01
 
+  /**
+   * v1.3.94（跳球）：判定「这一杆是否让白球离台」的竖直速度门限（m/s）。
+   * 取 0.05：以 g=9.8 计对应最大高度 ≈ v²/(2g) ≈ 0.13mm，远小于球半径，
+   * 等价于「没离台」。用它做门限可保证平杆/微抬杆行为完全不变。
+   */
+  static readonly airborneThreshold = 0.05
+
   constructor(pos, color?, label?: number, appearance?: BallAppearance) {
     this.pos = pos.clone()
     this.label = label
@@ -69,6 +114,8 @@ export class Ball {
     if (this.state == State.Falling) {
       this.updatePosition(t)
       this.pocket?.updateFall(this, t)
+    } else if (this.state == State.Airborne) {
+      this.updateAirborne(t)
     } else if (this.state == State.Rolling) {
       // A rolling ball can apply the trapezium rule
       // since it is guaranteed to be decelerating
@@ -87,6 +134,28 @@ export class Ball {
 
   updateMesh(t) {
     this.ballmesh?.updateAll(this, t)
+  }
+
+  /**
+   * v1.3.94（跳球）：空中运动积分。只受重力，水平分量空中不衰减（无台面
+   * 摩擦）。梯形法积分竖直：z' = z + (vz + vz')·t/2，vz' = vz - g·t。
+   * 落地（z ≤ 0）夹回 z=0、清除竖直速度，再按水平/角速度关系交还滚动或滑动。
+   */
+  private updateAirborne(t: number) {
+    // v1.3.95：留下腾空痕迹，供 Table.checkOffTable 判断出界合法性
+    this.wasAirborne = true
+    const zBefore = this.pos.z
+    const vzBefore = this.vel.z
+    const vzAfter = vzBefore - g * t
+    this.pos.z = zBefore + ((vzBefore + vzAfter) / 2) * t
+    this.pos.x += this.vel.x * t
+    this.pos.y += this.vel.y * t
+    this.vel.z = vzAfter
+    if (this.pos.z <= 0) {
+      this.pos.z = 0
+      this.vel.z = 0
+      this.state = this.isRolling() ? State.Rolling : State.Sliding
+    }
   }
 
   private updatePosition(t: number) {
@@ -148,6 +217,8 @@ export class Ball {
 
   isRolling() {
     return (
+      // v1.3.94：空中的球绝不算 Rolling（滚动是台面约束运动，空中无接触点）
+      this.state !== State.Airborne &&
       this.rvel.lengthSq() !== 0 &&
       surfaceVelocityFull(this.vel, this.rvel).length() < Ball.transition
     )
@@ -157,11 +228,19 @@ export class Ball {
     return this.state !== State.Falling && this.state !== State.InPocket
   }
 
+  /** v1.3.94：跳球在空中（不受台面摩擦/不参与台面碰撞判定） */
+  isAirborne() {
+    return this.state === State.Airborne
+  }
+
   inMotion() {
     return (
       this.state === State.Rolling ||
       this.state === State.Sliding ||
-      this.isFalling()
+      this.isFalling() ||
+      // v1.3.94：必须纳入 Airborne！否则 Table.allStationary() 在球还在空中时
+      // 返回 true → 本杆提前结算。
+      this.state === State.Airborne
     )
   }
 
@@ -177,8 +256,11 @@ export class Ball {
   fround() {
     this.pos.x = Math.fround(this.pos.x)
     this.pos.y = Math.fround(this.pos.y)
+    // v1.3.94：跳球引入竖直运动，z 必须一并量化，否则回放/网络同步漂移
+    this.pos.z = Math.fround(this.pos.z)
     this.vel.x = Math.fround(this.vel.x)
     this.vel.y = Math.fround(this.vel.y)
+    this.vel.z = Math.fround(this.vel.z)
     this.rvel.x = Math.fround(this.rvel.x)
     this.rvel.y = Math.fround(this.rvel.y)
     this.rvel.z = Math.fround(this.rvel.z)

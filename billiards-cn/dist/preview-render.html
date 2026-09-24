@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>缩略图离线渲染（构建期）</title>
+<style>html,body{margin:0;padding:0;background:#111;}</style>
+</head>
+<body>
+<!--
+  v1.4.0 缩略图构建期预渲染驱动页。
+
+  由 tools/render/render-previews.js（puppeteer-core + headless chrome）打开，
+  依赖链与 menu-cn.js 的 loadSkinPreview3DLib 完全一致：
+    three.standalone.js → skin-factory.js → cue-texture-factory.js → skin-preview-3d.js
+  页面本身不显示任何内容 —— ThumbRenderer 自建 260×120 离屏 canvas，
+  window.__renderOne(kind, id) 返回与运行时管线同参数的 dataURL。
+-->
+<script src="three.standalone.js"></script>
+<script src="skin-factory.js"></script>
+<script src="cue-texture-factory.js"></script>
+<script src="skin-preview-3d.js"></script>
+<script>
+;(function () {
+  "use strict"
+  window.__renderOne = function (kind, id) {
+    var P = window.SkinPreview3D
+    if (!P) return null
+    try {
+      return P.renderThumb(kind, id)
+    } catch (e) {
+      console.warn("[renderOne]", kind, id, e && e.message)
+      return null
+    }
+  }
+  window.__ready = !!(window.SkinPreview3D && window.THREE)
+})()
+</script>
+</body>
+</html>

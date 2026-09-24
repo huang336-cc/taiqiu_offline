@@ -200,7 +200,20 @@ angle-input .butt {
     6px 12px 24px rgb(0 0 0 / 70%),
     inset -4px -6px 12px rgb(0 0 0 / 40%),
     inset 8px 10px 15px rgb(255 255 255 / 20%);
-  transition: all 0.1s ease;
+  /* v1.3.93：显式声明 touch-action。
+     原先只靠 index.css 的全局 `div { touch-action: none }` 兜底 —— 该规则
+     一旦被任何更高优先级的选择器覆盖，击球点盘就会退化成「浏览器可接管手势」，
+     拖动被判定成滚动/long-press 从而中途收到 pointercancel 而断掉。
+     这里落一条显式规则，让「按住拖动选击球点」在任何层叠情况下都稳定。 */
+  touch-action: none;
+  /* v1.3.93：原来是 `transition: all 0.1s ease`。
+     `all` 把 transform 也纳入了过渡 —— 而击球点盘（#cueTip 的定位）在拖动时
+     每帧都在变 transform，0.1s 的缓动意味着**手指已经移开、盘面还在追**，
+     这是「不跟手」里最直观的一部分。
+     改为只对非交互属性（背景/阴影）做过渡，交互相关的位移即时生效。 */
+  transition:
+    background 0.1s ease,
+    box-shadow 0.1s ease;
 }
 
 .cueBall::before {
@@ -249,7 +262,16 @@ angle-input .butt {
   box-shadow:
     0 0 2px rgb(0 0 0 / 60%),
     inset 0 1px 1px rgb(255 255 255 / 30%);
-  transition: all 0.1s ease;
+  /* v1.3.93：原来是 `transition: all 0.1s ease`。
+     杆头（#cueTip）是拖动时**真正跟随手指**的元素，它的 left/top 每帧都在变。
+     `all` 把 left/top/transform 全纳入 0.1s 缓动，等于杆头恒定滞后手指 100ms ——
+     手指停住后它还会「飘」一下才到位。这就是「白球击球点滑动不跟手」在 CSS 侧
+     的根因（JS 侧同步改了 offsetX 参照系问题与 pointercapture，见 aiminputs.ts）。
+     改为只保留阴影过渡，位移即时生效。 */
+  transition:
+    box-shadow 0.1s ease,
+    width 0.1s ease,
+    height 0.1s ease;
 }
 
 .ballContainer.is-disabled .cueTip {

@@ -234,6 +234,8 @@ export function cueStrike(
   const speed = power * (1 - 0.25 * offset.lengthSq())
   const vel = norm(new Vector3(cos(angle), sin(angle), 0)).multiplyScalar(speed)
   const velCos = vel.clone().multiplyScalar(cos(elevation))
+  // v1.3.94（跳球）：抬杆时线速度同时含竖直分量（speed·sin elevation）
+  velCos.z = speed * Math.sin(elevation)
 
   return {
     vel: velCos,

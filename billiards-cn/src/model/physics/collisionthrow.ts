@@ -2,7 +2,21 @@ import { Vector3 } from "three"
 import { Ball } from "../ball"
 import { Collision } from "./collision"
 import { I, m, R } from "./constants"
+import { upCross } from "../../utils/three-utils"
 import { exp } from "../../utils/utils"
+
+/**
+ * v1.3.94（斯登 / 跟杆 / 缩杆）：纵向自旋 → 撞后沿连心线速度的增益。
+ *
+ * 物理本质：白球撞击前的高低杆自旋（绕水平横向轴）在撞后转化为沿连心线
+ * 的平动分量 —— 顶杆跟进、低杆回缩、中杆停球。增益把「自旋量」映射成
+ * 「沿连心线速度」，取 0.5 为起手标定：
+ *   · 中杆(offset.y=0)：rvel=0 → 母球撞后即停（斯登）；
+ *   · 满跟进(offset.y≈+0.4)：母球沿连心线跟进约 0.6·V；
+ *   · 满缩杆(offset.y≈−0.45)：母球回缩约 0.6·V。
+ * 取值经验校准，详见 botmatch 回归（清台 100% / 均杆 ~11 / 摔袋 ~2~3% 红线）。
+ */
+const FOLLOW_GAIN = 0.5
 
 const ab_v = new Vector3()
 const abTangent_v = new Vector3()
@@ -68,15 +82,15 @@ export class CollisionThrow {
       .copy(ab)
       .multiplyScalar(this.normalImpulse)
 
-    // Apply impulses to linear velocities (constrained to XY plane)
+    // v1.3.94（跳球）：贴台才压平 z（详见 v1.3.94 改动说明）
     a.vel
       .addScaledVector(impulseNormal, 1 / m)
       .addScaledVector(impulseTangential, 1 / m)
-    a.vel.z = 0
+    if (!a.isAirborne()) a.vel.z = 0
     b.vel
       .addScaledVector(impulseNormal, -1 / m)
       .addScaledVector(impulseTangential, -1 / m)
-    b.vel.z = 0
+    if (!b.isAirborne()) b.vel.z = 0
 
     // Angular velocity updates
     // Jt is the tangential impulse applied TO ball A.
@@ -92,6 +106,26 @@ export class CollisionThrow {
 
     a.rvel.addScaledVector(angularImpulse, 1 / I)
     b.rvel.addScaledVector(angularImpulse, 1 / I)
+
+    // v1.3.94（斯登 / 跟杆 / 缩杆）：纵向自旋 → 撞后沿连心线速度。
+    //
+    // 此前此文件对两球施加「同向同量」的角冲量，纵向(高低杆)自旋完全不参与
+    // 撞后平动 —— 斯登/跟进/缩杆在物理上毫无区别（母球一律按自然分离角走，
+    // 等同斯登）。这里补上「白球纵向自旋 → 沿连心线速度」：
+    //   顶杆(follow / offset.y>0) → 母球沿 ab 跟进；
+    //   低杆(draw   / offset.y<0) → 母球沿 ab 回缩；
+    //   中杆(stun   / offset.y=0) → 母球撞后即停（清除法向残余 ≈0.04V）。
+    //
+    // 仅作用于白球(a)：balls[0] 恒为白球、且碰撞对 (a,b) 排序保证 a<b，故白球
+    // 参与的碰撞里 a 即白球；对象球之间不施加，避免改变其碰撞行为（守 AI 红线）。
+    if (a.isCue) {
+      const transverse = upCross(ab) // 水平、垂直于连心线：高低杆自旋轴
+      const longSpin = a.rvel.dot(transverse) // 顶杆为正、缩杆为负（见 cueToSpin）
+      // 与撞前自旋匹配的沿连心线速度：自然滚动 longSpin≈V/R → 跟进≈V·GAIN
+      const followV = longSpin * R * FOLLOW_GAIN
+      const curAlong = a.vel.dot(ab)
+      a.vel.addScaledVector(ab, followV - curAlong)
+    }
 
     return vRelNormalMag
   }

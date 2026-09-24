@@ -1,5 +1,6 @@
 import { Outcome } from "../../model/outcome"
 import { Respot } from "../../utils/respot"
+import { OFF_TABLE_FOUL } from "../../utils/offtable"
 import { Table } from "../../model/table"
 
 export interface FoulResult {
@@ -34,7 +35,14 @@ export class SnookerUtils {
         previousPotRed,
         firstCollision
       ),
-      whitePotted: Outcome.isCueBallPotted(table.cueball, outcome),
+      /**
+       * v1.3.95：母球出界按「母球丢失」处理 —— 真实规则里球飞出台面等同
+       * 失去母球，应给对方自由球。并入这里后，罚分（foulPoints 保底 4 分）
+       * 与 `Snooker.whiteInHand()` 都自动沿用已有逻辑，无需另开分支。
+       */
+      whitePotted:
+        Outcome.isCueBallPotted(table.cueball, outcome) ||
+        Outcome.isCueBallOffTable(table.cueball, outcome),
       targetIsRed: targetIsRed,
     }
   }
@@ -85,6 +93,15 @@ export class SnookerUtils {
     outcome: Outcome[],
     shotInfo: ShotInfo
   ): string | null {
+    /**
+     * v1.3.95：跳台犯规（球飞出台面）—— 放在最前。
+     * 母球出界已在 `ShotInfo.whitePotted` 里并入（据此给对方自由球），
+     * 但文案要如实写「跳出台面」而不是「母球落袋」。
+     */
+    if (Outcome.offTableBalls(outcome).length > 0) {
+      return OFF_TABLE_FOUL
+    }
+
     if (shotInfo.whitePotted) {
       return "母球落袋"
     }
