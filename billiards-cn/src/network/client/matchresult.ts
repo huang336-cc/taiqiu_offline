@@ -188,6 +188,16 @@ export class MatchResultHelper {
         }
       },
       saveReplay: () => {
+        // v1.5.4（#69）：「已保存 ✓」必须等 IndexedDB 真正落库后再显示。
+        //
+        // 病灶：saveReplayToDB 是 fire-and-forget（异步 open+put），旧代码在
+        // **发起写入的同一帧**就把按钮置成「已保存 ✓」。真机（Android WebView）
+        // 上 IndexedDB 事务的提交可能滞后几百毫秒 —— 用户看到成功提示后立刻
+        // 「返回主菜单」，页面卸载时 put 尚未提交，写入被静默丢弃；用户却以
+        // 为已保存。保存按钮 notification 层点击即 disabled + is-busy（转圈），
+        // 这里顺势把「转圈 → 落库成功 → ✓」做成真实进度：转圈期间退出最多
+        // 是记录没写进去（列表里不出现，无损），不会再出现「看似已保存、
+        // 实际数据缺失/损坏」的中间态。
         try {
           const compressed = container.recorder.getWholeGameCompressed()
           const rule = container.rules.rulename
@@ -205,21 +215,36 @@ export class MatchResultHelper {
             createdAt: Date.now(),
             score,
             label: `${this.ruleLabel(rule)} · ${score} 分`,
-          }).catch((e) => console.error("saveReplayToDB failed", e))
-          const btn = document.querySelector(
-            '[data-notification-action="saveReplay"]'
-          ) as HTMLButtonElement | null
-          if (btn) {
-            btn.textContent = ok ? "已保存 ✓" : "已存入回放 ✓"
-            btn.disabled = true
-            btn.classList.add("is-saved")
-          }
+          })
+            .then(() => {
+              const btn = document.querySelector(
+                '[data-notification-action="saveReplay"]'
+              ) as HTMLButtonElement | null
+              if (btn) {
+                // is-busy 的 ::before 是无限转圈（见 v1.5.1 注释），完成时必须移除
+                btn.classList.remove("is-busy")
+                btn.textContent = ok ? "已保存 ✓" : "已存入回放 ✓"
+                btn.disabled = true
+                btn.classList.add("is-saved")
+              }
+            })
+            .catch((e) => {
+              console.error("saveReplayToDB failed", e)
+              const btn = document.querySelector(
+                '[data-notification-action="saveReplay"]'
+              ) as HTMLButtonElement | null
+              if (btn) {
+                btn.classList.remove("is-busy")
+                btn.textContent = "保存失败"
+              }
+            })
         } catch (e) {
           console.error("save replay failed", e)
           const btn = document.querySelector(
             '[data-notification-action="saveReplay"]'
           ) as HTMLButtonElement | null
           if (btn) {
+            btn.classList.remove("is-busy")
             btn.textContent = "保存失败"
             btn.disabled = true
           }

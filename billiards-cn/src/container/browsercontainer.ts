@@ -371,6 +371,11 @@ this.botName === "TheFarJaw"
     // 这里在卸载前同步断一次，让服务端立刻掉到 0 连接，新一局从干净状态开始。
     const shutdown = (): void => {
       try {
+        this.container?.teardown?.()
+      } catch {
+        // 卸载阶段的异常一律吞掉，不能影响导航
+      }
+      try {
         this.messageRelay?.close?.()
       } catch {
         // 卸载阶段的异常一律吞掉，不能影响导航
@@ -656,8 +661,46 @@ this.botName === "TheFarJaw"
     this.container.linkFormatter.replayUrl = prefix
   }
 
+  /**
+   * v1.5.4（#69）：回放数据损坏时的用户可见兜底。
+   *
+   * 病灶：startReplay 的 parse(replay)（JSON.parse / JSONCrush.uncrush）没有
+   * try-catch，解析异常会沿 initGameLoop → onAssetsReady 的 catch 静默吞掉 ——
+   * 页面停在「回放模式」的初始静止画面，无提示、无反应（真机反馈的
+   * 「进入回放模式后回放不会动」正是这条路径的观感）。
+   * 现在损坏/空数据的回放一律给出明确提示并返回主菜单，绝不静默卡死。
+   */
+  private replayBroken(): void {
+    console.error("[replay] broken/empty replay data, aborting to menu")
+    try {
+      globalThis.alert("回放数据已损坏或无法识别，请返回主菜单。")
+    } catch {}
+    globalThis.location.href = "menu.html"
+  }
+
   startReplay(replay) {
-    this.breakState = this.parse(replay)
+    let state
+    try {
+      state = this.parse(replay)
+    } catch (e) {
+      console.error("[replay] parse failed:", e)
+      this.replayBroken()
+      return
+    }
+    // 数据结构校验：init/shots 缺失或 shots 非数组都视为坏数据。
+    // （空数组也拦下：空回放会构建出「一杆都不播」的 Replay，观感同样是
+    // 「进入回放后一动不动」。）
+    if (
+      !state ||
+      typeof state !== "object" ||
+      !state.init ||
+      !Array.isArray(state.shots) ||
+      state.shots.length === 0
+    ) {
+      this.replayBroken()
+      return
+    }
+    this.breakState = state
     const session = Session.getInstance()
     if (this.breakState.players) {
       session.playername = this.breakState.players.player1
@@ -682,5 +725,27 @@ this.botName === "TheFarJaw"
 
   offerUpload() {
     // 离线版不上传成绩
+  }
+
+  /**
+   * v1.4.6：卸载/退出主菜单时由 index.ts 的 __onExitToMenu 显式触发。
+   *
+   * 根因：Android WebView 在整页导航（location.href 跳转回 menu.html）时
+   * 常把旧 play 页面保留在 bfcache 里，**其 WebGL context 不立即回收**。
+   * 反复「开始游戏 → 退出主菜单」会累积 context，直到撞上真机上限（约 16 个）
+   * 后，新 context 创建失败（getContext 返回空 / context lost），游戏卡在 Loading。
+   *
+   * 这里把释放职责上提一层：BrowserContainer 持有 GameContainer，由它去
+   * 调 GameContainer.teardown()。v1.4.9 起 teardown 已收敛为**纯 JS 轻量
+   * 清理**（停渲染循环 + 关 AudioContext），不再做任何 WebGL dispose ——
+   * 真机实测手动释放 GPU 资源会同步阻塞主线程约 3.5 秒（见
+   * GameContainer.teardown 与 View 的注释），GPU 回收交给浏览器随导航完成。
+   */
+  teardown(): void {
+    try {
+      this.container?.teardown?.()
+    } catch {
+      // 卸载阶段的异常一律吞掉，不能影响导航
+    }
   }
 }

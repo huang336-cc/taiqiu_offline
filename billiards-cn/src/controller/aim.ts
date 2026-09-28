@@ -75,8 +75,16 @@ export class Aim extends ControllerBase {
     this.container.view.clearLines()
     this.container.table.cue.aimInputs.setButtonText(t("hitButton"))
     // 分步实操新手引导：仅首次安装自动显示，或带 tutorial=1 强制显示
+    //
+    // v1.5.1：`tutorial=1` 只是「本次进入应当强制显示」的一次性开关，
+    // 它**不能压过**「引导已经看过」这个事实。此前 URL 上残留 tutorial=1
+    // （重开对局会把参数原样带回）时，Tutorial.start(true) 会绕过内部的
+    // hasSeenGuide 判断，只靠 shownThisGame 去重 —— 而该标志是页面级内存变量，
+    // 重开后必然归零，于是「继续对战」每开一局都重新弹一次新手引导。
+    // 修正方式：force 的前提就是还没看过引导。
     const forceTutorial =
-      new URLSearchParams(globalThis.location?.search).get("tutorial") === "1"
+      new URLSearchParams(globalThis.location?.search).get("tutorial") === "1" &&
+      !Settings.hasSeenGuide()
     // v1.2.6：把 aimInputs 暴露给 Tutorial，用于步骤 1 期间锁定控件。
     // 仅在有 cue 引用时注册，避免教程与对局耦合。
     ;(globalThis as any).__AimInputs = this.container.table.cue.aimInputs
@@ -84,12 +92,12 @@ export class Aim extends ControllerBase {
     // 看过之后（首杆结束、Tutorial.finish 已 markSeenGuide），重新进入 Aim 不应
     // 再禁用——否则控件被永久锁死、游戏画面静止、无法继续击球。
     // 引导步骤 1 的 lockControls(true) 仍会负责在「重新打开新手引导」重新显示时锁定控件。
-    this.container.table.cue.aimInputs.setDisabled(
-      forceTutorial && !Settings.hasSeenGuide()
-    )
+    this.container.table.cue.aimInputs.setDisabled(forceTutorial)
     // v1.1.11：与 Tutorial.start 内部判断保持一致，用 hasSeenGuide()（含独立 key 兜底）。
     // 避免真机主 key 写入失败时，seenGuide 内存判定与 start 内部不一致导致每杆重显。
-    if (!Settings.hasSeenGuide() || forceTutorial) {
+    // v1.5.1：forceTutorial 已蕴含「未看过引导」，此处不再用 forceTutorial 二次
+    // 触发（否则每局重开都会再弹一次）。
+    if (!Settings.hasSeenGuide()) {
       Tutorial.start(forceTutorial)
     }
   }

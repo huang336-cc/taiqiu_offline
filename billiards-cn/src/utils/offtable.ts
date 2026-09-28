@@ -16,13 +16,17 @@ export const OFF_TABLE_FOUL = "球跳出台面"
  * `Table.hit()` 记录的 `shotStart` 提供。母球**不在这里处理** —— 它应当
  * 由各规则自己决定给对手自由球，语义各不相同。
  *
+ * v1.5.4（#71）：母球不再被完全跳过。渲染层现在会隐藏 offTable 的球
+ * （见 ballmesh.updateAll），若母球保持 offTable=true 且无人接管（三库/
+ * 沙狐的白球直接放回原位继续打，没有自由球流程），白球会一直隐身。
+ * 因此这里把母球也放回 shotStart 并清掉出界标记 —— 后续有自由球流程的
+ * 规则（八球/九球/斯诺克）会重新覆盖它的位置，先放回原位只是安全兜底。
+ *
  * @returns 被放回的球，供调用方决定是否需要广播重摆事件
  */
 export function respotOffTable(table: Table, outcomes: Outcome[]): Ball[] {
   const moved: Ball[] = []
   for (const ball of Outcome.offTableBalls(outcomes)) {
-    if (ball === table.cueball) continue
-
     // 清掉出界标记，让它重新回到「在台上」参与后续游戏
     ball.offTable = false
     const target = ball.shotStart.clone()

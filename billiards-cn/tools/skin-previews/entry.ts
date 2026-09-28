@@ -22,6 +22,7 @@ import { R } from "../../src/model/physics/constants"
 import { TableGeometry } from "../../src/view/tablegeometry"
 import {
   getClothTexture,
+  getClothMarksTexture,
   getFrameTexture,
   getFrameNormalTexture,
   getFrameRoughnessTexture,
@@ -37,6 +38,7 @@ export {
   R,
   TableGeometry,
   getClothTexture,
+  getClothMarksTexture,
   getFrameTexture,
   getFrameNormalTexture,
   getFrameRoughnessTexture,

@@ -28,7 +28,7 @@ import { AimCalculator } from "../../src/network/bot/aimcalculator"
 import { Cue } from "../../src/view/cue"
 import { AimEvent } from "../../src/events/aimevent"
 import { EventType } from "../../src/events/eventtype"
-import { Outcome } from "../../src/model/outcome"
+import { Outcome, OutcomeType } from "../../src/model/outcome"
 import { Vector3 } from "three"
 import { DIFFICULTY, DifficultyProfile } from "../../src/network/bot/difficulty"
 
@@ -49,6 +49,8 @@ const NO_CLEARANCE = process.argv.includes("--noclr")
  * 只能拿 60 局对局级数字说话 —— 清台率、均杆数守住的前提下，谁犯规少谁赢。
  */
 const NO_STRICT = process.argv.includes("--nostrict")
+/** v1.4.6 诊断开关：逐杆打印「AI 克隆台预测首撞 vs 实际首撞」对比 */
+const DIAG_WHIFF = process.env.DIAG_WHIFF === "1"
 
 function makeBalls(): Ball[] {
   const balls: Ball[] = [new Ball(new Vector3(0, 0, 0), undefined, 0)]
@@ -134,6 +136,7 @@ interface MatchResult {
   pots: number
   fouls: number
   scratches: number
+  foulSamples: string[]
 }
 
 /**
@@ -172,6 +175,7 @@ function playMatch(
   let fouls = 0
   let scratches = 0
   let stuck = false
+  const foulSamples: string[] = []
 
   while (shots < MAX_SHOTS && remaining.size > 0) {
     const targets = [...remaining]
@@ -215,10 +219,36 @@ function playMatch(
     // 实测「16 杆清台」的样本被记成 15 次犯规，就是这个原因。
     // 这个错误曾让我误以为 AI 有严重犯规问题，白白追查了很久。
     table.outcome = []
+    // v1.4.6 诊断（DIAG_WHIFF=1）：出杆前用 AI 自己的 probeFirstHitLabel
+    // 在克隆台预测首撞，与 simulate 后的实际首撞逐杆对比 —— 区分
+    // 「克隆台预测失真」与「某路径绕过自验」两种根因。
+    const diagPred = DIAG_WHIFF
+      ? ((strategy as any).probeFirstHitLabel(ctx as any, aim) as
+          | number
+          | null)
+      : undefined
     if (!simulate(table, aim)) return null
     shots++
 
     const outcome = table.outcome
+    if (DIAG_WHIFF) {
+      let act: number | null = null
+      for (const o of outcome) {
+        if (o.type !== OutcomeType.Collision) continue
+        if (o.ballA === balls[0]) { act = o.ballB?.label ?? null; break }
+        if (o.ballB === balls[0]) { act = o.ballA?.label ?? null; break }
+      }
+      const defKind = (strategy as any).lastDefenseKind as string | null
+      const shotPath = (strategy as any).lastShotPath as string | null
+      const mismatch =
+        (diagPred ?? "空") !== (act ?? "空") ? " ◆不一致" : ""
+      console.log(
+        `[DIAG seed=${seed} 杆${shots}] pred=${diagPred ?? "空"} act=${act ?? "空"} ` +
+          `path=${shotPath ?? "?"} def=${defKind ?? "-"} ` +
+          `ang=${((aim.angle * 180) / Math.PI).toFixed(1)}° ` +
+          `pow=${((aim.power ?? 0) / R).toFixed(1)}R${mismatch}`
+      )
+    }
     const pottedMine = Outcome.pots(outcome).filter(
       (b) => b !== balls[0] && remaining.has(b)
     )
@@ -236,6 +266,24 @@ function playMatch(
       if (Math.abs(balls[0].pos.x) > TableGeometry.X - R) return null
     } else if (!firstHitTarget) {
       fouls++
+      // v1.4.6：区分「空杆」（母球全程零接触）与「首撞非目标」，抓样本定位根因。
+      // 口径：扫 outcome 里所有**母球参与**的球-球碰撞（firstCollision 的 ballA
+      // 不保证是母球，见 Outcome.firstCueContact 的注释）。
+      const cueCollided = outcome.some(
+        (o) =>
+          o.type === OutcomeType.Collision &&
+          (o.ballA === balls[0] || o.ballB === balls[0])
+      )
+      const kind = cueCollided ? "首撞非目标" : "空杆(母球零接触)"
+      const aimStr = `angle=${((aim.angle * 180) / Math.PI).toFixed(1)}° pow=${((aim.power ?? 0) / R).toFixed(1)}R elev=${((aim.elevation * 180) / Math.PI).toFixed(1)}°`
+      const shotPath = (strategy as any).lastShotPath as string | null
+      foulSamples.push(
+        `[seed=${seed} 杆${shots}] ${kind} path=${shotPath ?? "?"} ${aimStr} 目标=${targets.map((t) => t.label).join(",")} ` +
+          `局面: ${balls
+            .filter((b) => b.onTable())
+            .map((b) => `#${b.label}@(${b.pos.x.toFixed(2)},${b.pos.y.toFixed(2)})`)
+            .join(" ")}`
+      )
     }
 
     // 母球被打出台面（异常）：判为卡死
@@ -256,6 +304,7 @@ function playMatch(
     pots,
     fouls,
     scratches,
+    foulSamples,
   }
 }
 
@@ -281,6 +330,7 @@ function run(
     n: 0, cleared: 0, stuck: 0, timedOut: 0,
     shots: 0, pots: 0, fouls: 0, scratches: 0,
   }
+  const samples: string[] = []
   for (let i = 0; i < N; i++) {
     // 每局一条独立的确定性流（seed + i * 质数），A/B 两组第 i 局逐位相同
     const perMatchSeed = seed === undefined ? undefined : seed + i * 7919
@@ -294,6 +344,7 @@ function run(
     t.pots += r.pots
     t.fouls += r.fouls
     t.scratches += r.scratches
+    samples.push(...r.foulSamples)
   }
   const pct = (x: number) => ((x / Math.max(1, t.n)) * 100).toFixed(1)
   const per = (x: number) => (x / Math.max(1, t.n)).toFixed(2)
@@ -306,6 +357,11 @@ function run(
       `均杆数=${per(t.shots)}  均进球=${per(t.pots)}  ` +
       `犯规/杆=${perShot(t.fouls)}%  摔袋/杆=${perShot(t.scratches)}%`
   )
+  // v1.4.6：输出犯规样本（前 12 条），用于定位空杆/首撞错球的根因
+  if (samples.length) {
+    console.log(`  ── 犯规样本（${samples.length} 条，前 12）──`)
+    samples.slice(0, 12).forEach((s) => console.log("  " + s))
+  }
   return t
 }
 
@@ -337,10 +393,21 @@ if (ONLY_PRO) {
   console.log("")
   run("专业档·完整", DIFFICULTY.Professional, true, N, SEED)
 } else {
-  run("稳健档 ClawBreak", DIFFICULTY.ClawBreak, false, N, SEED)
-  run("激进档 TheFarJaw", DIFFICULTY.TheFarJaw, false, N, SEED)
-  run("专业档 Professional", DIFFICULTY.Professional, true, N, SEED)
-  console.log("")
-  console.log("--- 清台顺序 A/B 对照（仅专业档）---")
-  run("专业档·关闭清台顺序", DIFFICULTY.Professional, false, N, SEED)
+  // v1.4.6：--tier= 单档过滤 —— 修复⑦的克隆台自验让单进程 480 局内存
+  // 峰值过大（实测三档 120 局 Node OOM），拆进程并行跑各档。
+  const TIER = process.argv.find((a) => a.startsWith("--tier="))?.split("=")[1]
+  if (TIER === "claw") {
+    run("稳健档 ClawBreak", DIFFICULTY.ClawBreak, false, N, SEED)
+  } else if (TIER === "farjaw") {
+    run("激进档 TheFarJaw", DIFFICULTY.TheFarJaw, false, N, SEED)
+  } else if (TIER === "pro") {
+    run("专业档 Professional", DIFFICULTY.Professional, true, N, SEED)
+  } else {
+    run("稳健档 ClawBreak", DIFFICULTY.ClawBreak, false, N, SEED)
+    run("激进档 TheFarJaw", DIFFICULTY.TheFarJaw, false, N, SEED)
+    run("专业档 Professional", DIFFICULTY.Professional, true, N, SEED)
+    console.log("")
+    console.log("--- 清台顺序 A/B 对照（仅专业档）---")
+    run("专业档·关闭清台顺序", DIFFICULTY.Professional, false, N, SEED)
+  }
 }

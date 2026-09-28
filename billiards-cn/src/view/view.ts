@@ -158,6 +158,14 @@ export class View {
   readonly element
   table: Table
   /**
+   * v1.5.4（#70）：渲染画布。回放自由视角的手势（拖动/捏合/滚轮）直接绑在
+   * canvas 上，比绑容器更精确（容器常含进度条等覆盖层）。renderer 惰性重建时
+   * 取到的也是最新的 domElement。
+   */
+  get canvas(): HTMLCanvasElement | undefined {
+    return this.renderer?.domElement
+  }
+  /**
    * v1.3.95：真实高度的桌腿。
    * 物理台面保持 z=0、地面已下沉到 GROUND_Z，桌子会悬空 0.597m，
    * 用这组立柱把桌子接到地面。桌型尺寸可被 `configureForRule` 改写，
@@ -281,6 +289,28 @@ export class View {
     )
     this.initialiseScene()
   }
+
+  // v1.4.9：**刻意没有 dispose() 方法**。
+  //
+  // v1.4.6~v1.4.8 曾在这里提供 dispose()（v1.4.7 起在退出路径调用），用于
+  // 「绕开 Android WebView 不可靠的 context 回收」——该版本对真机卡顿的
+  // 诊断（context 累积到 16 上限）后来被证伪。真机录屏逐帧分析显示：
+  // 点「返回主菜单」后画面精确冻结 3.5s，卡点正是这里的 dispose ——
+  // **真机 GPU 驱动同步删除几十张 1024² 运行时纹理需要约 3.5 秒**，且阻塞
+  // 主线程（headless swiftshader 下同样的代码只要 1~6ms，纯软件实现删除
+  // 是空操作，所以当时测不出来）。
+  //
+  // 结论：
+  //   - 退出走 location.replace() 整页导航，浏览器随后回收整个文档，
+  //     WebGL context 与全部 GPU 资源都在其中 —— 手动 dispose 做的是同一
+  //     件事，只会把成本从「导航后台」提前到「点击响应路径」上；
+  //   - 累积问题由 replace 防住（旧文档可被回收，headless 实测 Documents/
+  //     Nodes 封顶不涨），不需要手动释放；
+  //   - 退出路径只保留零成本清理（停 rAF 循环 + 关 AudioContext，
+  //     见 GameContainer.teardown）。
+  // 若未来确需释放（如同页重开场景），必须避开点击响应路径，且优先只释放
+  // geometry/material —— **绝不能在退出时递归 dispose 纹理**（另见
+  // cue-preview-3d.js：「dispose map 会导致再次使用时变纯黑」的教训）。
 
   addLine(data: LineData) {
     this.drawing.addLine(data)

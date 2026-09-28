@@ -30,10 +30,10 @@ export class Recorder {
     return this.entries.map((e) => e.state)
   }
 
-  record(event: GameEvent, _recordOrigin = "unknown") {
+  record(event: GameEvent, recordOrigin: "local" | "remote" = "local") {
     let recordedEvent = event
     if (event.type === EventType.HIT) {
-      recordedEvent = this.recordHitEvent(event as HitEvent)
+      recordedEvent = this.recordHitEvent(event as HitEvent, recordOrigin)
     }
 
     if (
@@ -52,7 +52,7 @@ export class Recorder {
     }
   }
 
-  private recordHitEvent(hitEvent: HitEvent) {
+  private recordHitEvent(hitEvent: HitEvent, recordOrigin: "local" | "remote") {
     const tablejson = hitEvent.tablejson
     // recordedAim is tablejson.aim which never contains stateCheck,
     // so recordings are inherently lean without explicit stripping
@@ -61,6 +61,14 @@ export class Recorder {
       throw new Error("HitEvent missing aim position")
     }
 
+    // v1.5.4（#70）：给每杆打「归属」标记，回放进度条的进球点据此分色
+    // （蓝 = 保存者本人，红 = 对手/AI）。
+    // 来源判定在 Container 侧完成：本地玩家的 HIT 由 sendEvent 直发（local），
+    // 对手/电脑的 HIT 经 eventQueue 中继进来（remote）。只标记 remote ——
+    // 缺省（无 ow 或 ow≠2）一律视为玩家杆，旧回放数据因此自然兼容。
+    if (recordOrigin === "remote") {
+      ;(recordedAim as { ow?: number }).ow = 2
+    }
     return recordedAim
   }
 

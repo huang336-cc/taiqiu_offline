@@ -142,6 +142,14 @@ function createRenderer(
   glRenderer.outputColorSpace = SRGBColorSpace
   glRenderer.toneMapping = NoToneMapping
   glRenderer.sortObjects = false
+  // v1.5.2：关闭 three.js 的着色器错误检查（官方对生产环境的建议，默认 true）。
+  //
+  // checkShaderErrors=true 时，每个 WebGLProgram 首次使用都会同步调用
+  // getProgramInfoLog / getShaderInfoLog —— 这两个是强制 GPU 同步的查询，
+  // 会一直等到着色器编译完成才返回。实测（CPU 6x 降速）本项目启动要编译
+  // 11 个 program（单个源码约 79KB），仅此项就多花约 336ms（4010→3674ms，-8.4%）；
+  // 真机上这类同步查询同样阻塞主线程。开发期排查着色器问题可临时改回 true。
+  glRenderer.debug.checkShaderErrors = false
   glRenderer.setSize(width, height)
   glRenderer.setPixelRatio(computeCappedDPR())
   glRenderer.domElement.draggable = false

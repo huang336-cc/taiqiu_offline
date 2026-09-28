@@ -80,6 +80,9 @@ export class Spectate extends ControllerBase {
     this.container.table.cue.aim = event
     this.container.table.cueball = this.container.table.balls[event.i]
     this.container.table.cueball.pos.copy(event.pos)
+    // v1.5.4（#71）：观战侧白球重新上场的入口，清掉上一杆残留的出界标记
+    // （offTable 球被渲染层隐藏），避免对手摆球/瞄准时白球隐身。
+    this.container.table.cueball.offTable = false
     // v1.3.58：对手出杆后球杆会被收起，收到新的瞄准事件时重新亮出来
     this.container.table.cue.aimMode()
     this.container.table.cue.updateAimInput()

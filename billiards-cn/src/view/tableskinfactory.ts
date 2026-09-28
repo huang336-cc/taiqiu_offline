@@ -1,5 +1,6 @@
 import {
   CanvasTexture,
+  LinearFilter,
   RepeatWrapping,
   SRGBColorSpace,
   Texture,
@@ -184,6 +185,101 @@ export function getFrameRoughnessTexture(tableSkinId: string): Texture | null {
   tex.anisotropy = 4
   tex.needsUpdate = true
   frameRoughnessCache.set(key, tex)
+  return tex
+}
+
+/**
+ * 【v1.4.5 P5】库边贴图（绒面橡胶颗粒）。
+ *
+ * 为什么要单独一张：库边（CushionBlue）此前只有纯色 + 粗糙度/金属度分级
+ * （v1.4.4），光影上正确，但表面是「一块均匀的色块」—— 真实库边橡胶上有
+ * 细密的绒毛颗粒，掠射光下会呈现细微的明暗闪烁。而且 GLTF 的库边 mesh
+ * 连 TEXCOORD_0 都没有（见 assets.fixCushionUVs），此前挂任何贴图都恒采样
+ * (0,0)，从未真正显示过。
+ *
+ * 设计约束：
+ *  · **中性明度**（灰白底 + 明暗颗粒），色相全部交给 mat.color(cushionColor)
+ *    —— 贴图若自带主题色再与 color 相乘会「色彩平方」，越乘越脏；
+ *  · **上下均匀、无分带**：UV 是三平面米制投影（u 周期 0.75m、v 周期
+ *    0.05m），顶面窄条与侧面全程采样的是贴图的不同小条 —— 只有上下
+ *    均匀，两个面才不会出现明暗断层；
+ *  · 颗粒沿 u 拉长（绒毛顺长度方向），用整数格点哈希做伪随机 ——
+ *    v1.3.87 的教训：任何「规则函数」都会变成可见的周期 = 假。
+ */
+const CW = 1024
+const CH = 64
+const cushionCache = new Map<string, Texture>()
+
+/** 库边贴图专用的 wrap-safe 绘制（画布是 1024×64，与台呢的 W/H=512 不同） */
+function wrapCushion(
+  ctx: CanvasRenderingContext2D,
+  draw: () => void
+): void {
+  for (const ox of [-CW, 0, CW]) {
+    for (const oy of [-CH, 0, CH]) {
+      ctx.save()
+      ctx.translate(ox, oy)
+      draw()
+      ctx.restore()
+    }
+  }
+}
+
+export function getCushionTexture(tableSkinId: string): Texture | null {
+  if (cushionCache.has(tableSkinId)) return cushionCache.get(tableSkinId)!
+  const def = getTableSkin(tableSkinId)
+  // 发光主题的库边更「光洁」（亮颗粒更明显、暗颗粒收敛），呼应整体质感分级
+  const glow = def.frameGlow || def.edgeGlow
+
+  const cv = document.createElement("canvas")
+  cv.width = CW
+  cv.height = CH
+  const ctx = cv.getContext("2d")!
+
+  // 底色：接近白的浅灰（明度纹理，色相交给材质色相乘）
+  ctx.fillStyle = "#f2f2f2"
+  ctx.fillRect(0, 0, CW, CH)
+
+  // 绒毛颗粒：沿 u 拉长的细颗粒（约 1~2px 高 × 3~7px 长），明暗成对 ——
+  // 只画暗点在浅底上是「脏点」，明暗相间才是绒面纤维的反光。
+  const N = 2600
+  for (let i = 0; i < N; i++) {
+    const x = hash2d(i, 1, 71) * CW
+    const y = hash2d(i, 2, 73) * CH
+    const len = 2.5 + hash2d(i, 3, 79) * 5
+    const hgt = 0.8 + hash2d(i, 4, 83) * 1.4
+    const bright = hash2d(i, 5, 89) > 0.5
+    const a0 = 0.03 + hash2d(i, 6, 97) * 0.06
+    const a = bright ? a0 * (glow ? 1.4 : 1) : a0 * (glow ? 0.5 : 0.8)
+    ctx.fillStyle = bright
+      ? "rgba(255,255,255," + a.toFixed(3) + ")"
+      : "rgba(60,60,64," + a.toFixed(3) + ")"
+    wrapCushion(ctx, () => {
+      ctx.fillRect(x, y, len, hgt)
+    })
+  }
+
+  // 大颗粒暗斑：少量、更淡的柔边暗斑，打破「均匀噪点」的塑料感
+  for (let i = 0; i < 90; i++) {
+    const x = hash2d(i, 11, 101) * CW
+    const y = hash2d(i, 12, 103) * CH
+    const r = 1.5 + hash2d(i, 13, 107) * 3.5
+    const a = (0.02 + hash2d(i, 14, 109) * 0.03) * (glow ? 0.6 : 1)
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r)
+    g.addColorStop(0, "rgba(70,70,76," + a.toFixed(3) + ")")
+    g.addColorStop(1, "rgba(70,70,76,0)")
+    ctx.fillStyle = g
+    wrapCushion(ctx, () => {
+      ctx.fillRect(x - r, y - r, r * 2, r * 2)
+    })
+  }
+
+  const tex = new CanvasTexture(cv)
+  tex.wrapS = tex.wrapT = RepeatWrapping
+  tex.colorSpace = SRGBColorSpace
+  tex.anisotropy = 4
+  tex.needsUpdate = true
+  cushionCache.set(tableSkinId, tex)
   return tex
 }
 
@@ -380,6 +476,539 @@ function buildGild(
   return toTexture(cv)
 }
 
+// ============ 【v1.4.4】台面标志覆盖层 ============
+
+/** 整台标志贴图尺寸（repeat 1,1 铺满台面；≈7px/m，够画开球线与置球点） */
+const MARK_W = 2048
+const MARK_H = 1024
+const markCache = new Map<string, Texture>()
+
+/**
+ * 台面标志元素贴图：开球线（head string）、置球点（foot spot）、
+ * 头部点（head spot）、中点（center spot）。
+ *
+ * **为什么必须是独立覆盖层，而不是画进台呢贴图**：
+ * 台呢贴图 `getClothTexture` 是 `repeat(2,2)` 平铺的（一个纹理单元代表
+ * 桌面的一小块），任何「整台唯一」的元素画进去都会被重复 4 次 ——
+ * 开球线会变成 4 条、置球点变成 4 个。所以这里另起一张 repeat(1,1) 的
+ * 整台贴图，由 assets.applyClothMarks 以独立半透明 mesh 铺在台呢之上。
+ *
+ * **为什么画布是 2048×1024**：台面玩区 2.816×1.376m（比例 2.047），
+ * 2048×1024 比例 2.0，误差 2.3% —— 圆点的椭圆度肉眼不可辨，换来的是
+ * 2 的幂尺寸（兼容性好）。像素密度约 727×744 px/m，线宽 5px ≈ 7mm、
+ * 点半径 10px ≈ 14mm，在俯视机位下清晰可见且不过分抢眼。
+ *
+ * **元素定位按真实美式台球规则**（u 沿长边、v 沿短边）：
+ * - 开球线在长边 1/4 处，横跨整个短边；
+ * - 置球点在长边 3/4 处（与开球线对称）、短边中线；
+ * - 头部点在开球线与短边中线的交点；
+ * - 中点在台面正中。
+ */
+export function getClothMarksTexture(tableSkinId: string): Texture | null {
+  if (markCache.has(tableSkinId)) return markCache.get(tableSkinId)!
+  const def = getTableSkin(tableSkinId)
+  const ms = def.markStyle
+  if (!ms) return null
+
+  const cv = document.createElement("canvas")
+  cv.width = MARK_W
+  cv.height = MARK_H
+  const ctx = cv.getContext("2d")!
+  const r0 = (ms.color >> 16) & 255
+  const g0 = (ms.color >> 8) & 255
+  const b0 = ms.color & 255
+  /** 主题色 + 指定透明度 */
+  const col = (a: number): string => `rgba(${r0},${g0},${b0},${a})`
+
+  ctx.save()
+  ctx.lineCap = "round"
+  // 特效款：整层外发光（覆盖层没有桌框那种 Sobel 法线顾虑，可放心用 shadowBlur）
+  if (ms.glow > 0) {
+    ctx.shadowColor = col(0.9)
+    ctx.shadowBlur = 8 + ms.glow * 26
+  }
+
+  /**
+   * ⚠️ v1.4.4 实测教训：**元素不能太小**。
+   *
+   * 首版点半径只有 10px（2048 宽贴图），线宽 5~7px。游戏里台面在 1280×720
+   * 画面上只有约 960px 宽 —— 贴图被压缩到 0.47 倍后再走 mipmap，点的 alpha
+   * 被各级 mip 平均成接近 0，实测三个置球点**一个都看不见**，只剩那条
+   * 纵贯线（连续线不会被 mip 稀释）。
+   * 现在点位放大到直径 40px 上下、线宽统一 ×1.6，屏幕上看是 19~24px 的
+   * 圆点和 3.3~5px 的线 —— 与真实球桌（点 ~6mm、线 ~2mm）相比是夸张的，
+   * 但这是「看得见」的底线，再小就会被 mipmap 吃掉。
+   */
+  // ── 开球线：长边 1/4 处，纵贯短边（两端各留 3% 不与库边相接）──
+  ctx.strokeStyle = col(ms.alpha)
+  ctx.lineWidth = ms.width * 2.2
+  if (ms.dotted) ctx.setLineDash([26, 18])
+  ctx.beginPath()
+  ctx.moveTo(MARK_W * 0.25, MARK_H * 0.03)
+  ctx.lineTo(MARK_W * 0.25, MARK_H * 0.97)
+  ctx.stroke()
+  ctx.setLineDash([])
+
+  // ── 三个点：置球点 / 头部点 / 中点 ──
+  // 分级：特效款（glow>0）点位张扬，经典款收一档 —— 与「经典克制/特效张扬」
+  // 的视觉调性一致（用户选定的方向）。
+  const r = 40 * (ms.glow > 0 ? 1 : 0.85)
+  drawSpot(ctx, MARK_W * 0.75, MARK_H * 0.5, r, ms.spot, col) // foot spot
+  drawSpot(ctx, MARK_W * 0.25, MARK_H * 0.5, r * 0.85, ms.spot, col) // head spot
+  drawSpot(ctx, MARK_W * 0.5, MARK_H * 0.5, r * 0.72, ms.spot, col) // center
+
+  ctx.restore()
+  const tex = toTexture(cv)
+  tex.colorSpace = SRGBColorSpace
+  /**
+   * ⚠️ 必须关掉 mipmap（v1.4.4 实测）。
+   *
+   * 覆盖层是**单张不平铺**的整台贴图：2048px 宽在游戏俯视画面上只占约
+   * 512px，采样率 0.25。开 mipmap 时采样落在 mip2（512×256）上，孤立的
+   * 小圆点（实心核只有几个像素）被逐级平均，alpha 被稀释到接近 0 —— 三个
+   * 置球点**一个都看不见**；而纵贯的开球线因为沿一个方向连续，平均不掉，
+   * 所以只有线可见。这正是「同一个贴图里画的东西，有的看得见有的看不见」
+   * 的全部原因。关掉 mipmap + 各向异性拉到 8，点就回来了。
+   */
+  tex.generateMipmaps = false
+  tex.minFilter = LinearFilter
+  tex.magFilter = LinearFilter
+  tex.anisotropy = 8
+  tex.needsUpdate = true
+  markCache.set(tableSkinId, tex)
+  return tex
+}
+
+/**
+ * 置球点样式（7 种）。
+ *
+ * 全部为径向渐变/环带这类**中心对称**画法：置球点在真实球桌上就是一枚
+ * 嵌进台呢的小圆片（象牙、珍珠贝或金属），不适合用任何方向性图案。
+ */
+function drawSpot(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  r: number,
+  kind: string,
+  col: (a: number) => string
+): void {
+  /**
+   * 实心底盘（v1.4.4）。
+   *
+   * 没有它，pearl / frost 这类**径向渐变**样式的中心虽然 alpha 高，但真正
+   * 不透明的区域只有几个像素；贴图缩到屏幕尺寸后走 mipmap 逐级平均，核心
+   * alpha 被稀释到接近 0 —— 实测经典款置球点在 1280×720 画面上**完全
+   * 看不见**（差异 0），而同一张贴画的连续开球线却清晰可见。
+   * 真实球桌的置球点本来就是一枚嵌进台呢的实心圆片，所以先铺一层不透明
+   * 底再叠样式，既修了可见性，也更写实。
+   */
+  ctx.fillStyle = col(0.85)
+  ctx.beginPath()
+  ctx.arc(x, y, r * 0.55, 0, Math.PI * 2)
+  ctx.fill()
+
+  switch (kind) {
+    case "pearl": {
+      // 珍珠贝：中心亮、边缘收，带一圈极淡的晕
+      const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r)
+      g.addColorStop(0, "rgba(255,255,255,0.95)")
+      g.addColorStop(0.55, col(0.72))
+      g.addColorStop(1, col(0.28))
+      ctx.fillStyle = g
+      ctx.beginPath()
+      ctx.arc(x, y, r, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.strokeStyle = col(0.35)
+      ctx.lineWidth = r * 0.15
+      ctx.stroke()
+      break
+    }
+    case "gem": {
+      // 宝石：主题色实体 + 亮心 + 深色内环
+      ctx.fillStyle = col(0.8)
+      ctx.beginPath()
+      ctx.arc(x, y, r, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.strokeStyle = "rgba(0,0,0,0.35)"
+      ctx.lineWidth = r * 0.2
+      ctx.stroke()
+      const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, 0, x, y, r * 0.6)
+      g.addColorStop(0, "rgba(255,255,255,0.85)")
+      g.addColorStop(1, "rgba(255,255,255,0)")
+      ctx.fillStyle = g
+      ctx.beginPath()
+      ctx.arc(x, y, r, 0, Math.PI * 2)
+      ctx.fill()
+      break
+    }
+    case "gold": {
+      // 鎏金：金属环 + 中心亮点（环比实体更有「镶嵌」感）
+      ctx.strokeStyle = col(0.9)
+      ctx.lineWidth = r * 0.3
+      ctx.beginPath()
+      ctx.arc(x, y, r, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.fillStyle = col(0.35)
+      ctx.beginPath()
+      ctx.arc(x, y, r * 0.72, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.fillStyle = "rgba(255,250,225,0.9)"
+      ctx.beginPath()
+      ctx.arc(x - r * 0.25, y - r * 0.25, r * 0.22, 0, Math.PI * 2)
+      ctx.fill()
+      break
+    }
+    case "frost": {
+      // 霜白：冷白径向 + 虚线外环（呼应蓝宝石的冰裂主题）
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r)
+      g.addColorStop(0, "rgba(255,255,255,0.9)")
+      g.addColorStop(1, col(0.25))
+      ctx.fillStyle = g
+      ctx.beginPath()
+      ctx.arc(x, y, r * 0.8, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.strokeStyle = col(0.5)
+      ctx.lineWidth = r * 0.15
+      ctx.setLineDash([4, 4])
+      ctx.beginPath()
+      ctx.arc(x, y, r * 1.25, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.setLineDash([])
+      break
+    }
+    case "obsidian": {
+      // 黑曜石：暗色实体 + 一道弧形高光（黑玻璃的辨识特征）
+      ctx.fillStyle = "rgba(18,20,24,0.85)"
+      ctx.beginPath()
+      ctx.arc(x, y, r, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.strokeStyle = col(0.6)
+      ctx.lineWidth = r * 0.2
+      ctx.stroke()
+      ctx.strokeStyle = "rgba(255,255,255,0.55)"
+      ctx.lineWidth = r * 0.2
+      ctx.beginPath()
+      ctx.arc(x, y, r * 0.62, Math.PI * 1.05, Math.PI * 1.6)
+      ctx.stroke()
+      break
+    }
+    case "glow": {
+      // 发光：强径向渐变（外圈透明）+ 过曝亮心
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r * 1.6)
+      g.addColorStop(0, "rgba(255,255,255,0.98)")
+      g.addColorStop(0.35, col(0.95))
+      g.addColorStop(1, col(0))
+      ctx.fillStyle = g
+      ctx.beginPath()
+      ctx.arc(x, y, r * 1.6, 0, Math.PI * 2)
+      ctx.fill()
+      break
+    }
+    case "candy": {
+      // 糖果：粉白圆片 + 亮边环 + 高光点
+      ctx.fillStyle = "rgba(255,255,255,0.92)"
+      ctx.beginPath()
+      ctx.arc(x, y, r, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.strokeStyle = col(0.85)
+      ctx.lineWidth = r * 0.25
+      ctx.stroke()
+      ctx.fillStyle = "rgba(255,255,255,1)"
+      ctx.beginPath()
+      ctx.arc(x - r * 0.3, y - r * 0.32, r * 0.24, 0, Math.PI * 2)
+      ctx.fill()
+      break
+    }
+    default: {
+      ctx.fillStyle = col(0.7)
+      ctx.beginPath()
+      ctx.arc(x, y, r, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+}
+
+// ============ 【v1.4.4】经典 5 款独有底纹 ============
+
+/**
+ * 设计硬约束（承接 v1.3.87 / v1.3.88 两次翻车的教训）：
+ *
+ * v1.3.87 用高频**规则正弦**堆「编织颗粒」、v1.3.88 用等间距**斜线菱格**
+ * 堆「压花」，两者在离线小图里都像织物，但在实机俯视全屏（台呢铺满整屏）
+ * 下必然暴露**等间距周期结构**，视觉上就是一块格子布，被判定为假。
+ *
+ * 结论：**规则函数 = 可见的周期 = 假**。真实台呢是绒面，起伏各向同性、
+ * 无方向性、无等间距。因此这 5 款一律走：
+ *   · 基础层：baseClothGradient（值噪声 + 三层 fBm，整数周期 → 平铺无缝）；
+ *   · 特征层：各向异性噪声 / 域扭曲噪声 / 随机分叉线 —— 有机、无周期；
+ *   · 跨边界的线：wrap-safe（在 x-W / x / x+W 三处各画一遍）；
+ *   · 幅度克制：经典款对比度 ±6% 上下，宁可「看不出我改了」也不要「假」。
+ */
+
+/** 整数格点哈希 → [0,1)（与 baseClothGradient 内部同构） */
+function hash2d(xi: number, yi: number, seed: number): number {
+  let h = (xi * 374761393 + yi * 668265263 + seed * 1442695041) | 0
+  h = (h ^ (h >>> 13)) * 1274126177
+  h = h ^ (h >>> 16)
+  return (h >>> 0) / 4294967296
+}
+
+/**
+ * 模块级值噪声（供特征层使用；baseClothGradient 内部那份是闭包拿不到）。
+ *
+ * px / py 分别指定 x / y 方向的格点周期 —— 两者**独立**是刻意的：
+ * 各向异性纹理（如顺毛）需要两个方向频率不同，若共用一个周期会算错。
+ * 只要 px 整除 x 方向的坐标跨度、py 整除 y 方向跨度，平铺即无缝。
+ */
+function vn(
+  x: number,
+  y: number,
+  px: number,
+  py: number,
+  seed: number
+): number {
+  const gx = Math.floor(x)
+  const gy = Math.floor(y)
+  const fx = x - gx
+  const fy = y - gy
+  const sx = fx * fx * fx * (fx * (fx * 6 - 15) + 10)
+  const sy = fy * fy * fy * (fy * (fy * 6 - 15) + 10)
+  const wx = (n: number): number => ((n % px) + px) % px
+  const wy = (n: number): number => ((n % py) + py) % py
+  const v00 = hash2d(wx(gx), wy(gy), seed)
+  const v10 = hash2d(wx(gx + 1), wy(gy), seed)
+  const v01 = hash2d(wx(gx), wy(gy + 1), seed)
+  const v11 = hash2d(wx(gx + 1), wy(gy + 1), seed)
+  const a = v00 + (v10 - v00) * sx
+  const b = v01 + (v11 - v01) * sx
+  return a + (b - a) * sy
+}
+
+/** 8bit 通道限幅 */
+function cl(v: number): number {
+  return v < 0 ? 0 : v > 255 ? 255 : v
+}
+
+/**
+ * wrap-safe 绘制：把同一组图元在 3×3 宫格（x-W/x/x+W × y-H/y/y+H）各画一遍。
+ * 超出画布的部分被裁掉，跨界的那一段自然由相邻那份补上 → 平铺不断线。
+ *
+ * ⚠️ 为什么必须双向而不只是横向：台呢贴图 repeat(2,2)，**两个方向都会
+ * 跨接缝**。只做 x 方向平移时，金箔斑与裂纹在 y 方向仍在边界处断裂
+ * （实测 golden 的 seamY 达 3.23，即上下边界差是内部行差的 3 倍多）。
+ */
+function wrapDraw(ctx: CanvasRenderingContext2D, draw: () => void): void {
+  for (const ox of [-W, 0, W]) {
+    for (const oy of [-H, 0, H]) {
+      ctx.save()
+      ctx.translate(ox, oy)
+      draw()
+      ctx.restore()
+    }
+  }
+}
+
+/** 经典原木：精纺顺毛（各向异性噪声，纹理沿长边拉长） */
+function buildWorsted(
+  cv: HTMLCanvasElement,
+  ctx: CanvasRenderingContext2D,
+  def: ReturnType<typeof getTableSkin>
+): Texture {
+  baseClothGradient(ctx, def.clothColor, def.clothColor2)
+  const img = ctx.getImageData(0, 0, W, H)
+  const d = img.data
+  for (let y = 0; y < H; y++) {
+    const ny = y / H
+    for (let x = 0; x < W; x++) {
+      const nx = x / W
+      // y 方向频率是 x 的 6 倍 → 纹理沿 x 拉长 = 顺毛走向（各向异性）
+      const n =
+        vn(nx * 8, ny * 48, 8, 48, 31) * 0.62 +
+        vn(nx * 24, ny * 144, 24, 144, 37) * 0.38
+      const k = (n - 0.5) * 0.12 * 255 // ±6%
+      const i = (y * W + x) * 4
+      d[i] = cl(d[i] + k)
+      d[i + 1] = cl(d[i + 1] + k)
+      d[i + 2] = cl(d[i + 2] + k)
+    }
+  }
+  ctx.putImageData(img, 0, 0)
+  return toTexture(cv)
+}
+
+/** 翡翠绿：叶脉（域扭曲噪声 + ridged 脊线 → 有机流线） */
+function buildLeafVein(
+  cv: HTMLCanvasElement,
+  ctx: CanvasRenderingContext2D,
+  def: ReturnType<typeof getTableSkin>
+): Texture {
+  baseClothGradient(ctx, def.clothColor, def.clothColor2)
+  const img = ctx.getImageData(0, 0, W, H)
+  const d = img.data
+  for (let y = 0; y < H; y++) {
+    const ny = y / H
+    for (let x = 0; x < W; x++) {
+      const nx = x / W
+      // 域扭曲：先用低频噪声偏移采样坐标，直线族被掰成蜿蜒的有机流线。
+      // 扭曲量自身周期（4）整除跨度 → x=0 与 x=W 处扭曲量相同，平铺无缝。
+      const qx = vn(nx * 4, ny * 4, 4, 4, 51) - 0.5
+      const qy = vn(nx * 4 + 11, ny * 4 + 7, 4, 4, 52) - 0.5
+      const n = vn(nx * 6 + qx * 0.9, ny * 6 + qy * 0.9, 6, 6, 53)
+      // ridged：把噪声翻成脊线（|中值| 处最亮）→ 叶脉那样的细亮线
+      const ridge = 1 - Math.abs(n * 2 - 1)
+      const k = Math.pow(ridge, 7) * 0.13 * 255
+      const i = (y * W + x) * 4
+      d[i] = cl(d[i] + k)
+      d[i + 1] = cl(d[i + 1] + k * 0.92)
+      d[i + 2] = cl(d[i + 2] + k * 0.7)
+    }
+  }
+  ctx.putImageData(img, 0, 0)
+  return toTexture(cv)
+}
+
+/**
+ * 赤焰红：火焰暗纹。
+ *
+ * 火舌的「上扬感」**不用**线性渐变（1-ny 是非周期的，v 方向平铺时
+ * 会在贴图上下边界处突变出一条横向接缝），改用低频噪声（周期 2）做
+ * 上下的明暗调制 —— 既无缝，又不是规则正弦那种可察觉的规律渐变。
+ */
+function buildFlame(
+  cv: HTMLCanvasElement,
+  ctx: CanvasRenderingContext2D,
+  def: ReturnType<typeof getTableSkin>
+): Texture {
+  baseClothGradient(ctx, def.clothColor, def.clothColor2)
+  const img = ctx.getImageData(0, 0, W, H)
+  const d = img.data
+  for (let y = 0; y < H; y++) {
+    const ny = y / H
+    for (let x = 0; x < W; x++) {
+      const nx = x / W
+      const qx = vn(nx * 4, ny * 2, 4, 2, 61) - 0.5
+      // y 方向频率低（2）→ 纹理竖直拉长，像火舌
+      const n = vn(nx * 5 + qx * 1.15, ny * 2, 5, 2, 62)
+      const ridge = 1 - Math.abs(n * 2 - 1)
+      // 低频噪声调制：整幅上下的火势强弱（周期 2 → 无缝）
+      const draft = 0.55 + 0.45 * vn(nx * 1.5, ny * 2, 2, 2, 63)
+      const k = Math.pow(ridge, 5) * draft * 0.2 * 255
+      const i = (y * W + x) * 4
+      d[i] = cl(d[i] + k)
+      d[i + 1] = cl(d[i + 1] + k * 0.45)
+      d[i + 2] = cl(d[i + 2] + k * 0.12)
+    }
+  }
+  ctx.putImageData(img, 0, 0)
+  return toTexture(cv)
+}
+
+/**
+ * 随机分叉裂纹（冰裂 / 金箔龟裂共用）。
+ *
+ * 用随机游走而非等间距线：步长带随机扰动、随机触发分叉，
+ * 生成的是**有机**裂纹网，不会形成周期结构。
+ */
+function crackPoints(
+  x0: number,
+  y0: number,
+  angle: number,
+  steps: number,
+  stepLen: number,
+  jitter: number
+): Array<[number, number]> {
+  const pts: Array<[number, number]> = [[x0, y0]]
+  let x = x0
+  let y = y0
+  let a = angle
+  for (let s = 0; s < steps; s++) {
+    a += (Math.random() - 0.5) * jitter
+    x += Math.cos(a) * stepLen
+    y += Math.sin(a) * stepLen
+    pts.push([x, y])
+  }
+  return pts
+}
+
+function strokePts(
+  ctx: CanvasRenderingContext2D,
+  pts: Array<[number, number]>
+): void {
+  ctx.beginPath()
+  ctx.moveTo(pts[0][0], pts[0][1])
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1])
+  ctx.stroke()
+}
+
+/** 蓝宝石：冰裂（冷白细裂纹，随机分叉 + wrap-safe） */
+function buildIceCrack(
+  cv: HTMLCanvasElement,
+  ctx: CanvasRenderingContext2D,
+  def: ReturnType<typeof getTableSkin>
+): Texture {
+  baseClothGradient(ctx, def.clothColor, def.clothColor2)
+  ctx.save()
+  ctx.lineCap = "round"
+  for (let i = 0; i < 26; i++) {
+    const x0 = Math.random() * W
+    const y0 = Math.random() * H
+    const a0 = Math.random() * Math.PI * 2
+    const pts = crackPoints(x0, y0, a0, 16, 7, 0.5)
+    // 主裂纹
+    ctx.strokeStyle = "rgba(206,232,255,0.30)"
+    ctx.lineWidth = 1.4
+    wrapDraw(ctx, () => strokePts(ctx, pts))
+    // 分叉：从主裂纹中段随机抽出 1~2 条短支
+    const forks = 1 + Math.floor(Math.random() * 2)
+    for (let f = 0; f < forks; f++) {
+      const p = pts[Math.floor(Math.random() * pts.length)]
+      const fp = crackPoints(p[0], p[1], Math.random() * Math.PI * 2, 6, 5, 0.7)
+      ctx.strokeStyle = "rgba(206,232,255,0.16)"
+      ctx.lineWidth = 1
+      wrapDraw(ctx, () => strokePts(ctx, fp))
+    }
+  }
+  ctx.restore()
+  return toTexture(cv)
+}
+
+/** 金辉：金箔龟裂（碎裂网 + 金箔斑，wrap-safe） */
+function buildGoldLeaf(
+  cv: HTMLCanvasElement,
+  ctx: CanvasRenderingContext2D,
+  def: ReturnType<typeof getTableSkin>
+): Texture {
+  baseClothGradient(ctx, def.clothColor, def.clothColor2)
+  // 金箔斑：先铺一层不规则的金箔块（椭圆，随机旋转，wrap-safe）
+  ctx.save()
+  for (let i = 0; i < 40; i++) {
+    const x = Math.random() * W
+    const y = Math.random() * H
+    const rx = 8 + Math.random() * 26
+    const ry = rx * (0.35 + Math.random() * 0.5)
+    const rot = Math.random() * Math.PI
+    ctx.fillStyle = `rgba(246,214,128,${0.05 + Math.random() * 0.07})`
+    wrapDraw(ctx, () => {
+      ctx.beginPath()
+      ctx.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2)
+      ctx.fill()
+    })
+  }
+  // 龟裂网：比冰裂更碎更密
+  ctx.lineCap = "round"
+  for (let i = 0; i < 44; i++) {
+    const x0 = Math.random() * W
+    const y0 = Math.random() * H
+    const pts = crackPoints(x0, y0, Math.random() * Math.PI * 2, 7, 4.5, 0.85)
+    ctx.strokeStyle = "rgba(236,198,104,0.34)"
+    ctx.lineWidth = 1.1
+    wrapDraw(ctx, () => strokePts(ctx, pts))
+  }
+  ctx.restore()
+  return toTexture(cv)
+}
+
 // ============ 台呢纹理 ============
 
 function buildCloth(
@@ -403,6 +1032,17 @@ function buildCloth(
       return buildVelvet(cv, ctx, def)
     case "gild":
       return buildGild(cv, ctx, def)
+    // 【v1.4.4】经典 5 款独有底纹（此前 5 款共用 velvet，只换色不换图案）
+    case "worsted":
+      return buildWorsted(cv, ctx, def)
+    case "leafvein":
+      return buildLeafVein(cv, ctx, def)
+    case "flame":
+      return buildFlame(cv, ctx, def)
+    case "icecrack":
+      return buildIceCrack(cv, ctx, def)
+    case "goldleaf":
+      return buildGoldLeaf(cv, ctx, def)
     default:
       baseClothGradient(ctx, def.clothColor, def.clothColor2)
       return toTexture(cv)
@@ -781,12 +1421,42 @@ function buildFrameCanvas(
     }
   }
 
-  // 上下边发光条（沿桌框边缘）
+  /**
+   * 【v1.4.4】桌框装饰（内镶线 / 中轴暗槽 / 四角包角）。
+   *
+   * 前提：桌框走三平面 UV（fixFrameUVs），顶面 u=(x-minX)/scale、
+   * v=(y-minY)/scale，侧面被挪到 v∈[0.62,0.677] 的独立带（见 assets.ts）。
+   * 实测 wood mesh 世界尺寸 3.2917×1.8503×0.1887，scale=3.2917，于是：
+   *   · 顶面占据贴图 u∈[0,1]、v∈[0,0.5621] —— flipY 下即 canvas
+   *     y∈[(1-0.5621)*256, 256] = [112, 256]；
+   *   · 桌框是**环**，内边界是库边外沿（±1.5006 / ±0.7799）→ u∈[0.0441,
+   *     0.9559]、v∈[0.0441,0.5177] → canvas 内矩形 (45,123)-(979,245)。
+   * 所以能画的只有这条环带，而且 x 方向 311px/m、y 方向 78px/m —— **严重
+   * 各向异性**，任何"圆"都会被拉成横椭圆。装饰必须全用直线段。
+   *
+   * 另外：法线贴图由颜色贴图的亮度场 Sobel 生成，所以这些线画下去会
+   * 自动获得对应的凹凸，不需要另画一套法线。
+   */
+  drawFrameTrim(ctx, def)
+
+  /**
+   * 桌框发光边（沿外沿一圈）。
+   *
+   * ⚠️ v1.4.4 修正：旧版把发光条画在 canvas y=0..14 与 y=242..256。但顶面
+   * 只占 v∈[0,0.5621]（flipY 后即 y∈[112,256]）—— **上面那条 v≈0.95~1 的
+   * 条子从来没被采样过，等于白画**，只有下面那条看得见，所以发光框一直是
+   * 「只有一条边亮」。现在改成沿外沿描一圈，四条边都亮。
+   */
   if (def.frameGlow) {
-    ctx.fillStyle = hex(def.frameGlow)
+    ctx.strokeStyle = hex(def.frameGlow)
     ctx.globalAlpha = 0.85
-    ctx.fillRect(0, 0, FW, 14)
-    ctx.fillRect(0, FH - 14, FW, 14)
+    ctx.lineWidth = 9
+    ctx.strokeRect(
+      TRIM.ox0 + 5,
+      TRIM.oyTop + 5,
+      TRIM.ox1 - TRIM.ox0 - 10,
+      TRIM.oyBot - TRIM.oyTop - 10
+    )
     ctx.globalAlpha = 1
   }
 
@@ -809,4 +1479,117 @@ function buildFrameCanvas(
 /** 取桌框颜色贴图（内部转 Texture） */
 function buildFrame(def: ReturnType<typeof getTableSkin>): Texture {
   return toTexture(buildFrameCanvas(def))
+}
+
+/**
+ * 桌框顶面在画布上的可用区域（常量来自实测，见 buildFrameCanvas 注释）。
+ * 这些数字**只对这个 GLTF 桌模型成立** —— 换模型必须重测（probe-frameuv.js）。
+ */
+const TRIM = {
+  /** 桌框外沿矩形（顶面可见区的边界） */
+  ox0: 0,
+  ox1: 1024,
+  oyTop: 112, // v=0.5621
+  oyBot: 256, // v=0
+  /** 桌框内沿矩形（贴着库边外沿） */
+  ix0: 45,
+  ix1: 979,
+  iyTop: 123, // v=0.5177
+  iyBot: 245, // v=0.0441
+}
+
+/**
+ * 桌框装饰：内镶线 + 中轴暗槽 + 四角包角。
+ *
+ * 三条原则（都是踩过的坑）：
+ *  · 只画**直线段**：贴图 x/y 是 311/78 px per m，画圆会变成横椭圆；
+ *  · 线宽 ≤3px：环带在 y 方向只有 11px 高，画粗了会溢出到台面/侧面；
+ *  · **提亮为主**：桌框底色是很深的木色（如 0x6a4a1a，最大通道仅 106），
+ *    往上叠暗线会糊成一片，只有提亮的线才浮得出来（v1.3.88 教训）。
+ */
+function drawFrameTrim(
+  ctx: CanvasRenderingContext2D,
+  def: ReturnType<typeof getTableSkin>
+): void {
+  const { ox0, ox1, oyTop, oyBot, ix0, ix1, iyTop, iyBot } = TRIM
+  /**
+   * 分级（用户选定的「经典克制 / 特效张扬」）：
+   * 发光款用主题色 + 更高不透明度，经典款用木色系 + 低不透明度。
+   */
+  const glow = !!def.frameGlow
+  const trimA = glow ? 0.62 : 0.34
+  const grooveA = glow ? 0.34 : 0.2
+  const cornerA = glow ? 0.72 : 0.4
+
+  const line = (
+    x0: number, y0: number, x1: number, y1: number, w: number, style: string
+  ) => {
+    ctx.strokeStyle = style
+    ctx.lineWidth = w
+    ctx.beginPath()
+    ctx.moveTo(x0, y0)
+    ctx.lineTo(x1, y1)
+    ctx.stroke()
+  }
+  const colorWithAlpha = (h: number, a: number): string => {
+    const r = (h >> 16) & 255
+    const g = (h >> 8) & 255
+    const b = h & 255
+    return `rgba(${r},${g},${b},${a})`
+  }
+
+  ctx.save()
+  ctx.lineCap = "butt"
+
+  // ── 1. 内镶线：沿内沿一圈的亮线 + 外侧 3px 的一条暗线（双线镶边）──
+  const inner = glow
+    ? colorWithAlpha(def.frameGlow || 0xf0d8a0, trimA)
+    : `rgba(238,212,164,${trimA})`
+  ctx.strokeStyle = inner
+  ctx.lineWidth = glow ? 2.4 : 1.8
+  ctx.strokeRect(ix0, iyTop, ix1 - ix0, iyBot - iyTop)
+
+  // 外侧暗线：让亮线"浮"出来（真实球桌镶线两侧有阴影槽）
+  ctx.strokeStyle = `rgba(26,13,4,${grooveA})`
+  ctx.lineWidth = 1.2
+  ctx.strokeRect(ix0 - 3, iyTop - 3, ix1 - ix0 + 6, iyBot - iyTop + 6)
+
+  // ── 2. 中轴暗槽：沿环带中线一圈（左右带宽 45px、上下带高 11px）──
+  const mx0 = (ox0 + ix0) / 2
+  const mx1 = (ox1 + ix1) / 2
+  const myTop = (oyTop + iyTop) / 2
+  const myBot = (oyBot + iyBot) / 2
+  ctx.strokeStyle = `rgba(22,11,3,${grooveA * 0.9})`
+  ctx.lineWidth = glow ? 2.6 : 2.0
+  ctx.strokeRect(mx0, myTop, mx1 - mx0, myBot - myTop)
+
+  // 暗槽旁再补一条极淡的高光丝，避免暗槽看起来像"一条脏线"
+  ctx.strokeStyle = glow
+    ? colorWithAlpha(def.frameGlow || 0xf0d8a0, 0.22)
+    : `rgba(246,226,190,0.14)`
+  ctx.lineWidth = 0.9
+  ctx.strokeRect(mx0, myTop - 2.5, mx1 - mx0, myBot - myTop + 5)
+
+  // ── 3. 四角包角：角部加粗的 L 形亮线 ──
+  // 长度换算：x 311px/m、y 78px/m，取视觉长度 0.30m → 水平 93px、垂直 23px
+  const LEN_X = 93
+  const LEN_Y = 23
+  const cornerCol = glow
+    ? colorWithAlpha(def.frameGlow || 0xf0d8a0, cornerA)
+    : `rgba(244,220,178,${cornerA})`
+  ctx.strokeStyle = cornerCol
+  ctx.lineWidth = glow ? 4.5 : 3.2
+  const corners: Array<[number, number, number, number]> = [
+    // [内沿角点 x, 内沿角点 y, 水平延伸方向, 垂直延伸方向]
+    [ix0, iyTop, 1, 1],
+    [ix1, iyTop, -1, 1],
+    [ix0, iyBot, 1, -1],
+    [ix1, iyBot, -1, -1],
+  ]
+  for (const [cx, cy, sx, sy] of corners) {
+    line(cx, cy, cx + LEN_X * sx, cy, ctx.lineWidth, cornerCol)
+    line(cx, cy, cx, cy + LEN_Y * sy, ctx.lineWidth, cornerCol)
+  }
+
+  ctx.restore()
 }

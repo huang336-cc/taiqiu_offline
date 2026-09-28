@@ -199,12 +199,77 @@ export interface TableSkinDef {
     | "cloud"
     | "holo"
     | "candy"
+    /**
+     * 【v1.4.4】经典 5 款独有底纹。
+     *
+     * 此前 classic/emerald/crimson/sapphire/golden 五款**共用 velvet**，
+     * 只有颜色不同、图案完全一致，选皮肤时看不出差别。现各配一款。
+     *
+     * ⚠️ 设计硬约束（承接 v1.3.88 教训）：台呢是绒面，**不能出现等间距
+     * 的线/格/条纹**（v1.3.87 的规则正弦、v1.3.88 的斜线菱格都在实机
+     * 俯视全屏下变成「格子布」被判定为假）。因此这 5 款一律走
+     * 「各向异性噪声 / 域扭曲噪声 / 随机分叉线」等有机手法，无规则周期。
+     */
+    | "worsted" // 经典原木：精纺顺毛（各向异性噪声，沿长边走向）
+    | "leafvein" // 翡翠绿：叶脉（域扭曲噪声产生的有机流线）
+    | "flame" // 赤焰红：火焰暗纹（域扭曲 + 上扬调制）
+    | "icecrack" // 蓝宝石：冰裂（随机分叉裂纹，wrap-safe）
+    | "goldleaf" // 金辉：金箔龟裂（碎裂网 + 金箔斑）
   cushionColor: number
   frameColor: number
   /** 桌框发光色（emissive），0 表示不发光 */
   frameGlow: number
   /** 桌沿装饰发光边色（纯装饰细环），0 表示无 */
   edgeGlow: number
+  /**
+   * 【v1.4.4】桌沿菱形镶点色。
+   *
+   * GLTF 模型自带 `diamond` 几何（p8 八球 224 顶点、threecushion 三库 368
+   * 顶点，沿桌沿均匀分布的小菱点），但此前在 assets.ts 里被硬编码成
+   * 哑光浅金 `0xc9a86a`，13 款主题共用一色 —— 换皮肤时镶点永远一个样。
+   * 现按主题配：经典款哑光黄铜/古铜、鎏金款亮金、特效款发光色。
+   *
+   * ⚠️ snooker / d-snooker 模型没有 diamond 几何，该类玩法不显示镶点
+   * （模型固有限制，非本版回归）。
+   */
+  diamondColor: number
+  /** 镶点自发光强度，0 = 不发光（特效款 >0，让镶点跟着主题发亮） */
+  diamondGlow: number
+  /**
+   * 【v1.4.4】库边金属感 0~0.35。
+   *
+   * 此前库边只有一句 `mat.color.set(cushionColor)` —— 没有任何材质参数，
+   * 所有主题的库边都是同一档塑料感。现按主题分级：经典款近乎哑光橡胶
+   * （0.02），鎏金/全息款偏金属（0.18~0.30）。
+   */
+  cushionMetal: number
+  /**
+   * 【v1.4.4】台面标志元素（开球线 / 置球点 / 中点）的样式。
+   *
+   * 这些是真实球桌的**规则元素**（任何正规球台都有），与 v1.2.11 删掉的
+   * 品牌 LOGO 圆盘不是一回事。此前台面只有底纹、没有任何标志，俯视看过去
+   * 就是一整片纯色绒面，13 款之间也缺少可辨识的「桌上细节」。
+   *
+   * 实现为「独立透明覆盖层」（tableskinfactory.getClothMarksTexture）：
+   * 台呢贴图是 repeat(2,2) 平铺的，元素画进去会被重复 4 次，因此必须另起
+   * 一张 repeat(1,1) 的整台贴图。
+   *
+   * 调性分级：经典款低透明度、细线、哑光点；特效款高透明度 + 自发光。
+   */
+  markStyle: {
+    /** 线/点颜色 */
+    color: number
+    /** 线透明度 0~1（经典款 0.45~0.55 克制，特效款 0.9~1.0 张扬） */
+    alpha: number
+    /** 线宽（px，基于 2048 宽的整台贴图，≈7px/m） */
+    width: number
+    /** 置球点样式 */
+    spot: "pearl" | "gem" | "gold" | "frost" | "obsidian" | "glow" | "candy"
+    /** 自发光强度 0~1（0 = 不发光） */
+    glow: number
+    /** 开球线是否画成虚线（糖果/经典款用） */
+    dotted?: boolean
+  }
   swatch: string
 }
 
@@ -251,11 +316,15 @@ export const TABLE_SKINS: TableSkinDef[] = [
     // 库边用台呢的更深绿作为过渡，使台呢/库边/木框三者成一套协调的「原木绿台」主题。
     clothColor: 0x1f6b34,
     clothColor2: 0x124a22,
-    clothTexture: "velvet",
+    clothTexture: "worsted",
     cushionColor: 0x0e3a1a,
     frameColor: 0x6a4a1a,
     frameGlow: 0,
     edgeGlow: 0,
+    diamondColor: 0xc9a86a,
+    diamondGlow: 0,
+    cushionMetal: 0.02,
+    markStyle: { color: 0xf2ead6, alpha: 0.72, width: 5, spot: "pearl", glow: 0, dotted: true },
     swatch: "linear-gradient(135deg,#1f6b34 0%,#6a4a1a 100%)",
   },
   {
@@ -264,11 +333,15 @@ export const TABLE_SKINS: TableSkinDef[] = [
     kind: "emerald",
     clothColor: 0x2a7a3a,
     clothColor2: 0x1a3a1a,
-    clothTexture: "velvet",
+    clothTexture: "leafvein",
     cushionColor: 0x15501f,
     frameColor: 0x3d6b48,
     frameGlow: 0,
     edgeGlow: 0,
+    diamondColor: 0xb8c9a0,
+    diamondGlow: 0,
+    cushionMetal: 0.02,
+    markStyle: { color: 0xeae3c8, alpha: 0.68, width: 5, spot: "pearl", glow: 0 },
     swatch: "linear-gradient(135deg,#2a7a3a 0%,#0d3316 100%)",
   },
   {
@@ -277,11 +350,15 @@ export const TABLE_SKINS: TableSkinDef[] = [
     kind: "crimson",
     clothColor: 0x8a2a2a,
     clothColor2: 0x4a0a0a,
-    clothTexture: "velvet",
+    clothTexture: "flame",
     cushionColor: 0x5a1414,
     frameColor: 0x6b3630,
     frameGlow: 0,
     edgeGlow: 0,
+    diamondColor: 0xc98a5a,
+    diamondGlow: 0,
+    cushionMetal: 0.02,
+    markStyle: { color: 0xf0dcae, alpha: 0.66, width: 5, spot: "gem", glow: 0 },
     swatch: "linear-gradient(135deg,#8a2a2a 0%,#3a0c0c 100%)",
   },
   {
@@ -290,11 +367,15 @@ export const TABLE_SKINS: TableSkinDef[] = [
     kind: "sapphire",
     clothColor: 0x1a3a8a,
     clothColor2: 0x0a1a4a,
-    clothTexture: "velvet",
+    clothTexture: "icecrack",
     cushionColor: 0x0a2458,
     frameColor: 0x2e3d6b,
     frameGlow: 0,
     edgeGlow: 0,
+    diamondColor: 0xa8c0d8,
+    diamondGlow: 0,
+    cushionMetal: 0.02,
+    markStyle: { color: 0xe6f0ff, alpha: 0.7, width: 5, spot: "frost", glow: 0, dotted: true },
     swatch: "linear-gradient(135deg,#1a3a8a 0%,#081028 100%)",
   },
   {
@@ -304,11 +385,15 @@ export const TABLE_SKINS: TableSkinDef[] = [
     // 金辉主题：台呢提亮为更纯的暖金（与深棕木框形成金棕对比），库边取台呢与框之间的过渡金。
     clothColor: 0xb8902f,
     clothColor2: 0x6a4a14,
-    clothTexture: "velvet",
+    clothTexture: "goldleaf",
     cushionColor: 0x8a6620,
     frameColor: 0x6b4c22,
     frameGlow: 0,
     edgeGlow: 0,
+    diamondColor: 0xe0b860,
+    diamondGlow: 0,
+    cushionMetal: 0.12,
+    markStyle: { color: 0xe8c878, alpha: 0.78, width: 6, spot: "gem", glow: 0.15 },
     swatch: "linear-gradient(135deg,#b8902f 0%,#3a2408 100%)",
   },
   // —— 新增 6 款台球桌皮肤（含桌框发光/纹理/边缘特效）——
@@ -323,6 +408,10 @@ export const TABLE_SKINS: TableSkinDef[] = [
     frameColor: 0x4a4a52,
     frameGlow: 0x5a0d12,
     edgeGlow: 0x8a1018,
+    diamondColor: 0x8a8f98,
+    diamondGlow: 0,
+    cushionMetal: 0.25,
+    markStyle: { color: 0x9aa0aa, alpha: 0.68, width: 5, spot: "obsidian", glow: 0 },
     swatch: "linear-gradient(135deg,#1a1a20 0%,#8a1018 100%)",
   },
   {
@@ -336,6 +425,10 @@ export const TABLE_SKINS: TableSkinDef[] = [
     frameColor: 0x4a2820,
     frameGlow: 0xff5a14,
     edgeGlow: 0xff7a1f,
+    diamondColor: 0xff6a20,
+    diamondGlow: 0.55,
+    cushionMetal: 0.10,
+    markStyle: { color: 0xff5a14, alpha: 0.95, width: 7, spot: "glow", glow: 0.9 },
     swatch: "linear-gradient(135deg,#3a0808 0%,#ff7a1f 100%)",
   },
   {
@@ -349,6 +442,10 @@ export const TABLE_SKINS: TableSkinDef[] = [
     frameColor: 0x39306b,
     frameGlow: 0x6a3cff,
     edgeGlow: 0x13e6ff,
+    diamondColor: 0x18e8ff,
+    diamondGlow: 0.85,
+    cushionMetal: 0.15,
+    markStyle: { color: 0x13e6ff, alpha: 1.0, width: 7, spot: "glow", glow: 1.0 },
     swatch: "linear-gradient(135deg,#241046 0%,#13e6ff 100%)",
   },
   {
@@ -362,6 +459,10 @@ export const TABLE_SKINS: TableSkinDef[] = [
     frameColor: 0x6b4c22,
     frameGlow: 0xd9a23a,
     edgeGlow: 0xf0c860,
+    diamondColor: 0xe8b040,
+    diamondGlow: 0,
+    cushionMetal: 0.18,
+    markStyle: { color: 0xf0c860, alpha: 0.8, width: 6, spot: "gold", glow: 0.25 },
     swatch: "linear-gradient(135deg,#5a0a0a 0%,#d9a23a 100%)",
   },
   {
@@ -375,6 +476,10 @@ export const TABLE_SKINS: TableSkinDef[] = [
     frameColor: 0x9aa2ac,
     frameGlow: 0x9fd0ff,
     edgeGlow: 0xd0e8ff,
+    diamondColor: 0xd8e8f0,
+    diamondGlow: 0.35,
+    cushionMetal: 0.30,
+    markStyle: { color: 0xd8e8f0, alpha: 0.75, width: 6, spot: "pearl", glow: 0.3 },
     swatch: "linear-gradient(135deg,#c8d0da 0%,#9fd0ff 100%)",
   },
   {
@@ -388,6 +493,10 @@ export const TABLE_SKINS: TableSkinDef[] = [
     frameColor: 0xff9ec4,
     frameGlow: 0xff7ab0,
     edgeGlow: 0xffd0e8,
+    diamondColor: 0xffd8e4,
+    diamondGlow: 0.30,
+    cushionMetal: 0.05,
+    markStyle: { color: 0xfff0f6, alpha: 0.85, width: 6, spot: "candy", glow: 0.5, dotted: true },
     swatch: "linear-gradient(135deg,#ffe6f0 0%,#ff7ab0 100%)",
   },
   {
@@ -404,6 +513,10 @@ export const TABLE_SKINS: TableSkinDef[] = [
     frameColor: 0x6a4a10,
     frameGlow: 0xd9a23a,
     edgeGlow: 0xf0c060,
+    diamondColor: 0xd9a23a,
+    diamondGlow: 0,
+    cushionMetal: 0.18,
+    markStyle: { color: 0xd9a23a, alpha: 0.8, width: 6, spot: "gold", glow: 0.2 },
     swatch: "linear-gradient(135deg,#0e5c30 0%,#d9a23a 100%)",
   },
   {
@@ -419,6 +532,10 @@ export const TABLE_SKINS: TableSkinDef[] = [
     frameColor: 0x45356b,
     frameGlow: 0xc44dff,
     edgeGlow: 0xff5ad0,
+    diamondColor: 0xff5ad0,
+    diamondGlow: 0.85,
+    cushionMetal: 0.15,
+    markStyle: { color: 0xff5ad0, alpha: 1.0, width: 7, spot: "glow", glow: 1.0 },
     swatch: "linear-gradient(135deg,#1c0a3e 0%,#c44dff 100%)",
   },
 ]

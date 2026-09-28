@@ -21,6 +21,13 @@ function initialise() {
   const params = new URLSearchParams(location.search)
   const browserContainer = new BrowserContainer(canvas3d, params)
   browserContainer.start()
+  // v1.4.6：暴露「卸载游戏、释放 WebGL/Audio 资源」钩子。
+  // 返回主菜单走整页导航，但部分 WebView 不触发 pagehide/beforeunload，故在
+  // 跳转前由 back-confirm-cn.js 主动调用，绕开 WebView 不可靠的资源回收——
+  // 反复进出累积到 WebGL context 上限会卡死（用户反馈的「几次就卡住」）。
+  ;(globalThis as any).__onExitToMenu = () => {
+    try { browserContainer.teardown() } catch {}
+  }
   // 调试句柄：仅在显式打开 ?debug=1 时挂载，发布版不带，
   // 既能给自动化测试用，也不污染正式包
   if (params.get("debug") === "1") {
@@ -238,7 +245,17 @@ function setupOverlayControls(browserContainer: BrowserContainer) {
  * 手机端体验优化：
  * - 阻止双指缩放与双击放大，避免误触打断瞄准
  * - 阻止长按弹出系统菜单
+ *
+ * v1.4.5 修复「偶发点击无反应」：原实现对 300ms 内的连续 touchend 一律
+ * preventDefault()，而被 preventDefault 的那次触摸**不会再合成 click** ——
+ * 用户快速连点任意按钮（如：点齿轮 → 点「返回主菜单」→ 点弹窗「退出主菜单」，
+ * 任意两步间隔 <300ms）时，第二次点击会被静默吞掉，表现为「点了没反应」，
+ * 且越急越点不动。现改为：交互元素（按钮/链接/输入框等）不再被吞 click，
+ * 仅在非交互区域保留防双击缩放；双击缩放本身由 CSS touch-action 兜底。
  */
+const INTERACTIVE_SELECTOR =
+  "button, a, input, select, textarea, label, [role='button'], [data-notification-action]"
+
 function setupMobileBehaviour() {
   document.addEventListener(
     "gesturestart",
@@ -253,7 +270,13 @@ function setupMobileBehaviour() {
     "touchend",
     (e) => {
       const now = Date.now()
-      if (now - lastTouch < 300) {
+      const t = e.target
+      const interactive =
+        t instanceof Element &&
+        typeof t.closest === "function" &&
+        t.closest(INTERACTIVE_SELECTOR) !== null
+      // 交互元素：绝不吃掉 click（这是「退出弹窗点了没反应」的根因）
+      if (!interactive && now - lastTouch < 300) {
         e.preventDefault()
       }
       lastTouch = now

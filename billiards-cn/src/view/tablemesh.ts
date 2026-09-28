@@ -37,6 +37,15 @@ export class TableMesh {
       this.cloth.needsUpdate = true
     }
     this.cushion.color.set(ts.cushionColor)
+    // 【v1.4.4】与 GLTF 库边（assets.ts）同口径的质感分级。
+    // 回放/图解桌此前同样只有一句设色，13 款库边质感一个样。
+    // 这里是 MeshPhong（无 metalness/roughness），改用 specular/shininess 表达：
+    // 金属感越强 → 高光越亮越锐（镜面感），哑光款 → 高光弱而宽。
+    const cm = ts.cushionMetal ?? 0.02
+    this.cushion.shininess = 8 + cm * 120
+    this.cushion.specular.setScalar(0.03 + cm * 0.5)
+    const cg = ts.edgeGlow || ts.frameGlow
+    this.cushion.emissive.setHex(cg ? cg : 0x000000)
     this.addCushions(group, hasPockets)
 
     if (hasPockets) {
@@ -60,6 +69,9 @@ export class TableMesh {
   }
 
   private readonly cloth = new MeshPhongMaterial({
+    // 【v1.4.4】name 必须叫 cloth：台面标志覆盖层靠材质名定位台呢表面高度
+    // （与 GLTF 模型的 cloth 材质同口径），否则找不到贴合高度。
+    name: "cloth",
     color: 0x243599,
     wireframe: false,
     flatShading: true,

@@ -115,6 +115,9 @@ export class WatchShot extends ControllerBase {
       )
     }
     cueball.setStationary()
+    // v1.5.4（#71）：白球重新上场的网络侧入口 —— 上一杆它可能在本端被判
+    // 出界（offTable=true → 渲染隐藏），摆球确认后必须恢复可见。
+    cueball.offTable = false
     cueball.fround()
 
     if (event.useStartPos) {

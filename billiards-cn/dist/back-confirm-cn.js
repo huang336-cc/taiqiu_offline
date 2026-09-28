@@ -31,6 +31,19 @@
  *      （height:auto;float:none;position:static...），把可能的污染维度堵死；
  *   3) 遮罩与面板的尺寸/位置由 JS 用 innerWidth/innerHeight 以像素内联，
  *      不再依赖 vw/%/flex 的居中与铺屏（保留 fixed + 居中作为无 JS 时的兜底）。
+ *
+ * v1.4.6 修复「点弹窗『返回主菜单』无反应」（真机 100% 复现路径）：
+ *   旧版遮罩监听 click、点空白处等同「继续游戏」直接关弹窗。真机上手指
+ *   触点比视觉目标大得多 —— 弹窗出现后手指任何一次落点偏差/连点节奏里的
+ *   多余触摸落在按钮之外，弹窗就被静默关闭；用户再点「返回主菜单」原位置
+ *   时弹窗已不在，点到的只是底下的游戏层 —— 表现即「点了没反应」，且越急
+ *   越点不动（每次误触都把弹窗关掉，重新走 齿轮→返回主菜单 又会再被关）。
+ *   已用真实触摸事件流（CDP touchstart/touchend）100% 复现：弹窗显示期间
+ *   一次 (5,5) 触摸即令弹窗消失。修复：
+ *   1) 遮罩空白触摸/点击**不再关闭弹窗** —— 改为面板轻微抖动提示
+ *      （用户知道点到了、但必须明确二选一），弹窗仅剩「继续游戏 /
+ *      返回主菜单」两个明确出口，任何误触都不再让它静默消失；
+ *   2) 按钮最小高度提到 44px（iOS HIG 触控目标下限），降低误触概率。
  */
 ;(function () {
   "use strict"
@@ -126,7 +139,8 @@
       "  display:inline-block;vertical-align:middle;",
       "  position:static;float:none;clear:none;",
       "  box-sizing:border-box;",
-      "  width:200px;max-width:44%;min-width:0;height:auto;min-height:0;",
+      /* v1.4.6：min-height 44px（iOS HIG 触控目标下限），真机手指偏差不再点空 */
+      "  width:200px;max-width:44%;min-width:0;height:auto;min-height:44px;",
       "  margin:0 5px;padding:11px 8px;",
       "  font-family:inherit;font-size:15px;line-height:1.2;font-weight:600;",
       "  letter-spacing:normal;text-indent:0;",
@@ -148,6 +162,20 @@
       "  color:#ffd9c2;border-color:#e0a06a;",
       "}",
       "#" + BACKDROP_ID + " button.bcbtn:active{opacity:0.82;}",
+      /* v1.4.6：点空白（误触）时面板抖动提示 —— 明确反馈「点到了但没点中按钮」，
+         而不是旧版的静默关弹窗（真机上那是「点了没反应」的直接来源） */
+      "@-webkit-keyframes bcshake{",
+      "  0%{-webkit-transform:translateX(0);}20%{-webkit-transform:translateX(-8px);}",
+      "  40%{-webkit-transform:translateX(8px);}60%{-webkit-transform:translateX(-5px);}",
+      "  80%{-webkit-transform:translateX(5px);}100%{-webkit-transform:translateX(0);}",
+      "}",
+      "@keyframes bcshake{",
+      "  0%{transform:translateX(0);}20%{transform:translateX(-8px);}40%{transform:translateX(8px);}",
+      "  60%{transform:translateX(-5px);}80%{transform:translateX(5px);}100%{transform:translateX(0);}",
+      "}",
+      "#" + BACKDROP_ID + " .bcpanel.bcshake{",
+      "  -webkit-animation:bcshake 0.3s ease;animation:bcshake 0.3s ease;",
+      "}",
       /* 横屏矮屏：收紧纵向留白与字号，避免弹窗高度溢出 */
       "@media (max-height:480px){",
       "  #" + BACKDROP_ID + " .bcpanel{padding:12px 14px 10px;}",
@@ -165,7 +193,9 @@
     if (bd && bd.parentNode) bd.parentNode.removeChild(bd)
     window.removeEventListener("resize", onViewportChange, false)
     state = null
+    try { if (typeof shakeTimerRef === "number" && shakeTimerRef) clearTimeout(shakeTimerRef) } catch (e) {}
   }
+  var shakeTimerRef = null
 
   /** v1.3.77：视口变化（转屏/出键盘）时重新按像素摆放弹窗 */
   function onViewportChange() {
@@ -214,10 +244,35 @@
     var bd = el("div")
     bd.id = BACKDROP_ID
     bd.setAttribute("role", "dialog")
+    // v1.4.6：遮罩空白触摸/点击**不再关闭弹窗**（旧版「点空白=继续游戏」在
+    // 真机上会被手指偏差/连点节奏误触发，弹窗静默消失后用户再点按钮即「无
+    // 反应」—— 已用真实触摸事件流 100% 复现）。改为面板抖动提示，弹窗仅剩
+    // 「继续游戏 / 返回主菜单」两个明确出口。
+    var shakeTimer = null
+    function shakeHint() {
+      var bdNow = document.getElementById(BACKDROP_ID)
+      if (!bdNow) return
+      var pn = bdNow.firstChild
+      if (!pn) return
+      pn.classList.remove("bcshake")
+      // 强制重启动画
+      void pn.offsetWidth
+      pn.classList.add("bcshake")
+      if (shakeTimer) clearTimeout(shakeTimer)
+      shakeTimer = setTimeout(function () {
+        try { pn.classList.remove("bcshake") } catch (e) {}
+      }, 350)
+      shakeTimerRef = shakeTimer
+    }
     bd.addEventListener("click", function (e) {
-      // 点空白处等同"继续游戏"
-      if (e.target === bd) removeDialog()
+      if (e.target === bd) shakeHint()
     })
+    bd.addEventListener("touchend", function (e) {
+      if (e.target === bd) {
+        // 触屏上合成 click 可能被防抖吞掉，这里直接给反馈
+        shakeHint()
+      }
+    }, { passive: true })
     var panel = el("div", "bcpanel")
     var title = el("div", "bctitle", "返回主菜单？")
     var text = el("div", "bctext", "本局进度将不会保存，确认要返回主菜单吗？")
@@ -232,14 +287,43 @@
       // 标记已确认，避免被 popstate 拦截再次弹窗
       window.__exitConfirmed = true
       removeDialog()
+      // v1.5.0：退出立即反馈（必须先于任何可能让主线程忙碌的操作）。
+      // location.replace 提交后、menu.html 首帧渲染完成前，浏览器会一直显示旧文档
+      // —— 真机实测（录屏逐帧 + CPU 6x 降速）这段长达 3.5 秒且画面完全静止，
+      // 玩家感知为「点了没反应、卡死几秒」。这里立即铺一层全屏「加载中…」遮罩，
+      // 把无反馈的静默期变成明确的加载状态（与进入游戏时的加载页同款观感）。
+      try {
+        var ld = document.createElement("div")
+        ld.setAttribute("id", "bc-exit-loading")
+        ld.style.cssText = "position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#0a2a3d;"
+        var sp = document.createElement("div")
+        sp.style.cssText = "width:42px;height:42px;border:4px solid rgba(255,255,255,0.18);border-top-color:#e8c37a;border-radius:50%;animation:bcExitSpin 0.8s linear infinite;"
+        var tx = document.createElement("div")
+        tx.style.cssText = "font-size:14px;color:rgba(255,255,255,0.75);letter-spacing:1px;"
+        tx.textContent = "加载中…"
+        var st = document.createElement("style")
+        st.textContent = "@keyframes bcExitSpin{to{transform:rotate(360deg)}}"
+        ld.appendChild(sp)
+        ld.appendChild(tx)
+        document.body.appendChild(st)
+        document.body.appendChild(ld)
+      } catch (e) {}
       // 返回主菜单即结束本轮系列赛：清掉「你 X : Y 电脑」的累计，
       // 不清的话下次进同一玩法会接着上次的比分算，语义不对。
       try {
         window.localStorage && window.localStorage.removeItem(SERIES_KEY)
       } catch (e) {}
+      // v1.4.6：跳转前主动释放游戏内的 WebGL / Audio 资源（见 index.ts 暴露的
+      // window.__onExitToMenu）。部分 WebView 不触发 pagehide/beforeunload，仅靠
+      // 浏览器回收会因 bfcache 保留旧页面 context 而累积到上限，反复「开始游戏 →
+      // 退出主菜单」几次后新 context 创建失败、游戏卡在 Loading（用户反馈的卡死）。
+      // 这里在整页导航之前显式释放，与 browsercontainer 的 shutdown 形成双保险。
+      try {
+        if (typeof window.__onExitToMenu === "function") window.__onExitToMenu()
+      } catch (e) {}
       // 直接跳回主菜单；不依赖 history 栈（避免某些 WebView 不一致）
       try {
-        window.location.href = "menu.html"
+        window.location.replace("menu.html")
       } catch (e) {
         window.history.go(-(window.history.length))
       }

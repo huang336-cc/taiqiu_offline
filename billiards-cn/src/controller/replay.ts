@@ -29,6 +29,12 @@ interface PotInfo {
   ballId: number
   /** 对应袋口在 PocketGeometry.pocketCenters 中的下标 */
   pocketIdx: number
+  /**
+   * v1.5.4（#70）：本杆归属 —— "player" 玩家 / "ai" 电脑。
+   * 进度条上的进球吸附点按此分色（玩家蓝、AI 红），
+   * 让用户一眼看出「这一杆是谁进的球」。
+   */
+  owner: "player" | "ai"
 }
 
 interface ShotMeta {
@@ -60,9 +66,16 @@ interface ShotMeta {
    * 之前的俯视框定只用「白球 → 被击球 → 袋口」三点包围圆，半径常常只有
    * 一两个 R，而白球撞完目标球后的走位往往横穿半张台——镜头锁死在三点上，
    * 白球后半程直接滚出画面，用户看到的就是「看不到白球轨迹」。
-   * 这里记录真实轨迹，框定时把它一起包进去（见 frameCameraForShot）。
+   * 这里记录真实轨迹，供 seek / 回顾时参考（v1.5.4 起跟随视角已移除，
+   * cueTrack 仅保留在 shotMeta 里备查，不再驱动相机）。
    */
   cueTrack?: [number, number, number][]
+  /**
+   * v1.5.4（#70）：本杆归属 —— "player" 玩家（保存者本人）/"ai" 对手（电脑）。
+   * 来源是录制时 Recorder 打的 ow 标记（本地 sendEvent=1 缺省，对手 eventQueue=2），
+   * 进度条进球点按它分色。旧回放数据无 ow，一律视为玩家杆。
+   */
+  owner: "player" | "ai"
 }
 
 /**
@@ -155,6 +168,12 @@ export class Replay extends ControllerBase {
   private shotMeta: ShotMeta[] = []
   /** 当前正在播放（或正在被拖动）的杆在 shotMeta 中的下标 */
   private currentShotIndex = -1
+  /**
+   * v1.5.4（#70）：本杆归属。playNextShot 从原始杆 JSON 的 ow 标记读取
+   * （Recorder 录制时打的：本地玩家缺省、对手=2），供逐杆兜底记账时
+   * 写入 ShotMeta.owner（整局预计算失败时的降级路径）。
+   */
+  private pendingOwner: "player" | "ai" = "player"
   /** 头less 预演用的独立 Table 实例（每杆复用，避免扰动实时画面） */
   private simTable: Table | null = null
   /**
@@ -214,33 +233,95 @@ export class Replay extends ControllerBase {
     }
   }
   /**
-   * v1.2.26：回放视角模式。
-   *  true  = 俯视（固定俯视全局视角，相机停在台面上方俯瞰整桌，不跟随球运动）；
-   *  false = 跟随（侧后视角，相机沿母球位置/出杆方向平滑跟随，击球后不切俯视）。
-   * 回放默认「跟随」，击球后镜头随母球移动，观感更接近实战；
-   * 需要俯瞰全局时再切到「俯视」。
+   * v1.5.4（#70）：回放**自由视角**。
+   *
+   * 需求：删除原「跟随 / 俯视」二选一（跟随视角每杆自动框定机位，用户无法控制），
+   * 改为用户可以任意转动/缩放的自定义机位，且必须始终对着球台。
+   *
+   * 实现（几何见 Camera.freeCam / replayFreeView）：
+   *   - 单指拖动 → 绕球台中心转动方位角 / 俯仰角（orbitFreeBy）；
+   *   - 双指捏合 / 滚轮 → 拉近拉远（zoomFreeBy）；
+   *   - 注视点恒为台面中心，因此**任何角度都对着球台**。
+   * 指针在 canvas 上监听，按下即按需切换相机到 free 模式。
    */
-  private camTopDown = false
-  /** v1.2.26：视角切换按钮（跟随/俯视）引用与点击处理 */
-  private camBtn: HTMLButtonElement | null = null
-  private onCamClick = () => {
-    this.camTopDown = !this.camTopDown
+  private freeCamBound = false
+  private freeCamPointers = new Map<number, { x: number; y: number }>()
+  private freeCamPinchDist = 0
+  private onFreePointerDown = (e: PointerEvent) => {
     const cam = this.container.view.camera
-if (this.diagram || this.container.rules.rulename === "threecushion") {
-cam.forceMode(cam.topView)
-cam.setReplayNudge(null)
-} else if (this.camTopDown) {
-cam.forceMode(cam.topView)
-cam.setReplayNudge(null)
-} else {
-// v1.3.58：从俯视切回跟随时，按当前杆重新建立机位并立即定位，
-// 否则会退回 spectatorView（只跟母球、不做三点框定）。
-this.frameCameraForShot(this.container.table.cue.aim)
-}
-    if (this.camBtn) this.camBtn.textContent = this.currentCamLabel()
+    if (cam.mode !== cam.replayFreeView) cam.forceFreeView()
+    this.freeCamPointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (this.freeCamPointers.size === 2) {
+      const [a, b] = [...this.freeCamPointers.values()]
+      this.freeCamPinchDist = Math.hypot(a.x - b.x, a.y - b.y)
+    }
+    // setPointerCapture 只对「活跃指针」合法；自动化测试/合成事件传入的
+    // pointerId 不是活跃指针时会抛 NotFoundError，吞掉即可（不影响手势）。
+    try {
+      ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
+    } catch {
+      /* 合成指针或指针已释放：忽略 */
+    }
   }
-  private currentCamLabel(): string {
-    return this.camTopDown ? "俯视" : "跟随"
+  private onFreePointerMove = (e: PointerEvent) => {
+    const prev = this.freeCamPointers.get(e.pointerId)
+    if (!prev) return
+    const cam = this.container.view.camera
+    const dx = e.clientX - prev.x
+    const dy = e.clientY - prev.y
+    this.freeCamPointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (this.freeCamPointers.size >= 2) {
+      // 双指捏合缩放
+      const [a, b] = [...this.freeCamPointers.values()]
+      const d = Math.hypot(a.x - b.x, a.y - b.y)
+      if (this.freeCamPinchDist > 0 && d > 0) {
+        cam.zoomFreeBy(this.freeCamPinchDist / d)
+      }
+      this.freeCamPinchDist = d
+      return
+    }
+    // 单指拖动旋转
+    cam.orbitFreeBy(dx, dy)
+  }
+  private onFreePointerUp = (e: PointerEvent) => {
+    this.freeCamPointers.delete(e.pointerId)
+    if (this.freeCamPointers.size < 2) this.freeCamPinchDist = 0
+  }
+  private onFreeWheel = (e: WheelEvent) => {
+    const cam = this.container.view.camera
+    if (cam.mode !== cam.replayFreeView) cam.forceFreeView()
+    e.preventDefault()
+    cam.zoomFreeBy(e.deltaY > 0 ? 1.08 : 1 / 1.08)
+  }
+  /** 绑定自由视角手势（进入回放时调用一次） */
+  private setupReplayFreeCam() {
+    if (this.freeCamBound) return
+    const el = this.container.view.canvas
+    const target: HTMLElement | undefined =
+      el instanceof HTMLElement ? el : (document.querySelector("canvas") as HTMLElement | undefined)
+    if (!target) return
+    this.freeCamBound = true
+    target.addEventListener("pointerdown", this.onFreePointerDown)
+    target.addEventListener("pointermove", this.onFreePointerMove)
+    target.addEventListener("pointerup", this.onFreePointerUp)
+    target.addEventListener("pointercancel", this.onFreePointerUp)
+    target.addEventListener("pointerleave", this.onFreePointerUp)
+    target.addEventListener("wheel", this.onFreeWheel, { passive: false })
+  }
+  private teardownReplayFreeCam() {
+    if (!this.freeCamBound) return
+    const el = this.container.view.canvas
+    const target: HTMLElement | undefined =
+      el instanceof HTMLElement ? el : (document.querySelector("canvas") as HTMLElement | undefined)
+    this.freeCamBound = false
+    this.freeCamPointers.clear()
+    if (!target) return
+    target.removeEventListener("pointerdown", this.onFreePointerDown)
+    target.removeEventListener("pointermove", this.onFreePointerMove)
+    target.removeEventListener("pointerup", this.onFreePointerUp)
+    target.removeEventListener("pointercancel", this.onFreePointerUp)
+    target.removeEventListener("pointerleave", this.onFreePointerUp)
+    target.removeEventListener("wheel", this.onFreeWheel)
   }
   /** 吸附点 DOM 缓存签名，避免每帧重建 */
   private lastSnapSig = ""
@@ -269,11 +350,14 @@ this.frameCameraForShot(this.container.table.cue.aim)
     }
     console.log(`shots: ${this.shots.length}`)
     console.log(`shots: ${JSON.stringify(this.shots)}`)
-    const suggestCamera =
-      this.diagram || this.container.rules.rulename == "threecushion"
-        ? this.container.view.camera.topView
-        : (this.camTopDown ? this.container.view.camera.topView : this.container.view.camera.spectatorView)
-    this.container.view.camera.forceMode(suggestCamera)
+    // v1.5.4（#70）：图解 / 开伦仍沿用固定俯视（这两种是战术示意，不需要自由视角）；
+    // 其余一律进入**自由视角** —— 相机永远对着球台，用户可自行转动/缩放。
+    if (this.diagram || this.container.rules.rulename == "threecushion") {
+      this.container.view.camera.forceMode(this.container.view.camera.topView)
+    } else {
+      this.container.view.camera.forceFreeView()
+      this.setupReplayFreeCam()
+    }
     // v1.2.11 #user：进入回放前预跑完整局，填满 shotMeta，
     // 使整局进度条从开局即涵盖全部杆与进球（而非逐杆叠加）。
     if (!this.diagram) {
@@ -372,6 +456,9 @@ this.frameCameraForShot(this.container.table.cue.aim)
     }
 
     const aim = AimEvent.fromJson(shot)
+    // v1.5.4（#70）：从原始杆 JSON 读取归属标记（Recorder 录制时打的 ow），
+    // 供 beginShotBookkeeping 的逐杆兜底记账使用。
+    this.pendingOwner = (shot as { ow?: number }).ow === 2 ? "ai" : "player"
     this.container.setHudActivePlayer(this.currentActive)
     this.container.table.cueball = this.container.table.balls[aim.i]
 
@@ -382,10 +469,8 @@ this.frameCameraForShot(this.container.table.cue.aim)
     this.container.table.cue.aimMode()
     this.container.table.cue.updateAimInput()
     this.container.table.cue.t = 1
-  // v1.3.58：本杆击球前先把相机摆到位（见 frameCameraForShot）。
-  // 旧逻辑用 suggestMode 切到 spectatorView 就不管了，镜头只能靠每帧 lerp
-  // 慢慢飞向目标机位，出杆瞬间往往还没到位。
-  this.frameCameraForShot(aim)
+  // v1.5.4（#70）：自由视角下不再每杆自动框定机位 —— 相机由用户控制，
+  // 只在首次进入回放时定位（见构造函数 forceFreeView + setupReplayFreeCam）。
   clearTimeout(this.timer)
     this.timer = setTimeout(() => {
       this.container.table.proximityIndicator.hide()
@@ -486,8 +571,16 @@ this.frameCameraForShot(this.container.table.cue.aim)
       triggerT: null,
       pots: [],
       defaultFocus: this.computeFocusPoints(t.cue.aim),
+      owner: this.pendingOwner,
     }
-    this.precomputeShot(meta)
+    // v1.5.4（#70）：逐杆兜底记账同样要兜住 precomputeShot 的物理异常，
+    // 否则 handleHit 会把异常抛进 animate 循环，本杆时长缺失导致回放卡死。
+    try {
+      this.precomputeShot(meta)
+    } catch (e) {
+      console.warn("[replay] incremental precompute failed, degrade to zero-duration:", (e as Error)?.message)
+      meta.duration = Math.max(meta.duration, 1e-3)
+    }
     this.shotMeta.push(meta)
   }
 
@@ -528,19 +621,29 @@ this.frameCameraForShot(this.container.table.cue.aim)
     const cueBall = sim.cueball
     const SAMPLE_EVERY = 30
     const MAX_TRACK_POINTS = 400
-    while (!sim.allStationary() && guard++ < 500000) {
-      sim.advance(step)
-      if (
-        cueBall &&
-        guard % SAMPLE_EVERY === 0 &&
-        track.length < MAX_TRACK_POINTS &&
-        cueBall.onTable()
-      ) {
+    // v1.5.4（#70）：预演物理对 `Depth exceeded resolving collisions` 容错。
+    // 碰撞解算 100 层不收敛时 Table.advance 会 throw —— live 游戏靠 animate 的
+    // 逐帧 try-catch 自恢复，而预演是固定步长循环，一次 throw 就会整杆报废，
+    // 进度条整局预计算随之作废（表现为进度条退化成逐杆叠加、吸附点丢失）。
+    // 这里捕获后按「已模拟到的时间/事件」收尾，本杆数据仍然可用。
+    try {
+      while (!sim.allStationary() && guard++ < 500000) {
+        sim.advance(step)
+        if (
+          cueBall &&
+          guard % SAMPLE_EVERY === 0 &&
+          track.length < MAX_TRACK_POINTS &&
+          cueBall.onTable()
+        ) {
+          track.push([cueBall.pos.x, cueBall.pos.y, cueBall.pos.z])
+        }
+      }
+      if (cueBall && track.length < MAX_TRACK_POINTS) {
         track.push([cueBall.pos.x, cueBall.pos.y, cueBall.pos.z])
       }
-    }
-    if (cueBall && track.length < MAX_TRACK_POINTS) {
-      track.push([cueBall.pos.x, cueBall.pos.y, cueBall.pos.z])
+    } catch {
+      // 碰撞解算爆栈：以当前已产生的时间与事件收尾（duration/pots 部分有效）
+      console.warn("[replay] precompute sim hit Depth-exceeded, settle with partial result")
     }
     meta.cueTrack = track
     let maxTs = -1
@@ -554,7 +657,7 @@ this.frameCameraForShot(this.container.table.cue.aim)
         const pocketIdx = o.ballA?.pocket
           ? PocketGeometry.pocketCenters.indexOf(o.ballA.pocket)
           : -1
-        pots.push({ t: o.timestamp, ballId, pocketIdx })
+        pots.push({ t: o.timestamp, ballId, pocketIdx, owner: meta.owner })
       }
     }
     meta.duration = sim.time
@@ -639,6 +742,8 @@ this.frameCameraForShot(this.container.table.cue.aim)
           triggerT: null,
           pots: [],
           defaultFocus: this.computeFocusPoints(aim, this.simTable),
+          // v1.5.4（#70）：归属来自录制时 Recorder 打的 ow 标记（2=对手/AI）
+          owner: (shot as { ow?: number }).ow === 2 ? "ai" : "player",
         }
         this.precomputeShot(meta)
         this.shotMeta.push(meta)
@@ -787,29 +892,24 @@ this.frameCameraForShot(this.container.table.cue.aim)
     this.restoreShotStart(meta)
     this.container.table.hit()
     // v1.3.59：seek 重跑等同于一记真实出杆（确定性重跑物理到目标时刻）
+    // v1.5.4（#70）：与 precomputeShot 同理，对 Depth-exceeded 物理异常容错，
+    // 拖动进度条落到「碰撞解算不收敛」的杆段时按已推进到的位置收尾。
     const step = this.container.step
     let guard = 0
-    while (
-      this.container.table.time < localTarget &&
-      !this.container.table.allStationary() &&
-      guard++ < 500000
-    ) {
-      this.container.table.advance(step)
+    try {
+      while (
+        this.container.table.time < localTarget &&
+        !this.container.table.allStationary() &&
+        guard++ < 500000
+      ) {
+        this.container.table.advance(step)
+      }
+    } catch {
+      console.warn("[replay] seek advance hit Depth-exceeded, settle at current position")
     }
     this.container.table.updateBallMesh(0)
-    // v1.3.93：按目标杆重建相机框定并立即定位。
-    //
-    // 修的问题：原先 seek 只还原球局布局 + 确定性重跑物理，**完全不碰相机**。
-    // 相机锚点 replayAnchor 只在 setReplayFrame 里被清空，而 seek 不调它，
-    // 于是 replayFrameView 里的 `this.replayAnchor ?? build(...)` 一直复用
-    // **拖动前那一杆**的锚点 —— 用户看到的「进度条往回滑动后视角又定死在
-    // 滑之前的视角，啥也看不见」就是这个。
-    // 更难看的是两段跳：seek 后镜头卡旧机位，等球一动、playNextShot 调
-    // frameCameraForShot 重建锚点，画面才「啪」地跳到正确位置。
-    //
-    // instant=true 走 reframeReplayNow：重建锚点 + fraction=1 一次性到位，
-    // 且不改相机 mode / 按钮状态（当前是跟随还是俯视由用户之前的选择决定）。
-    this.frameCameraForShot(meta.aim, true)
+    // v1.5.4（#70）：自由视角下 seek 不再重定位相机 —— 镜头完全由用户控制，
+    // 拖动进度条只重跑球局物理，视角保持用户当前角度不变。
     this.container.view.update(0, this.container.table.cue.aim)
     this.container.view.render()
   }
@@ -876,132 +976,6 @@ this.frameCameraForShot(this.container.table.cue.aim)
     this.renderSnaps()
   }
 
-/**
-* v1.3.58：本杆击球前的相机定位。
-*
-* - 图解 / 开伦 / 俯视模式：沿用原来的 suggestMode（全局固定视角，无需框定）；
-* - 跟随模式：用本杆「白球 → 被击球 → 目标袋口」三点建立机位锚点，并立刻
-*   forceMove 把相机摆到位（不靠 lerp 慢慢飞），实现「每一杆击球前完成定位」。
-*   之后出杆即锁定，只在确有必要时做限幅微调（见 updateReplayCamera）。
-*
-* v1.3.60：俯视模式不再「啥都不管直接切固定机位」。用户从跟随切到俯视时，
-* 当前局的所有球都会被桌面下方那个全局正俯视压缩成像素点，根本看不清白球
-* 走到哪。把俯视的视线中心锚到「当前 cueball + 1 个最近被击球（若有）」
-* 的几何中心，相机高度按这个中心圈的最小包围球半径动态调整：圈越大相机
-* 越高，保证整圈始终在画面内；圈越小相机越低，让白球在画面里尽量大。
-* 不像跟随模式那样用「白球 / 被击球 / 球袋」框三点，俯视主要看的是「走位
-* 轨迹」，所以两三点已经够，三点反而会偏移镜头。
-*/
-private frameCameraForShot(aim: AimEvent, instant = false): void {
-const cam = this.container.view.camera
-if (this.diagram || this.container.rules.rulename === "threecushion") {
-  cam.suggestMode(cam.topView)
-  cam.setReplayNudge(null)
-  return
-}
-// v1.3.60：用**本杆**的预计算框定。原先取 shotMeta[currentShotIndex + 1]，
-// 即「下一杆」的默认框定来摆当前杆的机位——两者 aim 不同，机位因此常常
-// 对着错误的一侧。本杆没有预计算时（如图解模式）才退回现场计算。
-const mine = this.shotMeta[this.currentShotIndex]
-const baseFocus =
-  mine && mine.defaultFocus && mine.defaultFocus.length > 0
-    ? mine.defaultFocus
-    : this.computeFocusPoints(aim)
-if (this.camTopDown) {
-  const { center, radius } = this.topDownBounds(baseFocus, mine)
-  cam.setReplayNudge(null)
-  cam.forceMode(cam.topView)
-  cam.topViewAtCenter(center, radius)
-  return
-}
-// v1.3.93：跟随机位把「本杆白球真实轨迹」一并纳入框定。
-//
-// 修的问题：用户反馈「经常看不见白球或者看不见被击球」「视角方向定死在击球
-// 方向后又看不见球进另一边的袋」。根因是跟随模式只框「白球 / 被击球 / 袋口」
-// 三个**静态**点：白球撞完目标球后常常横穿半张台去走位，目标球也可能滚向
-// 远端袋口，两者都会直接滚出这三点的包围圆。而 cueTrack（本杆白球轨迹采样，
-// 预演时已经记好）此前**只喂给俯视模式**，跟随模式完全没用上。
-//
-// 取景策略：主看三点（保证击球瞬间的主体清晰），轨迹作为扩展视野并入，
-// 但轨迹权重只有 0.55 —— 全额并入会让长走位把镜头拉成半个俯视图、
-// 远近感尽失；完全不并入又会丢白球。0.55 是「球始终在画面内、又不失跟随感」
-// 的折中。
-const focus = expandFocusWithTrack(baseFocus, mine?.cueTrack)
-// v1.3.66：回退到 v1.3.58 之前的跟随相机——每杆用「白球→被击球→袋口」三点框定，
-// 相机每帧以 0.12 系数平滑飞向该机位；出杆后不做「锁机位」、也不「追袋口」。
-// 旧版的 forceMove(aim)（fraction=1 瞬间摆位）与 cueTrack 稀释、进球后微调
-// 会令镜头每杆跳切、并随进球乱飞，观感不如这种稳定的平滑跟随。
-// v1.3.76：把本杆出杆方向一并交给相机 —— 跟随机位要沿**出杆方向**站在母球
-// 后上方，而不是沿「母球 → 袋口」。后者实测平均偏 7.8°、P90 17.3°、极端切球
-// 偏 68.3°（tools/harness/replayyaw.ts，600 杆采样），用袋口方向摆机位会让
-// 画面里的击球方向和玩家实际打的方向对不上（用户反馈「回放模式下摄像头方向
-// 应与出杆方向一致」）。传入 aim.angle 后这部分误差为 0。
-const angle = (aim as { angle?: number } | undefined)?.angle
-if (instant) {
-  // v1.3.93：seek 专用 —— 按目标杆重建锚点并一次性定位，不经过 mode 切换。
-  cam.reframeReplayNow(focus, angle)
-  return
-}
-cam.setReplayFrame(focus, angle)
-}
-
-/**
- * v1.3.66：diluteTrack（v1.3.60 的白球轨迹稀释）已随「跟随镜头回退每帧三点框定」
- * 一并移除——跟随模式不再掺入轨迹采样点，故该方法无调用方。
- * v1.3.93：轨迹重新用于跟随框定，但实现改为上面的 expandFocusWithTrack
- * （按权重收缩后并入三点，而非等距重采样），此说明保留以记录沿革。
- */
-
-/**
- * v1.3.60：俯视模式的取景范围。
- *
- * 两组点都要包住：
- *  - focus：白球 / 被击球 / 目标袋口（决定「这一杆在打什么」）；
- *  - cueTrack：白球本杆的真实轨迹（决定「白球跑到哪」）。
- * 只看前者是原先「看不到白球轨迹」的直接原因——focus 三点往往挤在台面一角，
- * 而白球撞击后常横穿半张台，锁死三点等于把后半程走位切出画面。
- *
- * 返回包围盒中心与半对角线长度，交给 Camera.topViewAtCenter 反算视距。
- */
-private topDownBounds(
-  focus: Vector3[],
-  meta?: ShotMeta
-): { center: Vector3; radius: number } {
-  let minX = Infinity,
-    minY = Infinity,
-    maxX = -Infinity,
-    maxY = -Infinity
-  const eat = (x: number, y: number) => {
-    if (x < minX) minX = x
-    if (x > maxX) maxX = x
-    if (y < minY) minY = y
-    if (y > maxY) maxY = y
-  }
-  for (const p of focus) {
-    eat(p.x, p.y)
-  }
-  for (const t of meta?.cueTrack ?? []) {
-    eat(t[0], t[1])
-  }
-  // 一个点都没有（极端兜底）：退回整台中心 + 半台尺寸
-  if (minX > maxX) {
-    return { center: new Vector3(0, 0, 0), radius: R * 24 }
-  }
-  const center = new Vector3((minX + maxX) / 2, (minY + maxY) / 2, 0)
-  // 半对角线 = 包围盒外接圆半径；+2R 给球体本身和边距留量
-  const radius =
-    Math.hypot(maxX - minX, maxY - minY) / 2 + 2 * R
-  // 下限 3R：白球原地轻推时轨迹退化成一个点，也要保证有基本视高
-  return { center, radius: Math.max(radius, R * 3) }
-}
-
-/**
-* v1.3.66：跟随镜头改回「每帧三点框定平滑」（见 frameCameraForShot /
-* camera.replayFrameView）。此前的 updateReplayCamera（进球后追袋口微调）
-* 与其两个辅助方法已随这次回退一并移除——它们对应的 v1.3.58「锁机位 +
-* 追袋口」逻辑不再使用，留着只会误导后续维护。
-*/
-
   /** v1.2.11 #F11：渲染全局进球吸附点（所有已记录杆的 pots 平移到全局位置） */
   private renderSnaps() {
     if (!this.snapsEl) return
@@ -1026,7 +1000,9 @@ private topDownBounds(
       for (const p of meta.pots) {
         const globalT = cum[i] + (p.t - Replay.REPLAY_LEAD_MS)
         const f = Math.max(0, Math.min(1, globalT / total))
-        html += `<span class="replay-snap" style="left:${(f * 100).toFixed(2)}%"></span>`
+        // v1.5.4（#70）：按归属分色 —— 玩家=蓝、AI=红，一眼看出谁进的球
+        const cls = p.owner === "ai" ? "snap-ai" : "snap-player"
+        html += `<span class="replay-snap ${cls}" style="left:${(f * 100).toFixed(2)}%"></span>`
       }
     }
     this.snapsEl.innerHTML = html
@@ -1141,8 +1117,8 @@ private topDownBounds(
     this.container.replayTimeScaleHook = () => this.replayTimeScale()
 this.container.replayFrameHook = () => {
 this.tickSeekUI()
-// v1.3.66：跟随镜头改回每帧三点框定平滑（见 frameCameraForShot / camera.replayFrameView），
-// 不再调用 updateReplayCamera 做「进球后追袋口」微调，避免镜头随进球乱飞。
+// v1.5.4（#70）：自由视角 —— 镜头由用户在 canvas 上拖动/缩放控制，
+// 每帧回调不再干预相机（详见 setupReplayFreeCam / Camera.replayFreeView）。
 }
     // 显示「退出回放」按钮并绑定（回放全程常驻，结束后供用户离开）
     const exit = document.getElementById("replayExitBtn") as HTMLButtonElement | null
@@ -1158,13 +1134,11 @@ this.tickSeekUI()
       speed.textContent = this.currentSpeedLabel()
       speed.addEventListener("click", this.onSpeedClick)
     }
-    // v1.2.24：挂载视角切换按钮（跟随/俯视），初始化为当前视角标签并绑定切换
+    // v1.5.4（#70）：原「视角切换按钮（跟随/俯视）」已随跟随视角一并移除，
+    // 自由视角不再需要按钮 —— 直接在画面上拖动即可转向、捏合/滚轮缩放。
+    // 若旧版 HTML 仍残留该按钮，则主动隐藏，避免出现一个点了没反应的死按钮。
     const cam = document.getElementById("replayCamBtn") as HTMLButtonElement | null
-    this.camBtn = cam
-    if (cam) {
-      cam.textContent = this.currentCamLabel()
-      cam.addEventListener("click", this.onCamClick)
-    }
+    if (cam) cam.setAttribute("hidden", "")
     if (this.seekEl) {
       this.seekEl.addEventListener("pointerdown", this.onSeekStart)
       this.seekEl.addEventListener("pointerup", this.onSeekEnd)
@@ -1214,11 +1188,8 @@ this.tickSeekUI()
       this.speedBtn.removeEventListener("click", this.onSpeedClick)
       this.speedBtn = null
     }
-    // v1.2.24：解绑并复位视角切换按钮
-    if (this.camBtn) {
-      this.camBtn.removeEventListener("click", this.onCamClick)
-      this.camBtn = null
-    }
+    // v1.5.4（#70）：解绑自由视角手势（跟随/俯视按钮已移除）
+    this.teardownReplayFreeCam()
     // v1.2.13 #replay：恢复底部栏显示
     const panel = document.getElementById("panel")
     if (panel) panel.style.removeProperty("display")
@@ -1258,8 +1229,7 @@ return this
 
 override handleStationary(_) {
 // v1.2.6 #232：球已静止，等待下一次击球。
-// v1.3.66：清掉可能存在的微调目标（跟随改回每帧三点框定平滑，正常情况下本就是 null）
-this.container.view.camera.setReplayNudge(null)
+// v1.5.4（#70）：自由视角，相机不随杆复位。
 this.container.timeScale = 1
     const outcome = this.container.table.outcome
     this.container.recorder.updateBreak(outcome, false, false)
@@ -1310,9 +1280,8 @@ this.container.timeScale = 1
   override handleAbort(_: AbortEvent): Controller {
     clearTimeout(this.timer)
     this.timer = undefined
-    // v1.2.6 #232：退出回放，恢复正常速度并清除框定焦点
+    // v1.2.6 #232：退出回放，恢复正常速度
     this.container.timeScale = 1
-    this.container.view.camera.clearReplayFrame()
     // v1.2.9 #F5：隐藏回放进度条
     this.hideReplaySeek()
     return new End(this.container)
@@ -1321,12 +1290,18 @@ this.container.timeScale = 1
   retry() {
     clearTimeout(this.timer)
     this.timer = undefined
-    // v1.2.6 #232：转实时重打，恢复正常速度并清除框定焦点
+    // v1.2.6 #232：转实时重打，恢复正常速度
     this.container.timeScale = 1
-    this.container.view.camera.clearReplayFrame()
     // v1.2.9 #F5：隐藏回放进度条
     this.hideReplaySeek()
     this.container.table.updateFromShortSerialised(this.init)
+    // v1.5.4（#71）：offTable 是上一杆物理动画留下的运行时标志（渲染层据此
+    // 隐藏出界球），重打会完全重置球局，这里必须一并清掉，否则瞄准阶段
+    // 白球会因残留标志而隐身。
+    this.container.table.balls.forEach((b) => {
+      b.offTable = false
+      b.wasAirborne = false
+    })
     const aim = AimEvent.fromJson(this.firstShot)
     this.container.table.cueball = this.container.table.balls[aim.i]
     this.container.rules.cueball = this.container.table.cueball

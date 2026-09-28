@@ -236,7 +236,8 @@ try {
   })
 
   sendEvent(event) {
-    this.recorder.record(event)
+    // v1.5.4（#70）：本地玩家直接发出的事件标记为 local（回放归属=玩家）。
+    this.recorder.record(event, "local")
     this.throttle.send(event)
   }
 
@@ -414,15 +415,25 @@ try {
       const event = this.eventQueue.shift()
       if (event) {
         this.lastEventTime = performance.now()
-        this.recorder.record(event)
+        // v1.5.4（#70）：eventQueue 里的事件来自网络/本地 Bot 中继（对手侧），
+        // 标记为 remote（回放归属=AI/对手）。本地玩家的 HIT 不走这条队列，
+        // 而是经 sendEvent 直发，两者正好构成回放进度条分色的依据。
+        this.recorder.record(event, "remote")
         this.updateController(event.applyToController(this.controller))
       }
     }
   }
 
+  /** v1.4.8：teardown 后为 true，用于停止渲染循环（见 animate）。 */
+  private tornDown = false
+
   lastEventTime = performance.now()
 
   animate(timestamp): void {
+    // v1.4.8：teardown 后不再调度下一帧 —— 退出主菜单时必须停掉渲染循环，
+    // 否则页面若被 bfcache 保留，rAF 仍会持续唤醒并占用主线程（真机表现为
+    // 「退出后卡几秒」）。
+    if (this.tornDown) return
     // 关键：先调度下一帧，再执行业务。否则一旦本帧 render()/物理/相机更新
     // 抛出未捕获异常，requestAnimationFrame 就不会再被调用，动画循环永久死亡，
     // 画面冻结为黑屏。先调度可保证任何单帧异常都不会中断渲染循环。
@@ -471,6 +482,40 @@ try {
     const snapshot = ExportUtils.captureSnapshot(this.table)
     this.lastShotInit = snapshot.init
     this.lastShotData = snapshot.shot
+  }
+
+  /**
+   * v1.4.6 引入、v1.4.9 收敛：游戏卸载（返回主菜单 / 关闭页面）时的统一清理。
+   * 只做**零成本**的纯 JS 清理（停渲染循环 + 关 AudioContext）；
+   * WebGL 资源一律交给浏览器随导航回收 —— 真机实测手动 dispose 会同步阻塞
+   * 主线程约 3.5 秒（GPU 驱动删纹理），根因与数据见方法内注释。
+   */
+  teardown() {
+    // v1.4.9：teardown 收敛为**纯 JS 轻量清理**，绝不做任何 WebGL 释放。
+    //
+    // 血泪教训（真机录屏逐帧分析，两次退出都精确冻结 3.5s）：
+    //   v1.4.7 加了 renderer.dispose()、v1.4.8 又加了场景 geometry/material/
+    //   texture 递归释放 —— 在 headless（swiftshader 软件渲染）下这些删除是
+    //   空操作（实测 1~6ms），但**真机 GPU 驱动同步删除几十张 1024² 运行时
+    //   纹理需要约 3.5 秒**，且阻塞主线程 —— 用户点「返回主菜单」后画面
+    //   冻住 3.5 秒才跳转，「严重影响游戏体验」。
+    //
+    // 为什么可以不做：退出走 location.replace() 整页导航（v1.4.8 已改），
+    // 浏览器随后会回收整个文档 —— 包括 WebGL context 与其全部 GPU 资源。
+    // 手动 dispose 与浏览器回收做的是同一件事，只会把回收成本从「导航的
+    // 后台阶段」提前到「点击响应路径」上，让用户白白多等 3.5 秒。
+    // 累积问题由 replace 防住（旧文档可被回收），而不是靠手动释放。
+    //
+    // 这里只保留两件**零成本**且有益的事：
+    //   1. tornDown = true 停掉渲染循环（页面被保留时 rAF 不再唤醒主线程）；
+    //   2. 关闭 AudioContext（纯 JS 层操作，无 GPU 参与）。
+    this.tornDown = true
+    try {
+      const actx = (this.sound as any)?.actx
+      if (actx && typeof actx.close === "function" && actx.state !== "closed") {
+        actx.close()
+      }
+    } catch (e) {}
   }
 
   updateController(controller: Controller) {

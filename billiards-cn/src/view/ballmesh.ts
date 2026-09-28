@@ -132,6 +132,24 @@ export class BallMesh {
       this.shadow.visible = false
       return
     }
+    /**
+     * v1.5.4（#71 跳球「另一个白球」修复）：飞出台面的球不再渲染。
+     *
+     * 病灶：跳球（扎杆/大仰角）白球飞越库边的一瞬间，table.checkOffTable
+     * 会把 pos **瞬移**夹回库线内侧并 z 归零停球 —— 渲染层照常画，于是
+     * 用户看到「白球跳出去，马上有另一个白球放在库边」：其实是同一颗球
+     * 在一帧内从空中跳到了库边，观感极其诡异。
+     *
+     * 现在：offTable 的球与进袋球同样处理 —— 隐藏。视觉语义变成
+     * 「球飞出了台面（离开视野）」，一杆结算后由规则层重新放置
+     * （自由球/respot）时恢复显示。数据层的夹回 + 停球逻辑保持不变
+     * （那是防卡死的关键，见 table.checkOffTable 注释）。
+     */
+    if (ball.offTable) {
+      this.mesh.visible = false
+      this.shadow.visible = false
+      return
+    }
     if (!this.mesh.visible) this.mesh.visible = true
     if (!this.shadow.visible && Settings.get().scene !== "snow") {
       this.shadow.visible = true

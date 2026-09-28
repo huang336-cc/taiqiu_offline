@@ -245,3 +245,15 @@
   background: #ff5a3c;
   box-shadow: 0 0 6px rgba(255, 90, 60, 0.95);
 }
+
+/* v1.5.4（#70）：进球吸附点按归属分色 —— 玩家=蓝、AI=红，
+   让用户一眼看出进度条上每个进球是谁打的。 */
+.replay-snap.snap-player {
+  background: #35a7ff;
+  box-shadow: 0 0 6px rgba(53, 167, 255, 0.95);
+}
+
+.replay-snap.snap-ai {
+  background: #ff5a3c;
+  box-shadow: 0 0 6px rgba(255, 90, 60, 0.95);
+}

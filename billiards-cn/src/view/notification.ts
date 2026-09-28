@@ -71,8 +71,14 @@ export type NotificationActionHandlers = Record<string, () => void>
  * 改法：显式重建一个干净 URL（只丢回放相关参数，其余如 bot / ruletype /
  * timer 全部保留），用 `location.replace` 而不是 `reload` —— 不新增历史
  * 条目、不触发后退语义，并用一次性锁杜绝连点/双事件导致的重复导航。
+ *
+ * v1.5.1：额外丢弃 `tutorial`。理由：menu 只在「没看过引导」时给首局 URL
+ * 拼 `tutorial=1`，而 `Tutorial.shownThisGame`（同一次页面加载内的去重标志）
+ * 在重开后必然归零 —— 于是「继续对战」每开一局就重新弹一次新手引导。
+ * 引导是否该弹，只看「引导有没有看过」，与 URL 是否残留参数无关，
+ * 所以重开时必须把这个一次性参数剥掉（aim.ts 侧另加一道 hasSeenGuide 兜底）。
  */
-const RESTART_DROP_PARAMS = ["state", "replayId", "replay", "_r"]
+const RESTART_DROP_PARAMS = ["state", "replayId", "replay", "_r", "tutorial"]
 let restartPending = false
 
 export function restartGame(): void {
@@ -423,11 +429,20 @@ export class Notification {
       button.dataset.busy = "1"
       button.setAttribute("disabled", "disabled")
       button.classList.add("is-busy")
-      this.handleAction(action, button.dataset.notificationUrl)
+      // v1.5.1：把按钮本身传给 handleAction。
+      // is-busy 的 ::before 是一个无限旋转的 12px 转圈（notification.css），
+      // 而它原本**只在点击时 add、没有任何地方 remove** —— 对会跳转/重绘的
+      // 动作无所谓（DOM 直接没了），但对**原地完成**的动作（保存回放、复制）
+      // 按钮会带着转圈长期停留在屏幕上。这类动作必须在完成后自行清除 busy。
+      this.handleAction(action, button.dataset.notificationUrl, button)
     })
   }
 
-  private handleAction(action: string, url?: string) {
+  private handleAction(
+    action: string,
+    url?: string,
+    button?: HTMLElement | null
+  ) {
     const handler = this.actionHandlers[action]
     if (handler) {
       handler()
@@ -480,6 +495,8 @@ export class Notification {
             // 剪贴板权限被拒，忽略
           }
         }
+        // v1.5.1：复制是原地完成的动作，不清除 busy 就会一直转圈
+        button?.classList.remove("is-busy")
         break
       }
     }

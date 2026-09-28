@@ -19,7 +19,11 @@ import { TableMesh } from "./tablemesh"
 import { TableGeometry } from "./tablegeometry"
 import { Settings, getSkin, getTableSkin } from "../utils/settings"
 import { buildSceneEnvironment, GROUND_Z } from "./sceneenvironment"
-import { getClothTexture, getFrameTexture } from "./tableskinfactory"
+import {
+  getClothTexture,
+  getFrameTexture,
+  getCushionTexture,
+} from "./tableskinfactory"
 import {
   getFrameNormalTexture,
   getFrameRoughnessTexture,
@@ -62,6 +66,13 @@ export class Assets {
       // 沟槽的明暗差，这必须由法线贴图提供。
       frameNormal: getFrameNormalTexture(ts.id),
       frameRoughness: getFrameRoughnessTexture(ts.id),
+      // 【v1.4.4】桌沿镶点主题色/发光 + 库边金属感（此前二者都是硬编码，
+      // 换皮肤时镶点与库边质感永远一个样）
+      diamondColor: ts.diamondColor ?? 0xc9a86a,
+      diamondGlow: ts.diamondGlow ?? 0,
+      cushionMetal: ts.cushionMetal ?? 0.02,
+      // 【v1.4.5 P5】库边绒面贴图（中性明度，色相仍由 cushionColor 提供）
+      cushionTexture: getCushionTexture(ts.id),
     }
   }
 
@@ -336,7 +347,33 @@ export class Assets {
           }
           mat.needsUpdate = true
         } else if (name.includes("cushion")) {
+          // 【v1.4.5 P5】库边 UV：GLTF 的库边 mesh 连 TEXCOORD_0 都没有
+          // （threecushion.min.gltf 5 个 primitive 全缺 UV），贴图挂上去恒
+          // 采样 (0,0)。先补三平面米制 UV，再挂绒面贴图。
+          if (fixUVs) this.fixCushionUVs(child)
           mat.color.set(cfg.cushionColor)
+          // 【v1.4.4】库边材质分级。
+          // 此前这一支只有一句设色 —— 13 款主题的库边粗糙度/金属度完全相同，
+          // 换皮肤只换颜色，质感永远是同一档「塑料」。现按主题分级：
+          // 经典款近乎哑光橡胶（metal 0.02 → rough 0.70），鎏金/全息款偏金属
+          // （metal 0.30 → rough 0.45）。带发光边/框的主题，库边吃一点自发光，
+          // 让整圈库边有一层光晕（0.25 强度，不刺眼）。
+          const cm = cfg.cushionMetal ?? 0.02
+          if ("metalness" in mat) {
+            ;(mat as any).metalness = cm
+          }
+          if ("roughness" in mat) {
+            ;(mat as any).roughness = 0.72 - cm * 0.9
+          }
+          if ("emissive" in mat) {
+            const g = cfg.edgeGlow || cfg.frameGlow
+            ;(mat as any).emissive.set(g ? g : 0x000000)
+            ;(mat as any).emissiveIntensity = g ? 0.25 : 0
+          }
+          // 【v1.4.5 P5】绒面颗粒贴图（中性明度，色相由 mat.color 提供）
+          if (cfg.cushionTexture) {
+            ;(mat as any).map = cfg.cushionTexture
+          }
           mat.needsUpdate = true
         } else if (name.includes("wood")) {
           // 桌框：底色 + 发光（emissive）。无发光时 emissive 置黑。
@@ -409,21 +446,46 @@ export class Assets {
           // + rough=0.29（高反光镜面金属），在暗绿台面上就是一片刺眼的白点。
           // 现在改为**哑光浅金**：降低金属度与镜面强度、提高粗糙度，
           // 让它像嵌进木头的黄铜钉，而不是贴在表面的亮片。
-          mat.color.set(0xc9a86a)
+          // 【v1.4.4】镶点主题化：由 cfg.diamondColor 驱动（此前硬编码 0xc9a86a，
+          // 13 款共用一色）。带 diamondGlow 的主题让镶点跟着主题发亮，
+          // 并降低金属度/提高粗糙度 —— 发光件做成镜面金属会在暗台面上
+          // 炸出一片刺眼白点（正是 v1.3.38 当年把它整个隐藏的原因）。
+          const dc = cfg.diamondColor ?? 0xc9a86a
+          const dg = cfg.diamondGlow ?? 0
+          mat.color.set(dc)
           if ("emissive" in mat) {
-            ;(mat as any).emissive.set(0x000000)
-            ;(mat as any).emissiveIntensity = 0
+            ;(mat as any).emissive.set(dg ? dc : 0x000000)
+            ;(mat as any).emissiveIntensity = dg
           }
           ;(mat as any).map = null
-          ;(mat as any).metalness = 0.45
-          ;(mat as any).roughness = 0.52
+          ;(mat as any).metalness = dg ? 0.3 : 0.45
+          ;(mat as any).roughness = dg ? 0.5 : 0.52
           if ("specularIntensity" in mat) { (mat as any).specularIntensity = 0.4 }
           ;(mat as any).envMapIntensity = 0.5
           mat.needsUpdate = true
         }
       }
     })
+    // 【v1.4.5】台面标志覆盖层已按需求移除（玩家反馈置球点/开球线干扰观感）。
+    // 切换球桌主题时若旧覆盖层仍挂在场景里（如热切换场景），在此处清掉，
+    // 避免残留一个孤儿 mesh。
+    this.removeClothMarks()
   }
+
+  /**
+   * 【v1.4.5】移除台面标志覆盖层（v1.4.4 曾实现开球线/置球点/中点覆盖层，
+   * 上线后按玩家需求整体下线 —— 留此清理函数保证热切换皮肤时旧层不残留）。
+   */
+  removeClothMarks(): void {
+    const mesh = Assets.marksMesh
+    if (mesh && mesh.parent) {
+      mesh.parent.remove(mesh)
+    }
+  }
+
+  /** 台面标志覆盖层（v1.4.5 已下线；保留复用实例引用供 removeClothMarks 清理） */
+  private static marksMesh: Mesh | null = null
+
 
   /**
    * 桌沿装饰发光边：已移除。
@@ -504,6 +566,14 @@ export class Assets {
   }
 
   /**
+   * 桌框侧面 UV 的 v 带起点（见 fixFrameUVs 里的说明）。
+   *
+   * 取 0.62：顶面实测占 v∈[0,0.5621]，0.62 之后留出一点余量，既不与顶面
+   * 重叠，也不顶到贴图边缘（侧面最高只到 0.62+0.0573≈0.677）。
+   */
+  private static readonly SIDE_V_BAND = 0.62
+
+  /**
    * 修正桌框 UV（v1.3.86 新增）。
    *
    * 桌框不是平面，而是**一圈有厚度的立体木框** —— 若照搬台呢的顶视投影，
@@ -554,10 +624,20 @@ export class Assets {
         v = (y - minY) / scale
       } else if (nx >= ny) {
         u = (y - minY) / scale
-        v = (z - minZ) / scale
+        /**
+         * ⚠️ v1.4.4：侧面必须**挪出顶面的 v 带**。
+         *
+         * 实测（probe-frameuv.js）wood mesh 世界尺寸 3.2917×1.8503×0.1887，
+         * scale=3.2917 → 顶面 v∈[0,0.5621]、侧面 v∈[0,0.0573]。两者**起点
+         * 都是 0**，也就是说侧面采样的是顶面下沿那一小条 —— 在那里画任何
+         * 装饰，都会以完全不同的映射同时糊到侧面上。
+         * 给侧面整体加 0.62 的 v 偏移，它落到贴图上的独立窄带（v∈
+         * [0.62,0.677]），顶面这才能放开手脚画内镶线/包角。
+         */
+        v = Assets.SIDE_V_BAND + (z - minZ) / scale
       } else {
         u = (x - minX) / scale
-        v = (z - minZ) / scale
+        v = Assets.SIDE_V_BAND + (z - minZ) / scale
       }
       uvs[i * 2] = u
       uvs[i * 2 + 1] = v
@@ -565,8 +645,79 @@ export class Assets {
     geometry.setAttribute("uv", new Float32BufferAttribute(uvs, 2))
   }
 
-  private uvsAreCollapsed(geometry: BufferGeometry): boolean {
-    const uv = geometry.attributes.uv
+  /**
+   * 【v1.4.5 P5】库边 UV 的米制周期（世界单位：米）。
+   *
+   * u 每 0.75m 重复一次 —— 长边库边（≈3.0m）重复 4 次、短边（≈1.5m）
+   * 重复 2 次、斜角段按实际长度，各段绒面颗粒密度一致；
+   * v 每 0.05m 重复一次 —— 库边全高 0.0492m 恰好 ≈1 个周期，侧面占满
+   * 整张贴图高度，顶面斜条只采样其中一小条（贴图上下均匀，采样哪条都一样）。
+   */
+  private static readonly CUSHION_U_METERS = 0.75
+  private static readonly CUSHION_V_METERS = 0.05
+
+  /**
+   * 【v1.4.5 P5】补库边 UV（三平面米制投影）。
+   *
+   * GLTF 的库边 mesh（CushionBlue，合并 6 段的单 mesh，世界
+   * 3.0011×1.5597×0.0492）**完全没有 TEXCOORD_0**（probe-frameuv.js 实测
+   * uv attribute 缺失）—— 此前挂贴图恒采样 (0,0)，等于没挂。
+   *
+   * 投影方式与桌框 fixFrameUVs 同源（按法线主导轴选投影平面）：
+   *   · 法线偏 Z（顶斜面/底面）→ (x, y)
+   *   · 法线偏 X（左右端）      → (y, z)
+   *   · 法线偏 Y（前后长边）    → (x, z)
+   * 区别在于**不按 bbox 归一，而按米制周期**：库边是「环形窄条」，按
+   * bbox 归一会让长边与短边的纹理密度差一倍；米制周期才能保证 6 段
+   * 颗粒尺度一致。局部坐标乘世界缩放（GLTF 祖先链 0.0655）换算成米。
+   */
+  private fixCushionUVs(mesh): void {
+    const geometry = mesh.geometry as BufferGeometry
+    if (!geometry) return
+    if (geometry.attributes.uv && !this.uvsAreCollapsed(geometry)) return
+
+    const pos = geometry.attributes.position
+    const nor = geometry.attributes.normal
+    if (!pos || !nor) return
+
+    mesh.updateWorldMatrix(true, false)
+    const e = mesh.matrixWorld.elements
+    const sx = Math.hypot(e[0], e[1], e[2]) || 1
+    const sy = Math.hypot(e[4], e[5], e[6]) || 1
+    const sz = Math.hypot(e[8], e[9], e[10]) || 1
+
+    const uM = Assets.CUSHION_U_METERS
+    const vM = Assets.CUSHION_V_METERS
+    const uvs = new Float32Array(pos.count * 2)
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i)
+      const nx = Math.abs(nor.getX(i))
+      const ny = Math.abs(nor.getY(i))
+      const nz = Math.abs(nor.getZ(i))
+      /**
+       * 纹理语义全场统一：u = 沿所在段的长轴、v = 沿库边高度 z。
+       * 顶斜面用位置归段：|x|>|y| 在左右区域 → 属短边段（长轴 = y），
+       * 否则属长边段（长轴 = x）。
+       * ⚠️ 顶面不能按 (x,y) 平面投影 —— 短边顶面的 y 跨全程 1.56m，
+       * v 会重复 31 个周期（0.05m/周期），颗粒变成肉眼可见的周期条纹
+       * （v1.3.87 教训：可见的周期 = 假）。统一 v=z 后，任何面的 v 都
+       * 只跨 1 个周期。
+       */
+      let a: number
+      if (nz >= nx && nz >= ny) {
+        a = Math.abs(x) > Math.abs(y) ? y * sy : x * sx
+      } else if (nx >= ny) {
+        a = y * sy
+      } else {
+        a = x * sx
+      }
+      uvs[i * 2] = a / uM
+      uvs[i * 2 + 1] = (z * sz) / vM
+    }
+    geometry.setAttribute("uv", new Float32BufferAttribute(uvs, 2))
+  }
+
+  private uvsAreCollapsed(geometry: BufferGeometry): boolean {    const uv = geometry.attributes.uv
     if (!uv) return false
     const u0 = uv.getX(0)
     const v0 = uv.getY(0)

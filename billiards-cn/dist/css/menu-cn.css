@@ -1681,3 +1681,9 @@ kbd {
     flex: 1 1 auto;
   }
 }
+
+/* v1.4.5：双击缩放由 CSS 兜底禁用（与游戏页 index.css 同步） */
+html,
+body {
+  touch-action: manipulation;
+}

@@ -3,6 +3,7 @@ import { Container } from "../../container/container"
 import { Input } from "../../events/input"
 import { Session } from "../../network/client/session"
 import { Overlap } from "../../utils/overlap"
+import { isFirstShot } from "../../utils/utils"
 import { unitAtAngle } from "../../utils/three-utils"
 import { id } from "../../utils/dom"
 import { TimeoutButton } from "../timeoutbutton"
@@ -20,11 +21,6 @@ export class AimInputs {
   readonly cuePowerPercentElement: HTMLElement | null
   readonly resetSpinElement
   readonly cueTiltElement: AngleInput
-  /** v1.3.94（杆法档位按钮）：斯登 / 跟进 / 缩杆 / 扎杆 四个预设按钮 */
-  readonly spinStunElement
-  readonly spinFollowElement
-  readonly spinDrawElement
-  readonly spinJumpElement
   /** Shared button for both "Hit" and "Place Ball" actions. */
   readonly cueHitElement
   /** ② 白球击球点触发按钮（展开上方紧凑面板） */
@@ -57,10 +53,6 @@ export class AimInputs {
     this.cuePowerPercentElement = id("powerPercent")
     this.resetSpinElement = id("resetSpin") as HTMLButtonElement
     this.cueTiltElement = id("cueTilt") as AngleInput
-    this.spinStunElement = id("spinStun") as HTMLButtonElement
-    this.spinFollowElement = id("spinFollow") as HTMLButtonElement
-    this.spinDrawElement = id("spinDraw") as HTMLButtonElement
-    this.spinJumpElement = id("spinJump") as HTMLButtonElement
     this.cueHitElement = id("cueHit") as HTMLButtonElement
     this.cueBallTriggerElement = id("cueBallTrigger") as HTMLButtonElement
     if (this.cueHitElement) {
@@ -126,11 +118,6 @@ export class AimInputs {
       // 这里不再绑 click，防止「按一下被执行两次」。
     }
     this.resetSpinElement?.addEventListener("click", this.resetSpin)
-    // v1.3.94（杆法档位按钮）：一键设定击球杆法（保留当前左右塞 offX）
-    this.spinStunElement?.addEventListener("click", () => this.setSpinGear("stun"))
-    this.spinFollowElement?.addEventListener("click", () => this.setSpinGear("follow"))
-    this.spinDrawElement?.addEventListener("click", () => this.setSpinGear("draw"))
-    this.spinJumpElement?.addEventListener("click", () => this.setSpinGear("jump"))
     this.cueHitElement?.addEventListener("click", this.hit)
     // v1.1.41：力度条改为容器层自定义 pointer 事件
     // —— 原生 input[type=range] 在 Android WebView 上只在 thumb 附近 ±22px 响应触摸，
@@ -187,6 +174,11 @@ export class AimInputs {
     // JS 计算并夹紧到视口内可彻底规避。
     if (willOpen) {
       this.positionCueBallPopup()
+      // v1.5.4：面板 hidden 期间 pointer 事件进不来，红点位置可能停在旧数据；
+      // 展开后按当前 aim.offset 补刷一次视觉状态（v1.5.3 引入时是为半径线，
+      // 该线已按用户反馈回退，但这次补刷对红点回灌仍然有效，保留）。
+      const off = this.container.table.cue?.aim?.offset
+      if (off) this.updateVisualState(off.x, off.y)
     }
   }
 
@@ -235,7 +227,12 @@ export class AimInputs {
   /** 弹窗打开时随视口变化（旋转/键盘弹出）重定位 */
   private repositionIfOpen = () => {
     const popup = id("cueballPopup") as HTMLElement | null
-    if (popup && !popup.hidden) this.positionCueBallPopup()
+    if (popup && !popup.hidden) {
+      this.positionCueBallPopup()
+      // v1.5.3：半径线宽度是 JS 按像素算的，球盘尺寸变了要重算
+      const off = this.container.table.cue?.aim?.offset
+      if (off) this.updateVisualState(off.x, off.y)
+    }
   }
 
   /** v1.1.18 popup 内点击：仅阻止冒泡（避免被外部点击立即关闭） */
@@ -289,9 +286,16 @@ export class AimInputs {
   }
 
   /**
-   * v1.4.0：新回合开始时复位白球击球点（打点 + 抬杆 + 杆法按钮高亮）。
+   * v1.4.0：新回合开始时复位白球击球点（打点 + 抬杆 + 击球点辅助线）。
    * 只在控件启用（回合开始）时由 setDisabled 调用；观战态 controlsDisabled
    * 恒为 true，不会误清回放/观战演示的演示打点。
+   *
+   * v1.5.4：补充**力度**跨回合复位。取证（tools/render/probe-powerreset.js）
+   * 证实 aim.power 与力度条 UI 在回合间完整残留：上一杆拉了 90% 大力，下一
+   * 回合不动任何控件直接出杆，用的仍是 90% 力度 —— 白球高速跟进目标球一起
+   * 落袋。用户反馈的「轮到我时没重置击球点，白球一起进袋」即此（打点其实已
+   * 复位，力度从未复位）。复位值取 35% 轻杆：足以把白球推出可感知的距离，
+   * 又几乎没有跟袋风险；首杆（开球）不受影响，保留 65% 的开球默认力度。
    */
   private resetSpinForNewTurn() {
     const cue = this.container.table.cue
@@ -301,19 +305,18 @@ export class AimInputs {
     if (cue.aim.elevation !== 0) {
       cue.aim.elevation = 0
     }
-    // 数据清零后统一刷 UI：红点回中、仰角滑杆归零（updateAimInput 内部
-    // 不检查 disabled，可在此安全调用）
-    cue.updateAimInput()
-    // 杆法档位按钮高亮一并清除 —— 否则玩家看到的「缩杆还亮着」就是
-    // 「击球点没重置」的直接来源
-    for (const el of [
-      this.spinStunElement,
-      this.spinFollowElement,
-      this.spinDrawElement,
-      this.spinJumpElement,
-    ]) {
-      el?.classList.remove("active")
+    // v1.5.4：力度复位。首杆（尚未有任何 AIM 记录）保留开局默认大力，否则
+    // 开球变成轻推；后续每个新回合都回到 35% 轻杆基准，杜绝上一杆的暴力
+    // 力度悄悄带到这一杆。
+    if (!isFirstShot(this.container.recorder)) {
+      const resetPower = 0.35 * maxPower
+      if (Math.abs(cue.aim.power - resetPower) > 1e-9) {
+        cue.aim.power = resetPower
+      }
     }
+    // 数据清零后统一刷 UI：红点回中、仰角滑杆归零、力度条回落、辅助线随之隐藏
+    // （updateAimInput 内部不检查 disabled，可在此安全调用）
+    cue.updateAimInput()
   }
 
   private updateBallContainer() {
@@ -372,15 +375,6 @@ export class AimInputs {
     }
     if (this.resetSpinElement) {
       this.resetSpinElement.disabled = this.controlsDisabled
-    }
-    // v1.3.94（杆法档位按钮）：与 resetSpin 同步禁用
-    for (const el of [
-      this.spinStunElement,
-      this.spinFollowElement,
-      this.spinDrawElement,
-      this.spinJumpElement,
-    ]) {
-      if (el) el.disabled = this.controlsDisabled
     }
   }
 
@@ -675,7 +669,8 @@ export class AimInputs {
   }
 
   /* ---------- v1.3.93：击球点盘的 pointer 事件 ---------- */
-  private onSpinPointerDown = (e: PointerEvent) => {    if (this.controlsDisabled) return
+  private onSpinPointerDown = (e: PointerEvent) => {
+    if (this.controlsDisabled) return
     // preventDefault：阻止 Android WebView 把手势判定成滚动/长按选择，
     // 否则会在拖动中途派发 pointercancel 把滑动打断（力度条早已这么做，
     // 击球点盘此前漏了这一步）。
@@ -685,6 +680,12 @@ export class AimInputs {
     } catch {
       /* 非 primary pointer 上可能抛错，忽略 */
     }
+    // v1.5.4：拖动打点期间显示 3D 路线（白球行进线 + 母球碰后预测线 +
+    // 被击球去袋虚线）。此前打点盘没有挂 beginAimInteraction，isAiming()
+    // 恒为 false，AimLine 在拖打点时从不绘制 —— 用户看到的「调整击球点
+    // 时看不到白球和被击球的路线」。按住即进入瞄准交互，松手结束；
+    // 拖动中每帧 setSpin → updateTargetLine，路线实时随打点变化。
+    this.container.table.cue.beginAimInteraction()
     this.adjustSpin(e)
   }
 
@@ -707,6 +708,9 @@ export class AimInputs {
         /* 无捕获时忽略 */
       }
     }
+    // v1.5.4：与 onSpinPointerDown 的 beginAimInteraction 配对；pointercancel
+    // 也走这里，计数不会泄漏。
+    this.container.table.cue.endAimInteraction()
   }
 
   readDimensions() {
@@ -757,62 +761,14 @@ export class AimInputs {
     this.container.lastEventTime = performance.now()
   }
 
-  /**
-   * v1.3.94（杆法档位按钮）：一键设定击球杆法。
-   *
-   * 预设量值与 AI 的 `chooseSpin` 玩家可达区间对齐（FOLLOW_MAX=0.4 /
-   * DRAW_MAX=−0.45 / elevation≤0.42），保证玩家与 AI 共用同一套物理、无特权。
-   * 左右塞(offX)保持不变，只改高低杆(offY)与抬杆(elev)：
-   *   斯登 = 中杆停球；跟进 = 高杆前跟；缩杆 = 低杆回缩；扎杆 = 低杆+抬杆起跳。
-   */
-  setSpinGear = (kind: "stun" | "follow" | "draw" | "jump") => {
-    if (this.controlsDisabled) {
-      return
-    }
-    const cue = this.container.table.cue
-    const offX = cue.aim.offset.x // 保留当前左右塞
-    let offY = 0
-    let elev = 0
-    switch (kind) {
-      case "stun":
-        offY = 0
-        elev = 0
-        break
-      case "follow":
-        offY = 0.4
-        elev = 0
-        break
-      case "draw":
-        offY = -0.42
-        elev = 0
-        break
-      case "jump":
-        offY = -0.45
-        elev = 0.35
-        break
-    }
-    cue.setSpin(new Vector3(offX, offY, 0), this.container.table)
-    cue.setElevation(elev)
-    this.updateVisualState(offX, offY)
-    this.updateTiltSlider(elev)
-    // 高亮当前档位按钮
-    for (const [el, k] of [
-      [this.spinStunElement, "stun"],
-      [this.spinFollowElement, "follow"],
-      [this.spinDrawElement, "draw"],
-      [this.spinJumpElement, "jump"],
-    ] as const) {
-      el?.classList.toggle("active", k === kind)
-    }
-    this.container.lastEventTime = performance.now()
-  }
-
   updateVisualState(x: number, y: number) {
+    const px = (-(x * AimInputs.TIP_SCALE) / 2 + 0.5) * 100
+    const py = (-(y * AimInputs.TIP_SCALE) / 2 + 0.5) * 100
     const elt = this.cueTipElement?.style
     if (elt) {
       // Use percentages so the tip scales automatically with the ball
-      elt.left = ((-(x * AimInputs.TIP_SCALE) / 2 + 0.5) * 100).toString() + "%"
-      elt.top = ((-(y * AimInputs.TIP_SCALE) / 2 + 0.5) * 100).toString() + "%"
+      elt.left = px.toString() + "%"
+      elt.top = py.toString() + "%"
       elt.transform = "translate(-50%, -50%)"
     }
     this.showOverlap()

@@ -635,6 +635,10 @@ botName === "TheFarJaw"
           : this.container.rules.placeBall()
     )
     cueball.setStationary()
+    // v1.5.4（#71）：AI 摆好自由球后马上要出杆，必须清掉出界标记恢复白球
+    // 渲染（出界球被 ballmesh 隐藏；上一杆白球跳台犯规后此处是它重新
+    // 上场的入口，漏清会导致 AI 出杆动画里白球隐身）。
+    cueball.offTable = false
     cueball.fround()
     this.container.table.cue.aim.elevation = 0
     this.publishSequenceToPlayer(this.aim())

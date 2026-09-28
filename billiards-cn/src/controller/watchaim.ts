@@ -26,6 +26,10 @@ export class WatchAim extends ControllerBase {
   override handleAim(event: AimEvent) {
     this.container.table.cue.aim = event
     this.container.table.cueball.pos.copy(event.pos)
+    // v1.5.4（#71）：对手正在摆自由球（白球跟随其 aim 移动）。若上一杆
+    // 本端把白球判为出界（offTable=true → 渲染隐藏），这里必须恢复显示，
+    // 否则对手摆球时本端看白球是隐身的。
+    this.container.table.cueball.offTable = false
     this.container.table.cue.updateAimInput()
     return this
   }

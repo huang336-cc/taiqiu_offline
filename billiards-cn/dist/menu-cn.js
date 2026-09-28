@@ -531,6 +531,12 @@
     // 强制回落到雪山，避免进入游戏后黑屏。
     if (merged.scene !== "snow") merged.scene = "snow"
     // v1.1.10：seenGuide 独立 key 兜底。主 key 写入失败时，独立 key 仍可读到。
+    // v1.5.1：补齐第三通道 globalThis.__billiardsSeenGuide，与 Settings.hasSeenGuide()
+    // 的三通道判定完全对齐 —— 游戏内引导完成时先写内存标记，主 key 落盘有可能
+    // 因配额失败，缺这一通道会让菜单仍以为「没看过」而重复拼 tutorial=1。
+    if (!merged.seenGuide && globalThis.__billiardsSeenGuide === true) {
+      merged.seenGuide = true
+    }
     if (!merged.seenGuide) {
       try {
         if (localStorage.getItem("billiards_cn_seenGuide_v1") === "1") {
@@ -781,7 +787,7 @@
       params.push("lan=host")
     }
     // 联机不弹分步实操新手引导（会挡住双方的等待提示）
-    location.href = "play.html?" + params.join("&")
+    location.replace("play.html?" + params.join("&"))
   }
 
   /* v1.3.93：局域网输入框的即时校验。
@@ -885,14 +891,130 @@
 
   /* ---------------- 屏幕切换 ---------------- */
 
-  function showScreen(name) {
+  // v1.5.0：变更履历懒注入。首次点击时动态加载 changelog-data.js（约 298KB），
+  // 注入 #changelogBody 后标记 data-filled，之后点击直接复用（不重复加载）。
+  // 加载失败时给出可读提示，履历屏仍可打开（不至于白屏）。
+  function injectChangelog(done) {
+    var box = $("changelogBody")
+    if (!box) { done(); return }
+    if (box.getAttribute("data-filled") === "1") { done(); return }
+    var inject = function () {
+      try {
+        box.innerHTML = window.__CHANGELOG_HTML || '<p class="about-text dim">履历内容缺失。</p>'
+        box.setAttribute("data-filled", "1")
+      } catch (e) {}
+      done()
+    }
+    if (window.__CHANGELOG_HTML) { inject(); return }
+    var sc = document.createElement("script")
+    sc.src = "changelog-data.js"
+    sc.onload = inject
+    sc.onerror = function () {
+      try {
+        box.innerHTML = '<p class="about-text dim">变更履历加载失败，请退出应用后重试。</p>'
+        box.setAttribute("data-filled", "1")
+      } catch (e) {}
+      done()
+    }
+    document.body.appendChild(sc)
+  }
+
+  /**
+   * v1.5.1：菜单子屏历史栈 —— 让 Android 系统返回键在菜单内逐层回退。
+   *
+   * 背景（本版修复的真实缺陷）：菜单是单页应用，showScreen 只切 CSS class，
+   * 所有子屏（设置 / 变更履历 / 关于 / 规则…）**都不往 history 里压条目**。
+   * 于是 WebView 侧的 `canGoBack() ? goBack() : finish()` 完全取决于「上一个
+   * 文档是谁」：冷启动时为 false（返回键直接退出应用）；而从对局页导航回来
+   * 时历史栈里还留着 play.html，返回键会一路退回 play.html —— 用户看到的就是
+   * 「在变更履历里按返回，却直接开始游戏」。
+   *
+   * 修法：每进一个子屏压一条 history；返回按钮与系统返回键都走 history.back()，
+   * 由 popstate 统一把 UI 退回父屏。退回主屏后历史指针回到 menu.html 那一条，
+   * 再按返回 canGoBack() 为 false，行为回到「主菜单按返回 = 退出应用」。
+   */
+  var screenStack = []
+  var currentScreen = ""
+  /**
+   * v1.5.1：抑制**下一次** popstate 的子屏回退。
+   * 球杆全屏预览关闭时会自己 history.back() 一次来清掉它压的那条历史；
+   * 那次 back 同样会走到下面的 popstate 处理里，若不拦住就会连带多退一级
+   * 子屏（表现为「关掉预览后设置页也跟着退回主页」）。
+   */
+  var screenSuppressPop = false
+
+  // 初始屏由 HTML 里的 class="screen active" 决定（脚本不负责首屏渲染），
+  // 这里必须同步进来：否则首次 showScreen 会把空串压进栈，返回时 pop 出空串
+  // 会切到一个不存在的屏 —— 表现为整屏空白。
+  ;(function () {
+    try {
+      var init = document.querySelector(".screen.active")
+      currentScreen = init ? String(init.id || "").replace(/^screen-/, "") : "home"
+    } catch (e) {
+      currentScreen = "home"
+    }
+  })()
+
+  /** 只切 UI，不动 history */
+  function applyScreen(name) {
     var screens = document.querySelectorAll(".screen")
     Array.prototype.forEach.call(screens, function (s) {
       s.classList.remove("active")
     })
     var target = $("screen-" + name)
     if (target) target.classList.add("active")
+    currentScreen = name
   }
+
+  function showScreen(name) {
+    if (!name || name === currentScreen) {
+      applyScreen(name || "home")
+      return
+    }
+    try {
+      history.pushState({ menuScreen: name }, "", location.href)
+      screenStack.push(currentScreen)
+    } catch (e) {
+      // 极端 WebView 不支持 pushState：退化为「无返回键兜底」，至少 UI 正常
+    }
+    applyScreen(name)
+  }
+
+  /**
+   * 返回按钮 / 系统返回键共用的回退入口。
+   * 有子屏历史就走 history.back()（让 history 与 UI 同步），
+   * 否则直接落到 fallback（通常是 home）。
+   */
+  function goBackScreen(fallback) {
+    if (screenStack.length > 0) {
+      try {
+        history.back()
+        return
+      } catch (e) { /* 忽略，走下面的直接切换 */ }
+    }
+    showScreen(fallback || "home")
+  }
+
+  window.addEventListener("popstate", function () {
+    // 预览关闭时自行触发的那次 back：只消费掉，不做子屏回退
+    if (screenSuppressPop) {
+      screenSuppressPop = false
+      return
+    }
+    // 球杆全屏预览自己也压过一条历史，且它比子屏更"上层"，优先交给它处理，
+    // 否则一次返回会同时关掉预览并多退一级屏。
+    try {
+      if (typeof cueOverlay !== "undefined" && cueOverlay &&
+          cueOverlay.classList.contains("active")) {
+        return
+      }
+    } catch (e) { /* cueOverlay 尚未初始化 */ }
+    var prev = screenStack.pop()
+    // 双重保险：栈里理论上不会存空串 / 未知屏，但真机上 WebView 的 popstate
+    // 时机偶发异常（如快速连按返回），兜底回 home 也不能白屏。
+    if (prev == null || prev === "") prev = "home"
+    if (prev !== currentScreen) applyScreen(prev)
+  })
 
   /* ---------------- 设置面板 ---------------- */
 
@@ -1974,6 +2096,23 @@ $("setKeepViews").checked = settings.keepAllViews !== false
 
   /* ---------------- 启动游戏 ---------------- */
 
+  /**
+   * v1.5.1：与游戏内 Settings.hasSeenGuide() 对齐的三通道判定。
+   * 顺序：globalThis 内存标记 → 菜单内存 settings → localStorage 独立 key。
+   * 任一为真即视为已看过引导（引导一旦看过就永不自动再弹）。
+   */
+  function hasSeenGuideLocal() {
+    if (globalThis.__billiardsSeenGuide === true) return true
+    if (settings && settings.seenGuide) return true
+    try {
+      if (localStorage.getItem("billiards_cn_seenGuide_v1") === "1") {
+        settings.seenGuide = true
+        return true
+      }
+    } catch (e) { /* localStorage 不可用时忽略 */ }
+    return false
+  }
+
   function startGame() {
     var params = []
     params.push("ruletype=" + encodeURIComponent(selectedRule))
@@ -1994,10 +2133,17 @@ $("setKeepViews").checked = settings.keepAllViews !== false
 
     // 分步实操新手引导：仅首次安装或手动「重新打开新手引导」后自动显示一次。
     // 由游戏内引导完成时写入 seenGuide，之后进入任何对局都不再自动弹出。
-    if (!settings.seenGuide) {
+    //
+    // v1.5.1：这里改用与 Settings.hasSeenGuide() 完全一致的三通道判定。
+    // 此前只看内存 settings.seenGuide，而游戏内 Tutorial.finish() 是
+    // 「内存标记 + 主 key + 独立 key」三路写入 —— 只要主 key 落盘失败而
+    // 菜单页恰好在独立 key 同步前读取，就会误判为「没看过」→ 又拼 tutorial=1。
+    // 另：tutorial=1 只在真正首局拼上，重开对局不再重复携带（见 notification.ts
+    // 的 RESTART_DROP_PARAMS）。
+    if (!hasSeenGuideLocal()) {
       params.push("tutorial=1")
     }
-    location.href = "play.html?" + params.join("&")
+    location.replace("play.html?" + params.join("&"))
   }
 
   /** 轻量 toast 提示（不依赖外部库） */
@@ -2060,25 +2206,97 @@ $("setKeepViews").checked = settings.keepAllViews !== false
     } catch (e) {}
   }
 
+  // v1.4.5 修复「偶发首页点击开始游戏无反应」：
+  // 原 init() 把 btnStart/btnGuide/btnSettings 的绑定放在**最后一步**，
+  // 前面 localize/initModes/initLanPanel/initSettingsPanel 等十几个子步骤
+  // 任何一步在特定设置状态/特定 WebView 上抛异常，按钮就永远不会被绑定 ——
+  // 表现即「点开始游戏没反应」。现改为：init() 一进来先绑核心三键（防重复
+  // 绑定），再依次做其余初始化；每个子步骤独立 try-catch，一步失败不拖垮
+  // 全部（其余入口按钮也尽量保住）。
+  var __coreBound = false
+  function bindCoreButtons() {
+    if (__coreBound) return
+    __coreBound = true
+    try {
+      $("btnStart").addEventListener("click", function () {
+        buzz(15)
+        startGame()
+      })
+      $("btnGuide").addEventListener("click", function () {
+        showScreen("guide")
+      })
+      $("btnSettings").addEventListener("click", function () {
+        syncSettingsUI()
+        showScreen("settings")
+      })
+    } catch (e) {
+      try {
+        console.error("[menu] 核心按钮绑定失败", e)
+      } catch (e2) {}
+    }
+  }
+
+  /** 单个子初始化的隔离执行：失败只记日志，不中断后续步骤 */
+  function safeInit(name, fn) {
+    try {
+      fn()
+    } catch (e) {
+      try {
+        console.error("[menu] init 步骤失败: " + name, e)
+      } catch (e2) {}
+    }
+  }
+
+  /**
+   * v1.5.0：把回调推到「首帧绘制完成之后」再执行。
+   * 双 rAF 保证浏览器已经完成一次真实绘制，再套一层 setTimeout(0) 让排在前面的
+   * 微任务/渲染收尾先跑完。用于把非首屏的初始化挪出首屏关键路径。
+   */
+  function deferAfterFirstPaint(fn) {
+    if (typeof window.requestAnimationFrame !== "function") {
+      window.setTimeout(fn, 0)
+      return
+    }
+    window.requestAnimationFrame(function () {
+      window.requestAnimationFrame(function () {
+        window.setTimeout(function () {
+          try { fn() } catch (e) {}
+        }, 0)
+      })
+    })
+  }
+
   function init() {
+    // v1.4.5：核心按钮最先绑定 —— 之后任何初始化失败都不影响「开始游戏」
+    bindCoreButtons()
     // v1.3.12：外观定制双端均默认展开。
     // HTML 里 <details id="customDetails" open> 已默认展开；不再对 APP 端（html.in-app）
     // 强制收回，用户要求"app 端外观定制不要折叠"。
 
-    // v1.3.19：先用当前语言本地化整页（必须在 refreshCustomRows 之前，
-    // 以便 NAME_OF 读到已翻译的 .skin-name）。
-    localize(document, curLang())
+    // v1.4.5：每个子步骤独立隔离 —— 任一失败只记日志，不再中断后续绑定
+    safeInit("localize", function () {
+      localize(document, curLang())
+    })
+    safeInit("initModes", initModes)
+    safeInit("initOpponents", initOpponents)
 
-    initModes()
-    initOpponents()
-    initLanPanel()
-    initSettingsPanel()
-    initTableAppearances()
-    initCueThemes()
-    initScenes()
-
-    // v1.2.12：恢复首页「查看回放」按钮绑定（v1.2.11 #3 误删 initMyReplays 时一并丢失）
-    initReplays()
+    // v1.5.0：首屏只做「首页看得到的东西」。
+    // 以下初始化都属于**二级页面**（外观定制 / 球杆主题 / 场景 / 回放 / 设置面板），
+    // 玩家在首页根本看不到，却和首屏抢主线程 —— 返回主菜单时这段是白付的成本。
+    // 现统一延后到首帧绘制完成之后执行（见 deferAfterFirstPaint）：
+    // 首页可见内容不变、可点按钮（开始游戏/玩法/难度）在首帧前就已绑定完毕，
+    // 二级面板的渲染延后几十毫秒，用户点开时早已就绪（点开二级页本身就要几百毫秒）。
+    deferAfterFirstPaint(function () {
+      safeInit("initLanPanel", initLanPanel)
+      safeInit("initSettingsPanel", initSettingsPanel)
+      safeInit("initTableAppearances", initTableAppearances)
+      safeInit("initCueThemes", initCueThemes)
+      safeInit("initScenes", initScenes)
+      // v1.2.12：恢复首页「查看回放」按钮绑定（v1.2.11 #3 误删 initMyReplays 时一并丢失）
+      safeInit("initReplays", initReplays)
+      safeInit("applyCardPreviews", applyCardPreviews)
+      safeInit("refreshCustomRows", refreshCustomRows)
+    })
 
     // 首页「外观定制」二级菜单入口（item 4）
     Array.prototype.forEach.call(
@@ -2091,23 +2309,12 @@ $("setKeepViews").checked = settings.keepAllViews !== false
       }
     )
 
-    applyCardPreviews()
-    refreshCustomRows()
     // v1.3.104：首页空闲时预渲染球杆主题等，点开二级面板即秒出（消除卡顿）
     // 延后 2.5s，避开首屏启动竞争
     window.setTimeout(warmUpPreviews, 2500)
 
-    $("btnStart").addEventListener("click", function () {
-      buzz(15)
-      startGame()
-    })
-    $("btnGuide").addEventListener("click", function () {
-      showScreen("guide")
-    })
-    $("btnSettings").addEventListener("click", function () {
-      syncSettingsUI()
-      showScreen("settings")
-    })
+    // v1.4.5：btnStart/btnGuide/btnSettings 已提前到 init() 开头绑定（见 bindCoreButtons），
+    // 此处原绑定代码删除，避免重复绑定导致一次点击触发两次 startGame。
 
     // v1.3.60：语言分段控件已从设置面板移除（DOM 一并删除），绑定代码同步移除。
 
@@ -2119,11 +2326,16 @@ $("setKeepViews").checked = settings.keepAllViews !== false
     }
 
     // v1.1.12：关于页 → 变更履历（独立屏）
+    // v1.5.0：履历正文（约 286KB，原占 menu.html 的 86%）已抽离到 changelog-data.js，
+    // 点击时才动态加载注入。此前它随 menu.html 每次整页加载都白付解析成本 ——
+    // 真机实测（CPU 6x 降速）「点返回主菜单 → 主菜单首帧」3.4~4.1 秒，主因就是它。
     var changelogBtn = $("btnChangelog")
     if (changelogBtn) {
       changelogBtn.addEventListener("click", function () {
         buzz(15)
-        showScreen("changelog")
+        injectChangelog(function () {
+          showScreen("changelog")
+        })
       })
     }
 
@@ -2221,10 +2433,12 @@ $("setKeepViews").checked = settings.keepAllViews !== false
     }
 
     // data-back 可指定返回目标，缺省回主页
+    // v1.5.1：走 goBackScreen（history.back + popstate 落 UI），
+    // 让「点返回按钮」与「按系统返回键」走同一条路径、栈状态一致。
     var backs = document.querySelectorAll("[data-back]")
     Array.prototype.forEach.call(backs, function (b) {
       b.addEventListener("click", function () {
-        showScreen(b.getAttribute("data-back") || "home")
+        goBackScreen(b.getAttribute("data-back") || "home")
       })
     })
 
@@ -2402,7 +2616,11 @@ $("setKeepViews").checked = settings.keepAllViews !== false
     if (cuePushedHistory) {
       cuePushedHistory = false
       if (!fromPopState) {
-        try { history.back() } catch (e) { /* 忽略 */ }
+        try {
+          // 这次 back 只是为了清掉预览压的那条历史，别让它再退一级子屏
+          screenSuppressPop = true
+          history.back()
+        } catch (e) { /* 忽略 */ }
       }
     }
   }
@@ -2677,12 +2895,23 @@ $("setKeepViews").checked = settings.keepAllViews !== false
   // v1.2.5：经 sessionStorage 传递完整回放数据，再跳转回放页。
   // 规避 Android WebView 对 URL 长度的限制（之前 ?state= 超长被截断，
   // 只回放出前几个球）。与游戏内 src/utils/replay-nav.ts 同方案。
+  // v1.5.4（#69）：sessionStorage 写入失败时**不再继续跳转** —— 旧行为带一个
+  // 空 replayId 跳到 play.html，回放页读不到数据只能 alert（部分 WebView 会
+  // 吞掉 alert），用户看到的就是「进入回放模式后一动不动」。写失败时就地
+  // 提示并留在菜单。compressed 为空/损坏的记录同样就地拦截。
   function navigateToReplay(compressed, rule) {
+    if (typeof compressed !== "string" || compressed.length === 0) {
+      console.error("replay data is empty or corrupted")
+      try { window.alert("这条回放的数据已损坏，无法播放。") } catch (e) {}
+      return
+    }
     var id = "bcr_" + Date.now() + "_" + Math.floor(Math.random() * 1e9)
     try {
       sessionStorage.setItem("bcr:" + id, compressed)
     } catch (e) {
       console.error("replay sessionStorage 写入失败", e)
+      try { window.alert("回放数据过大，无法在本机打开。") } catch (e2) {}
+      return
     }
     location.href =
       "play.html?replayId=" +

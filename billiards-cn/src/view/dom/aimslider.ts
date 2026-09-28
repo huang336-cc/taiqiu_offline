@@ -2,6 +2,8 @@ import { id } from "../../utils/dom"
 import { unitAtAngle } from "../../utils/three-utils"
 import { Tutorial } from "../tutorial"
 import type { Container } from "../../container/container"
+import { Vector3 } from "three"
+import type { PerspectiveCamera } from "three"
 
 /**
  * 横向瞄准角度滑动条（悬浮 2D UI，不参与 3D 场景渲染）。
@@ -46,6 +48,27 @@ export class AimSlider {
    * 拖到条子边缘时示意线来回抽搐。拖动开始时算一次并锁死即可。
    */
   private dragViewSign = 1
+  /**
+   * v1.5.1：带**滞后**的视角符号（viewSign 的稳定化记忆）。
+   *
+   * 缺陷实测（tools/render/probe-aim151.js，横屏 1422×640，真实触摸）：
+   * 把瞄准角从 0° 扫到 355°，dot 在 **0° 与 180° 附近穿越 0**，实测
+   * |dot| 最小值 = 0.0000；用 `dot >= 0 ? 1 : -1` 取符号时，落在这两个
+   * 奇异区内的手势会被解算成相反的角度增量 —— 拖到轨道端部 14 次，
+   * **6 次反向**，且全部集中在基准角 0° / 180° / 183° 上。
+   *
+   * 根因：dot≈0 意味着「角度增大」在屏幕上几乎不产生横向位移，此时符号
+   * 由浮点噪声决定，dot 在穿越带内反复易号 → 同一个手指方向时左时右。
+   *
+   * 改法：只在 |d| 明确越过阈值时才更新符号，过渡带内**保持上一次判定**。
+   * 该记忆由 sync() 每帧连续维护（不受拖动影响），所以拖动开始时取到的
+   * 已经是「当前角度下最近一次可信的符号」，不会取到噪声值。
+   *
+   * 初值取 **0 而不是 1**：0 表示「还没有过任何判定」。首次进入过渡带时
+   * 没有历史可沿用，此时必须取即时符号 —— 硬编码 1 会让开局那一段
+   * （实测初始瞄准角处 dot 恰好为 0）整段手势都反着走。
+   */
+  private lastViewSign = 0
 
   // ---- v1.4.2：贴边自转已从本控件移除（左右两端一律「只跟随手指」）----
   //
@@ -67,6 +90,13 @@ export class AimSlider {
   // 画布拖拽（events/keyboard.ts 的 edgeSpin）不受影响，保留原样。
   /** 拖动中最近一次指针屏幕 X */
   private lastClientX = 0
+  /**
+   * v1.5.1：当前手势的 pointerId。
+   * 此前 onDragMove 不校验来源指针，第二根手指（或误触）的 move 也会
+   * 被当成同一手势，lastClientX 瞬间跳到另一根手指的位置 —— 表现为
+   * 「拖着拖着瞄准线突然朝反方向猛跳一下」。现在只认发起手势的那根手指。
+   */
+  private activePointerId: number | null = null
 
   constructor(container: Container) {
     this.container = container
@@ -113,25 +143,81 @@ export class AimSlider {
 
   /**
    * 当前相机视角下，aim.angle 增大是否对应「瞄准线在屏幕上向右转」。
-   * 取相机世界矩阵的 X 列（即屏幕右方向在世界坐标系中的向量），与
-   * 瞄准方向的 +90° 垂直向量做点积：dot>0 表示 aim.angle 增大 = 瞄准线
-   * 屏幕右转，此时滑块无需翻转；dot<0 则需翻转，使「滑块右拖 = 瞄准线
-   * 屏幕右转」。默认瞄准视角下 dot<0，故返回 -1，把滑块方向与画布拖拽
-   * 镜像、贴合玩家肉眼所见的瞄准方向；切到俯视等视角时符号自动切换，
-   * 始终与可见瞄准方向保持一致。
+   * 返回 +1 表示角度增大 = 瞄准线屏幕右转（滑块无需翻转），-1 表示需翻转，
+   * 使「滑块右拖 = 瞄准线在屏幕上向右转」在任何视角下都成立。
+   *
+   * v1.5.1 起用**有限差分实测**判定（详见下方实现处注释）；早期版本用的是
+   * 一阶近似：取相机世界矩阵第一列（屏幕右方向）与 unitAtAngle(a+90°) 做
+   * 点积，dot>=0 取 +1。该近似在瞄准方向平行/反平行于屏幕右方向时恒等于 0，
+   * 符号判定退化成浮点噪声 —— 只在拿不到母球的极端情况下还用它兜底。
    */
   private viewSign(): number {
     const cam = this.container.view?.camera?.camera
-    if (!cam) return 1
+    if (!cam) return this.lastViewSign || 1
     cam.updateMatrixWorld()
     const e = cam.matrixWorld.elements
     // 相机世界矩阵第一列 = 屏幕右方向（世界坐标）
     const rx = e[0]
     const ry = e[1]
     const a = this.cue.aim.angle
-    const perp = unitAtAngle(a + Math.PI / 2)
-    const dot = rx * perp.x + ry * perp.y
-    return dot >= 0 ? 1 : -1
+    const ball = this.container.table?.balls?.[0]
+    if (!ball) {
+      // 拿不到母球（极端情况）时退回一阶近似：perp · 屏幕右方向
+      const perp = unitAtAngle(a + Math.PI / 2)
+      const dot = rx * perp.x + ry * perp.y
+      this.lastViewSign = dot >= 0 ? 1 : -1
+      return this.lastViewSign
+    }
+    //
+    // v1.5.1：改用**有限差分实测**替代一阶近似 dot。
+    //
+    // 一阶近似 `dot = 屏幕右方向 · unitAtAngle(a+90°)` 在瞄准方向平行/反平行于
+    // 屏幕右方向时会**恰好等于 0**（实测扫描：dot 在 0° 与 180° 附近穿越 0，
+    // |dot| 最小值 = 0.0000），此时符号由浮点噪声决定，方向判定随机 —— 这正是
+    // 「细微瞄准条右滑却反向瞄准」的根因（实测 14 次拖动 6 次反向）。
+    //
+    // 有限差分绕开了这个奇点：直接把 a 与 a+EPS 两个方向上的瞄准线远端点
+    // 投影到屏幕，比较真实的屏幕横向坐标。它测的是**用户真正看到的东西**，
+    // 且天然包含了相机跟随、俯仰角等一阶近似没算进去的因素。
+    const EPS = (0.5 * Math.PI) / 180
+    const x0 = this.screenXAt(a, cam, ball.pos)
+    const x1 = this.screenXAt(a + EPS, cam, ball.pos)
+    if (x0 === null || x1 === null) return this.lastViewSign || 1
+    const d = x1 - x0
+    // 滞后阈值（NDC 单位，屏幕宽度 = 2.0）：位移小于约 1.4px 时方向不可感知，
+    // 沿用上一次判定，避免在过渡带里来回易号造成抽搐。
+    const HYST = 0.002
+    if (d > HYST) {
+      this.lastViewSign = 1
+    } else if (d < -HYST) {
+      this.lastViewSign = -1
+    } else if (this.lastViewSign === 0) {
+      // 首次就落在过渡带：没有历史可沿用，取即时符号（哪怕它很小）
+      this.lastViewSign = d >= 0 ? 1 : -1
+    }
+    return this.lastViewSign || 1
+  }
+
+  /**
+   * 瞄准线在给定角度下、距母球 L 米的那一点，投影到屏幕后的**归一化横坐标**
+   * （NDC，范围 -1~1）。返回 null 表示该点落在相机后方，不可用。
+   */
+  private screenXAt(
+    angle: number,
+    cam: PerspectiveCamera,
+    ballPos: { x: number; y: number; z: number }
+  ): number | null {
+    const L = 1.0
+    const u = new Vector3(Math.cos(angle), 0, -Math.sin(angle))
+    const p = new Vector3(
+      ballPos.x + u.x * L,
+      ballPos.y + u.y * L,
+      ballPos.z + u.z * L
+    )
+    // 先看它在相机空间里的深度：z > 0 表示在相机后方，投影结果会翻面，不可用
+    const local = p.clone().applyMatrix4(cam.matrixWorldInverse)
+    if (local.z > -0.05) return null
+    return p.project(cam).x
   }
 
   private isDisabled(): boolean {
@@ -151,8 +237,11 @@ export class AimSlider {
     }
     // v1.2.6：新手引导步骤 2 推进——首次拖动瞄准条 = 用户在做瞄准动作
     Tutorial.notifyAimDrag()
+    // v1.5.1：已在拖动中的手势忽略后续按下（多指），只认第一根手指
+    if (this.dragging) return
     this.dragging = true
     this.didDrag = false
+    this.activePointerId = typeof e.pointerId === "number" ? e.pointerId : null
     // 记录起点：屏幕 X 与当时的真实瞄准角，后续用相对增量（不截断）
     this.dragStartX = e.clientX
     this.dragStartAngle = this.cue.aim.angle
@@ -175,6 +264,8 @@ export class AimSlider {
 
   private onDragMove = (e: PointerEvent) => {
     if (!this.dragging || this.isDisabled()) return
+    // v1.5.1：只接受发起手势的那根手指的位移
+    if (this.activePointerId != null && e.pointerId !== this.activePointerId) return
     this.lastClientX = e.clientX
     this.applyDrag()
   }
@@ -207,6 +298,12 @@ export class AimSlider {
     // rate 取 2×HALF/轨宽 = 拖满一整条轨宽对应 2°——与旧灵敏度一致，
     // 超出轨宽后按同一斜率继续换算角度。
     const rate = (2 * HALF) / rect.width
+    // v1.5.1：拖动中**实时**取滞后符号，不再沿用拖动开始时锁定的那一个。
+    // 锁定的前提是「拖动期间视角不变」，但实测并不成立：按下手指会触发
+    // beginAimInteraction，相机随之跟随瞄准角，dot 在手势开始后的头几帧
+    // 里仍在变化 —— 锁定一个过渡期的符号，整段手势就都是反的。
+    // 抽搐风险由 viewSign 的滞后阈值兜住（|dot| 未明确越过阈值就不换符号）。
+    this.dragViewSign = this.viewSign()
     const delta = dx * rate * this.dragViewSign
     const target = this.dragStartAngle + delta
     this.cue.setAimAngle(target, this.container.table)
@@ -230,7 +327,11 @@ export class AimSlider {
 
   private onDragEnd = (e: PointerEvent) => {
     if (!this.dragging) return
+    // v1.5.1：非发起手指抬起时不结束手势（否则多指操作时第一根手指
+    // 还按着、却被第二根的 up 提前收尾，后续拖动全部失效）
+    if (this.activePointerId != null && e.pointerId !== this.activePointerId) return
     this.dragging = false
+    this.activePointerId = null
     try {
       this.track?.releasePointerCapture(e.pointerId)
     } catch {
@@ -259,6 +360,13 @@ export class AimSlider {
    * 避免和手指打架。
    */
   sync() {
+    // v1.5.1：非拖动期间每帧维护一次滞后符号（viewSign 内部会更新
+    // lastViewSign）。这样用户按下手指时取到的是「当前角度下最近一次可信的
+    // 符号」，而不是奇异区里的噪声值 —— 前提是符号记忆连续，不能只在
+    // 拖动开始那一瞬间才算一次。
+    if (!this.dragging && this.container.view?.camera?.camera) {
+      this.viewSign()
+    }
     if (!this.slider) return
     if (this.dragging) return
     this.cue.setAimBase(this.cue.aim.angle)

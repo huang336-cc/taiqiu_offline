@@ -40,6 +40,10 @@ export class PlaceBall extends ControllerBase {
       }
     }
     cueball.setStationary()
+    // v1.5.4（#71）：自由球 placements 覆盖了出界球的夹回位置，这里明确
+    // 清掉出界标记 —— 否则瞄准阶段白球会因 offTable 仍为 true 而被渲染层
+    // 隐藏（见 ballmesh.updateAll），玩家面对一个「隐形白球」摆球。
+    cueball.offTable = false
     cueball.updateMesh(0)
     this.container.table.cue.placeBallMode()
     this.container.table.cue.showHelper(false)

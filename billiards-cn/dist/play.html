@@ -321,9 +321,8 @@
       <!-- v1.2.17 #4：全局倍速按钮（回放模式常驻），在 0.5x/1x/2x/4x 间循环，
            不自动按击球/进球提速，完全由用户选择，保证击球到进球的真实时间间隔。 -->
       <button id="replaySpeedBtn" class="replay-speed-btn" type="button">1x</button>
-      <!-- v1.2.26：视角切换按钮（固定/俯视），默认「固定」侧后视角（击球后不切俯视、
-           不跟随）；点击在固定侧后视角与固定俯视全局视角之间切换。 -->
-      <button id="replayCamBtn" class="replay-cam-btn" type="button">固定</button>
+      <!-- v1.5.4（#70）：删除「视角切换（固定/俯视）」按钮 —— 回放改为自由视角，
+           直接在画面上拖动即可转向、双指捏合/滚轮缩放，不需要按钮切换。 -->
       <button id="replayExitBtn" class="replay-exit-btn" type="button" hidden>退出回放</button>
     </div>
 
@@ -336,12 +335,15 @@
         <div class="cb-area cb-disc-area">
           <div class="cb-area-head">
             <div class="cb-area-title">白球击球点</div>
-            <div class="cb-area-desc">点击白球设置击球位置</div>
+            <div class="cb-area-desc">拖动白球设置位置，球桌上同步显示行进路线</div>
           </div>
           <div id="ballContainerWrapper" class="ballContainerWrapper">
             <div id="ballContainer" class="ballContainer">
               <div id="objectBall" class="objectBall"></div>
               <div id="cueBall" class="cueBall">
+                <!-- v1.5.4：v1.5.3 的圆盘十字线/半径线已回退（用户澄清需求是
+                     「调整击球点时在球桌上显示白球与被击球的路线」而非盘面
+                     标尺）。3D 路线由 cue.ts 的 AimLine 在拖动打点期间绘制。 -->
                 <div id="cueTip" class="cueTip"></div>
               </div>
             </div>
@@ -359,18 +361,6 @@
             <div class="cb-area-desc">拖动球杆调整抬杆高度</div>
           </div>
           <angle-input id="cueTilt" aria-label="抬杆角度"></angle-input>
-        </div>
-        <div class="cb-area cb-gear-area">
-          <div class="cb-area-head">
-            <div class="cb-area-title">杆法档位</div>
-            <div class="cb-area-desc">一键设定击球杆法（保留左右塞）</div>
-          </div>
-          <div class="gear-btns">
-            <button id="spinStun" class="gear-btn" type="button" data-gear="stun">斯登</button>
-            <button id="spinFollow" class="gear-btn" type="button" data-gear="follow">跟进</button>
-            <button id="spinDraw" class="gear-btn" type="button" data-gear="draw">缩杆</button>
-            <button id="spinJump" class="gear-btn" type="button" data-gear="jump">扎杆</button>
-          </div>
         </div>
       </div>
       <span class="cueball-popup-arrow" aria-hidden="true"></span>

@@ -306,3 +306,9 @@ label {
    完全盖住并屏蔽游戏交互——导致「开始游戏」看似跳转却卡在「请横屏」死墙、无法进入对局。
    现不再强制横屏：游戏在竖屏下也能正常进入与游玩（resize/orientationchange 已做重渲染适配）。
    保留 .rotate-overlay 基础样式（默认 display:none），若日后想做「非阻塞」的横屏提示再启用。 */
+
+/* v1.4.5：双击缩放由 CSS 兜底禁用（touchend 防抖不再吞交互元素的 click，见 src/index.ts） */
+html,
+body {
+  touch-action: manipulation;
+}

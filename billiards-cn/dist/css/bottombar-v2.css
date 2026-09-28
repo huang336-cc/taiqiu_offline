@@ -387,37 +387,6 @@ body.replay-mode #menu {
   cursor: grabbing;
 }
 
-/* v1.3.94：杆法档位按钮（斯登 / 跟进 / 缩杆 / 扎杆） */
-.cb-gear-area {
-  width: 100%;
-}
-.cb-gear-area .gear-btns {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
-}
-.cb-gear-area .gear-btn {
-  appearance: none;
-  border: 1.5px solid #8a6428;
-  border-radius: 8px;
-  background: linear-gradient(180deg, #5a3d1c 0%, #3a2814 100%);
-  color: #f3e4c4;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 8px 0;
-  cursor: pointer;
-  touch-action: manipulation;
-}
-.cb-gear-area .gear-btn:active,
-.cb-gear-area .gear-btn.active {
-  background: linear-gradient(180deg, #c89534 0%, #9c6f1f 100%);
-  color: #1a120a;
-}
-.cb-gear-area .gear-btn:disabled {
-  opacity: 0.4;
-  pointer-events: none;
-}
-
 /* ---------- 4. ④ 力度段：v1.1.35 完全按图 2 重做
    - 去掉木纹金边外壳，作为透明容器让内部白胶囊成为视觉
    - 白胶囊外壳（圆角药丸）= 大号「65%」深蓝字 + 凹陷药丸轨道（橙→红渐变填充 + 黑色 8 球滑块）
