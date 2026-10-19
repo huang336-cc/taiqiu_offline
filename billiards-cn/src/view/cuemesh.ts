@@ -24,6 +24,7 @@ import {
   Mesh,
   CylinderGeometry,
   MeshPhongMaterial,
+  MeshStandardMaterial,
   Vector3,
   ShaderMaterial,
   Group,
@@ -184,19 +185,39 @@ export class CueMesh {
     return { mesh, tiltMesh: tiltGroup, cueBody }
   }
 
-  static cueGeometry(tipRadius, buttRadius, length, segments = 9) {
+  static cueGeometry(tipRadius, buttRadius, length, segments = 28) {
     const group = new Group()
 
     // Material Definitions - 根据皮肤选择颜色
+    //
+    // v1.6.0（3D 美化 P2）：Phong → Standard。
+    //
+    // 9 面圆柱的折线棱 + Phong 的「均匀塑料高光」是球杆廉价感的来源。
+    // Standard 材质吃 scene.environment（台球厅环境贴图），漆面杆身
+    // 能映出吊灯光带；分段数 9 → 28 消除侧面轮廓棱线。
+    // shininess → roughness 的映射在 applyCueTheme 统一处理。
     const skin = getSkin(Settings.get().skin)
-    const ashWoodMat = new MeshPhongMaterial({ color: skin.shaftColor, shininess: 50 })
-    const ebonyMat = new MeshPhongMaterial({ color: skin.buttColor, shininess: 80 })
-    // 先角：浅米白色硬质材质（v1.3.51，原银白 0xe5e5e5）
-    const ferruleMat = new MeshPhongMaterial({
-      color: 0xf0e8d6,
-      shininess: 100,
+    const ashWoodMat = new MeshStandardMaterial({
+      color: skin.shaftColor,
+      roughness: 0.42,
+      metalness: 0.0,
     })
-    const tipMat = new MeshPhongMaterial({ color: skin.tipColor, shininess: 5 })
+    const ebonyMat = new MeshStandardMaterial({
+      color: skin.buttColor,
+      roughness: 0.3,
+      metalness: 0.0,
+    })
+    // 先角：浅米白色硬质材质（v1.3.51，原银白 0xe5e5e5）
+    const ferruleMat = new MeshStandardMaterial({
+      color: 0xf0e8d6,
+      roughness: 0.22,
+      metalness: 0.05,
+    })
+    const tipMat = new MeshStandardMaterial({
+      color: skin.tipColor,
+      roughness: 0.92,
+      metalness: 0.0,
+    })
 
     // Ratios for a standard snooker cue
     const buttLength = length * 0.28
@@ -359,10 +380,20 @@ export class CueMesh {
       }
       // 材质光泽：主题自带 finish 优先（哑光石砚 vs 玻璃/冰晶）；
       // 无 finish 且为 auto 时恢复几何默认，避免残留上一次主题的光泽。
+      //
+      // v1.6.0：材质已升级为 MeshStandardMaterial，主题的 finish 仍以
+      // Phong shininess 语义书写（0~100，越大越亮），这里换算成
+      // roughness（越小越亮）：roughness ≈ 1 − shininess/105，下限 0.08
+      // 保住玻璃/冰晶主题的镜面感，上限 0.95 保住哑光石砚。
+      const toRough = (s: number) =>
+        Math.min(0.95, Math.max(0.08, 1 - s / 105))
       if (theme.finish) {
-        mat.shininess = isButt ? theme.finish.butt : theme.finish.shaft
+        const s = isButt ? theme.finish.butt : theme.finish.shaft
+        mat.shininess = s
+        ;(mat as any).roughness = toRough(s)
       } else if (!tex) {
         mat.shininess = isButt ? 80 : 50
+        ;(mat as any).roughness = toRough(isButt ? 80 : 50)
       }
       mat.needsUpdate = true
     })

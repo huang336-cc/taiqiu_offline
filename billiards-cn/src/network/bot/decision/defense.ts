@@ -7,6 +7,7 @@ import { DecisionContext } from "./shotcontext"
 import { enumerateCandidates, lineClearance, distToRail } from "./offense"
 import { PowerTier } from "./power"
 import { cueSpeedFor } from "../powerphysics"
+import { Outcome } from "../../../model/outcome"
 
 /**
  * v1.3.91：防守策略池（专业级 AI 决策层 · 最高优先级）。
@@ -509,7 +510,15 @@ function kickDefense(
   //
   // 现在用真实物理跑一遍，按力度从大到小找一条「母球不进袋、且停位不贴袋口」
   // 的解球线；全都摔袋则返回 null，让上层改用别的防守方案（而不是硬打）。
-  const checked = verifyKickNoScratch(dctx, best.aim, power)
+  // v1.5.7（#85）：把解球目标球的 label 传进去 —— 收力必须同时保证
+  // 「母球真的碰到了目标球」，否则就是空杆犯规（见 verifyKickNoScratch）。
+  const checked = verifyKickNoScratch(
+    dctx,
+    best.aim,
+    power,
+    dctx.table.balls.indexOf(best.ball),
+    best.total
+  )
   if (!checked) return null
   void calculator
 
@@ -536,11 +545,32 @@ function kickDefense(
 function verifyKickNoScratch(
   dctx: DecisionContext,
   aimPoint: Vector3,
-  power: number
+  power: number,
+  targetIdx: number,
+  reachDistance: number
 ): number | null {
   const source = dctx.table.balls
+  // v1.5.7（#85）：收力的下限改为「物理上够得着目标球」的反解力度，
+  // 不再用固定的 18R。原下限 18R = 0.59 m/s，纯滚动仅能走约 2.1 m；
+  // 解球常要绕两库（实测总程 3.4~5.0 m，还要扣掉库边能量损失），
+  // 收到 18R 时母球根本到不了目标球 —— 于是「避开了摔袋，却打成空杆犯规」。
+  // 这里用与主力度同一套物理反解（不放安全余量）算最小可达力度。
+  const reachPower = cueSpeedFor(reachDistance / 0.75, 6 * R, 2 * R, 1, 0, 0, 1.0)
+  // v1.5.7（#85 二轮）：判据**分级**，不再一票否决。
+  //
+  // 旧实现把「停位离袋口 < 2.2R」和「够不着目标球」当成同等严重，两个都
+  // `continue` 掉。但两者在规则上根本不对等：
+  //   · 够不着目标球 = **空杆，立即犯规**（对手直接拿自由球）
+  //   · 停位贴袋口   = **只是下一杆的风险**，本杆完全合法
+  // 于是优先躲「未来风险」反而稳定地打出「当前犯规」—— 这正是用户看到的
+  // 「两库撞球后力度不够导致犯规」。现在改为：先找三条全满足的；都找不到
+  // 就退而求其次，在「首撞命中 + 母球没进袋」的档里挑停位离袋口最远的。
+  let fallback: { power: number; clearance: number } | null = null
+  const tried = new Set<number>()
   for (const scale of [1.0, 0.8, 0.62, 0.48]) {
-    const trial = Math.max(18 * R, power * scale)
+    const trial = Math.max(reachPower, power * scale)
+    if (tried.has(trial)) continue // 被 reachPower 顶到同一档 → 不必重算
+    tried.add(trial)
     try {
       const clones: Ball[] = source.map((b: Ball) => {
         const nb = new Ball(b.pos.clone(), undefined, b.label)
@@ -564,18 +594,35 @@ function verifyKickNoScratch(
       }
       if (guard >= 200000) continue
       if (!probe.cueball.onTable()) continue // 母球进袋 → 换更小的力度
+      // v1.5.7（#85）：**首撞合法性**才是解球的命门。
+      //
+      // 此前这一档只判「母球没进袋 + 停位不贴袋口」，从不过问母球有没有
+      // 真的碰到目标球。于是为躲摔袋一路把力度收到 0.48 倍后，母球在半路
+      // 就停住了 —— 用户看到的「两库撞球后力度不够导致犯规」正是这个：
+      // 不是力度算小了，是**为躲摔袋主动收小到够不着**。八球规则下空杆
+      // 与摔袋同样是犯规，且同样送对手自由球，所以两者必须一起判。
+      // 用「源球在 table.balls 里的下标」取克隆体，比按 label 匹配更稳。
+      const targetClone: Ball | undefined = clones[targetIdx]
+      if (!targetClone || !targetClone.onTable()) continue
+      if (!Outcome.firstCueContact(probe.cueball, probe.outcome, [targetClone])) {
+        continue // 够不到目标球 = 空杆犯规 → 这一档力度不合格
+      }
       let nearest = Infinity
       for (const pk of dctx.pockets) {
         const dd = probe.cueball.pos.distanceTo(pk)
         if (dd < nearest) nearest = dd
       }
-      if (nearest < 2.2 * R) continue // 停位贴袋口，下一杆极易摔袋
-      return trial
+      if (nearest >= 2.2 * R) return trial // 三条全满足 → 直接采用
+      // 够得着、也没摔袋，只是停位贴袋口：记下来当备胎，继续找更好的
+      if (!fallback || nearest > fallback.clearance) {
+        fallback = { power: trial, clearance: nearest }
+      }
     } catch {
       continue
     }
   }
-  return null
+  // 没有「完美解球线」时：宁可停位贴袋，也绝不空杆。
+  return fallback ? fallback.power : null
 }
 
 /**

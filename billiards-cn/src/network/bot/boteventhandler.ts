@@ -332,7 +332,10 @@ botName === "TheFarJaw"
       (b) => b !== cueball && b.label !== 8 && b.onTable()
     )
 
-    if (session.p1type !== 0 && hasObjectBallsRemaining) {
+    // v1.5.5（#73）：球桌开放（p1type===0，含开球杆）时 bot 打进黑8同样 respot
+    // + 犯规，不再「判玩家获胜」送赢 —— 与玩家侧 eightball.handleFoul 的
+    // 开放球桌语义对称：黑8提前进袋一律复位，不算输也不算赢。
+    if (session.p1type === 0 || hasObjectBallsRemaining) {
       const footSpot = new Vector3(TableGeometry.tableX / 2, 0, 0)
       Respot.respotBehind(footSpot, eightBall, table)
       eightBall.fround()
@@ -362,7 +365,9 @@ botName === "TheFarJaw"
       (b) => b !== cueball && b.label !== 8 && b.onTable()
     )
 
-    if (session.p1type !== 0 && hasObjectBallsRemaining) {
+    // v1.5.5（#73）：与 handleEightBallFoul 同款 —— 球桌开放（p1type===0，含
+    // 开球杆）时 bot 提前进黑8一律 respot + 犯规，不再落回通用结束判定。
+    if (session.p1type === 0 || hasObjectBallsRemaining) {
       const footSpot = new Vector3(TableGeometry.tableX / 2, 0, 0)
       Respot.respotBehind(footSpot, eightBall, table)
       eightBall.fround()

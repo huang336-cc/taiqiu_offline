@@ -157,6 +157,16 @@ export class Aim extends ControllerBase {
     Tutorial.notifyShot()
     const hitEvent = new HitEvent(this.container.table.serialiseHit())
     this.container.sendEvent(hitEvent)
-    return new PlayShot(this.container)
+    // ⚠️ 顺序不能反：PlayShot 的**构造函数**里就调 hit() → table.hit() 用
+    // 当前 cue.aim 击球（elevation 决定跳不跳）。所以必须先 new PlayShot，
+    // 出杆这一下已经打完了，才允许清 aim —— 否则抬杆角被提前清成 0，
+    // 跳球直接失效（实机探针 probe-jump157-real.js 实测：各仰角落点全同、
+    // 峰值全 0，就是踩了这个坑）。
+    const next = new PlayShot(this.container)
+    // v1.5.7（#87）：本杆参数已经用完了 —— 立刻把打点 / 抬杆 / 力度清回基准。
+    // 此后无论经由哪条路径回到玩家回合（正常换手、进球后连续回合、犯规后
+    // 自由球、回放返回），都不可能再带着上一杆的高杆出杆。
+    this.container.table.cue.aimInputs.resetSpinAfterShot()
+    return next
   }
 }

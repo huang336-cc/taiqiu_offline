@@ -6,6 +6,7 @@ import {
   Texture,
 } from "three"
 import { getTableSkin } from "../utils/settings"
+import { makeValueNoise2D } from "../utils/noise"
 
 /**
  * 台球桌皮肤贴图工厂（item 5：增加台球桌皮肤）。
@@ -137,6 +138,88 @@ export function getFrameNormalTexture(tableSkinId: string): Texture | null {
   tex.anisotropy = 4
   tex.needsUpdate = true
   frameNormalCache.set(key, tex)
+  return tex
+}
+
+/**
+ * v1.6.0（3D 美化 P1）：台呢**法线贴图**（绒面微起伏）。
+ *
+ * 为什么必须补：台呢在俯视/斜视机位占画面绝大部分，而它此前只有
+ * 颜色贴图 + sheen —— 视觉上是一块「染色的布」，没有织物的微观起伏。
+ * 真实台呢在掠射光下能看出绒面颗粒的细密明暗闪烁，这必须由法线贴图提供。
+ *
+ * 与桌框不同，台呢的凹凸**不能**从颜色贴图亮度反推（颜色贴图是意象化
+ * 图案，不是织物照片）。这里独立生成：
+ *   - 周期性 value-noise 三层（粗/中/细）叠加成无缝绒面高度场
+ *     （makeValueNoise2D 自带的 wrap 保证 RepeatWrapping 下无接缝）；
+ *   - Sobel 求梯度 → 切线空间法线；
+ *   - 强度刻意压得很低（0.55）—— 绒面是微起伏，不是搓衣板。
+ */
+const clothNormalCache = new Map<string, Texture>()
+
+export function getClothNormalTexture(tableSkinId: string): Texture | null {
+  const key = tableSkinId + "#cn"
+  if (clothNormalCache.has(key)) return clothNormalCache.get(key)!
+  const def = getTableSkin(tableSkinId)
+  if (def.clothTexture === "none") return null
+
+  const w = 256
+  const h = 256
+  const n1 = makeValueNoise2D(1337, 64) // 细密绒面
+  const n2 = makeValueNoise2D(7331, 16) // 中频起伏
+  const lum = new Float32Array(w * h)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      // 采样坐标落在噪声表周期内 → 左右/上下边缘天然衔接
+      const a = n1(x * 4, y * 4)
+      const b = n2(x, y)
+      lum[y * w + x] = a * 0.72 + b * 0.28
+    }
+  }
+
+  const out = document.createElement("canvas")
+  out.width = w
+  out.height = h
+  const octx = out.getContext("2d")!
+  const img = octx.createImageData(w, h)
+  const d = img.data
+
+  const strength = 0.55
+  const at = (x: number, y: number): number =>
+    lum[(((y % h) + h) % h) * w + (((x % w) + w) % w)]
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const gx =
+        at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1) -
+        at(x - 1, y - 1) - 2 * at(x - 1, y) - at(x - 1, y + 1)
+      const gy =
+        at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1) -
+        at(x - 1, y - 1) - 2 * at(x, y - 1) - at(x + 1, y - 1)
+      let nx = -gx * strength
+      let ny = -gy * strength
+      const nz = 1
+      const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1
+      nx /= len
+      ny /= len
+      const i = (y * w + x) * 4
+      d[i] = Math.round((nx * 0.5 + 0.5) * 255)
+      d[i + 1] = Math.round((ny * 0.5 + 0.5) * 255)
+      d[i + 2] = Math.round(((nz / len) * 0.5 + 0.5) * 255)
+      d[i + 3] = 255
+    }
+  }
+  octx.putImageData(img, 0, 0)
+
+  const tex = new CanvasTexture(out)
+  tex.wrapS = tex.wrapT = RepeatWrapping
+  // 法线贴图是向量数据，不能设 sRGB（否则凹凸方向整体偏移）
+  tex.anisotropy = 4
+  // 比颜色贴图更密（repeat 2 → 5）：绒面颗粒要细，颜色图案要疏。
+  // 8 时噪声格点周期太短，会在掠射光下显出规则网格；5 兼顾细密度与随机感。
+  tex.repeat.set(5, 5)
+  tex.needsUpdate = true
+  clothNormalCache.set(key, tex)
   return tex
 }
 

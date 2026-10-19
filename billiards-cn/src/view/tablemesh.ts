@@ -11,7 +11,7 @@ import { TableGeometry } from "./tablegeometry"
 import { PocketGeometry } from "./pocketgeometry"
 import { R } from "../model/physics/constants"
 import { Settings, getTableSkin } from "../utils/settings"
-import { getClothTexture } from "./tableskinfactory"
+import { getClothTexture, getClothNormalTexture } from "./tableskinfactory"
 
 export class TableMesh {
   logger = (_) => {}
@@ -35,6 +35,12 @@ export class TableMesh {
     if (clothTex) {
       this.cloth.map = clothTex
       this.cloth.needsUpdate = true
+    }
+    // v1.6.0：回放/图解桌同样挂绒面法线，避免与主桌观感割裂
+    const clothN = getClothNormalTexture(ts.id)
+    if (clothN) {
+      this.cloth.normalMap = clothN
+      this.cloth.normalScale.set(0.6, 0.6)
     }
     this.cushion.color.set(ts.cushionColor)
     // 【v1.4.4】与 GLTF 库边（assets.ts）同口径的质感分级。

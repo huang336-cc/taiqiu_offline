@@ -25,7 +25,6 @@ import {
   BoxGeometry,
   RingGeometry,
   CircleGeometry,
-  ConeGeometry,
   CylinderGeometry,
   IcosahedronGeometry,
   SphereGeometry,
@@ -40,6 +39,7 @@ import {
   SRGBColorSpace,
 } from "three"
 import { makeValueNoise2D, fbm2D, makeSeededRng } from "../utils/noise"
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js"
 import { getBeachTexture } from "./beachtexturefactory"
 
 /**
@@ -2260,79 +2260,6 @@ function SRGBToDisplay(c: number): number {
   return v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055
 }
 
-/** 山顶平台上的露头岩石：给俯视窄边和 aim 视角前景补细节 */
-function buildSnowRocks(): Group {
-  const g = new Group()
-  g.name = "SnowRocks"
-  const rng = makeSeededRng(4021)
-  const cRock = new Color(0x5c6672)
-  const cSnow = new Color(0xf4f9ff)
-  const tmp = new Color()
-  const geos: BufferGeometry[] = []
-  for (let i = 0; i < 24; i++) {
-    const ang = rng() * Math.PI * 2
-    const r = 2.1 + rng() * 3.2
-    const h = 0.1 + rng() * 0.26
-    const rad = h * (0.7 + rng() * 0.7)
-    const geo = new ConeGeometry(rad, h, 5 + Math.floor(rng() * 3), 1)
-    geo.rotateX(Math.PI / 2)
-    geo.translate(0, 0, h / 2)
-    // 径向随机扰动，破掉规则圆锥感
-    const p = geo.attributes.position
-    for (let v = 0; v < p.count; v++) {
-      const s = 0.78 + rng() * 0.44
-      p.setX(v, p.getX(v) * s)
-      p.setY(v, p.getY(v) * s)
-    }
-    geo.computeVertexNormals()
-    const nrm = geo.attributes.normal
-    const cols = new Float32Array(p.count * 3)
-    for (let v = 0; v < p.count; v++) {
-      const t = Math.min(1, Math.max(0, p.getZ(v) / h))
-      tmp.copy(cRock).lerp(cSnow, smoothstep(0.45, 0.95, t))
-      // v1.3.62c：与地形同一套显示空间着色 + toneMapped=false，
-      // 否则这 24 块石头会在雪白地形上显得格外平、格外亮，像贴纸。
-      const ndc = Math.pow(
-        Math.max(
-          0,
-          nrm.getX(v) * SNOW_BAKE_SUN[0] +
-            nrm.getY(v) * SNOW_BAKE_SUN[1] +
-            nrm.getZ(v) * SNOW_BAKE_SUN[2]
-        ),
-        SNOW_SHADE.GAMMA
-      )
-      tmp.setRGB(
-        Math.min(1, SRGBToDisplay(tmp.r) * (SNOW_SHADE.AMB[0] + SNOW_SHADE.SUN[0] * ndc)),
-        Math.min(1, SRGBToDisplay(tmp.g) * (SNOW_SHADE.AMB[1] + SNOW_SHADE.SUN[1] * ndc)),
-        Math.min(1, SRGBToDisplay(tmp.b) * (SNOW_SHADE.AMB[2] + SNOW_SHADE.SUN[2] * ndc)),
-        SRGBColorSpace
-      )
-      cols[v * 3] = tmp.r
-      cols[v * 3 + 1] = tmp.g
-      cols[v * 3 + 2] = tmp.b
-    }
-    geo.setAttribute("color", new BufferAttribute(cols, 3))
-    // v1.3.94：把落位直接烘进几何（mergeColored 只搬属性、不应用矩阵），
-    // 24 块岩石合并为单个 Mesh，省下 23 个 draw call。
-    geo.translate(Math.cos(ang) * r, Math.sin(ang) * r, snowFloorZ(r))
-    geos.push(geo)
-  }
-  // 注：MeshBasicMaterial 不做光照，flatShading 无效果（且新版类型里已移除）
-  const rockMesh = new Mesh(
-    mergeColored(geos),
-    new MeshBasicMaterial({
-      vertexColors: true,
-      toneMapped: false,
-      fog: envFogEnabled,
-    })
-  )
-  rockMesh.name = "SnowRocks"
-  rockMesh.castShadow = false
-  rockMesh.receiveShadow = false
-  g.add(rockMesh)
-  return g
-}
-
 export function buildSnowMountainV3(): Group {
   const g = new Group()
   g.name = "SnowMountain"
@@ -2365,7 +2292,8 @@ export function buildSnowMountainV3(): Group {
     )
   }
 
-  g.add(buildSnowRocks())
+  // v1.5.5（#74）：删除球桌旁的 24 个锥形「露头岩石」装饰（buildSnowRocks）——
+  // 用户要求只保留远处的连绵雪山，桌面附近不要任何锥体小物件。
   return g
 }
 
@@ -3548,6 +3476,36 @@ function cylGeo(rTop: number, rBot: number, h: number, seg = 10): BufferGeometry
   return g
 }
 
+/**
+ * v1.6.0（3D 美化 P3）：圆角盒（软包家具的核心几何）。
+ *
+ * 为什么必须用圆角而不是平盒子：`boxGeo` 的六个面各自法线恒定，bakeIndoor
+ * 的 `N·L` 逐顶点相同 → 一个面就是一整块纯色，视觉上就是"积木"。
+ * 圆角盒在棱边处法线连续变化，顶点色随之渐变，直接得到软包沙发那种
+ * 「受光面亮、转角暗」的立体转折 —— 这是几何层面的差异，不是贴图能补的。
+ *
+ * 半径自动夹取到短边的 49%，避免零件过薄时几何自交。
+ */
+function roundedBoxGeo(
+  w: number,
+  l: number,
+  h: number,
+  r: number,
+  seg = 3
+): BufferGeometry {
+  const maxR = Math.min(w, l, h) * 0.49
+  const g = new RoundedBoxGeometry(w, l, h, seg, Math.min(r, maxR))
+  g.translate(0, 0, h / 2)
+  return g
+}
+
+/** 横置圆柱：轴向沿局部 X（家具的"卷边/抱枕柱"等） */
+function cylGeoX(r: number, len: number, seg = 14): BufferGeometry {
+  const g = new CylinderGeometry(r, r, len, seg, 1)
+  g.rotateZ(Math.PI / 2)
+  return g
+}
+
 
 /**
  * 道具收集器：把一堆小几何体烘好顶点色后合并成**一个** Mesh。
@@ -3973,26 +3931,44 @@ function addSofa(
     y + Math.sin(rot) * du + Math.cos(rot) * dv,
   ]
   let ax: number, ay: number
-  // ① 四条方木腿（0.13m，收回体内不外凸）
+  // ① 四条圆木腿（略外撇，真实沙发的"削角腿"观感来自圆角）
   for (const sx of [-1, 1]) {
     for (const sy of [-1, 1]) {
-      ;[ax, ay] = at(sx * (HL - 0.14), sy * 0.24)
-      p.add(boxGeo(0.07, 0.07, 0.13), ax, ay, F + 0.004, rot, RM_SOFA_LEG)
+      ;[ax, ay] = at(sx * (HL - 0.16), sy * 0.26)
+      p.add(cylGeo(0.028, 0.034, 0.15, 10), ax, ay, F, rot, RM_SOFA_LEG)
     }
   }
-  // ② 座箱（腿上平台，F+0.13 → 0.35）
+  // ② 座箱（圆角软包基座，F+0.15 → 0.37）
   ;[ax, ay] = at(0, 0)
-  p.add(boxGeo(len, 0.78, 0.22), ax, ay, F + 0.13, rot, clothDk)
-  // ③ 通长厚坐垫（F+0.35 → 0.52，四周缩进露出一圈座箱边）
-  ;[ax, ay] = at(0, -0.06)
-  p.add(boxGeo(len - 0.14, 0.64, 0.17), ax, ay, F + 0.35, rot, clothHex)
-  // ④ 靠背（F+0.13 → 0.73）
-  ;[ax, ay] = at(0, 0.29)
-  p.add(boxGeo(len, 0.22, 0.60), ax, ay, F + 0.13, rot, clothHex)
-  // ⑤ 两侧方扶手（F+0.13 → 0.68，顶面高于坐垫）
+  p.add(roundedBoxGeo(len, 0.80, 0.22, 0.05), ax, ay, F + 0.15, rot, clothDk)
+  // ③ 两段独立坐垫（中间留 3cm 分缝 —— 这是"布艺沙发"最直观的识别特征）
   for (const sx of [-1, 1]) {
-    ;[ax, ay] = at(sx * (HL - 0.11), 0)
-    p.add(boxGeo(0.22, 0.84, 0.55), ax, ay, F + 0.13, rot, clothDk)
+    ;[ax, ay] = at(sx * (len / 4), -0.07)
+    p.add(
+      roundedBoxGeo(len / 2 - 0.035, 0.64, 0.175, 0.055, 4),
+      ax,
+      ay,
+      F + 0.37,
+      rot,
+      clothHex
+    )
+  }
+  // ④ 靠背（圆角软包，F+0.15 → 0.78）+ 顶部卷边圆柱
+  ;[ax, ay] = at(0, 0.30)
+  p.add(roundedBoxGeo(len, 0.24, 0.63, 0.06, 4), ax, ay, F + 0.15, rot, clothHex)
+  ;[ax, ay] = at(0, 0.31)
+  p.add(cylGeoX(0.118, len, 16), ax, ay, F + 0.78 - 0.115, rot, clothHex)
+  // ⑤ 两侧扶手：圆角体 + 顶部圆卷（真实沙发扶手的圆柱收口）
+  for (const sx of [-1, 1]) {
+    ;[ax, ay] = at(sx * (HL - 0.115), 0)
+    p.add(roundedBoxGeo(0.23, 0.86, 0.56, 0.055, 4), ax, ay, F + 0.15, rot, clothDk)
+    p.add(cylGeoX(0.115, 0.86, 16), ax, ay, F + 0.71 - 0.05, rot, clothDk)
+  }
+  // ⑥ 两只斜靠的抱枕（生活感；用大圆角薄盒 + 侧倾）
+  const PILLOW = 0xf3e6c8
+  for (const sx of [-1, 1]) {
+    ;[ax, ay] = at(sx * (len / 4 + 0.02), 0.16)
+    p.add(roundedBoxGeo(0.36, 0.34, 0.13, 0.062, 4), ax, ay, F + 0.53, rot + sx * 0.22, PILLOW)
   }
 }
 
@@ -4010,16 +3986,24 @@ function addFloorLamp(
   metalHex: number
 ): void {
   const F = ROOM_FLOOR_Z
-  p.add(cylGeo(0.19, 0.21, 0.028, 16), x, y, F + 0.008, 0, metalHex) // 底盘
-  p.add(cylGeo(0.020, 0.024, 1.12, 8), x, y, F + 0.034, 0, metalHex) // 灯杆
-  p.add(cylGeo(0.145, 0.185, 0.28, 14), x, y, F + 1.10, 0, shadeHex) // 灯罩（锥）
+  const GLOW = 0xfff8e8
+  // 底盘：两级圆盘（大底盘 + 上收的过渡环），比单圆盘更像真灯座
+  p.add(cylGeo(0.20, 0.215, 0.022, 20), x, y, F + 0.006, 0, metalHex)
+  p.add(cylGeo(0.12, 0.16, 0.03, 20), x, y, F + 0.027, 0, metalHex)
+  // 灯杆：下粗上细的锥形杆 + 中部装饰环
+  p.add(cylGeo(0.013, 0.019, 1.06, 10), x, y, F + 0.056, 0, metalHex)
+  p.add(cylGeo(0.026, 0.026, 0.025, 12), x, y, F + 0.52, 0, metalHex)
+  // 灯罩：外锥（下阔）+ 上端收口环 —— 真实灯罩是"上窄下阔的锥台"
+  p.add(cylGeo(0.115, 0.19, 0.30, 22), x, y, F + 1.116, 0, shadeHex)
+  p.add(cylGeo(0.115, 0.115, 0.014, 22), x, y, F + 1.416, 0, shadeHex)
+  // 罩口内胆发光面（朝下的圆盘）—— 灯光出处，与室内吊灯同语言
   p.add(
-    cylGeo(0.145, 0.145, 0.012, 14),
+    cylGeo(0.182, 0.182, 0.008, 22),
     x,
     y,
-    F + 1.368,
+    F + 1.112,
     0,
-    (out: Color) => out.setRGB(1, 0.972, 0.90) // 罩顶微光面
+    (out: Color) => out.setHex(GLOW)
   )
 }
 
@@ -4034,12 +4018,108 @@ function addSideTable(
 ): void {
   const F = ROOM_FLOOR_Z
   const HW = 0.30 * s
+  // 四条锥形圆木腿（上粗下细）
   for (const sx of [-1, 1]) {
     for (const sy of [-1, 1]) {
-      p.add(boxGeo(0.05, 0.05, 0.42), x + sx * (HW - 0.03), y + sy * (HW - 0.03), F + 0.012, 0, legHex)
+      p.add(
+        cylGeo(0.019, 0.026, 0.42, 10),
+        x + sx * (HW - 0.035),
+        y + sy * (HW - 0.035),
+        F,
+        0,
+        legHex
+      )
     }
   }
-  p.add(boxGeo(HW * 2, HW * 2, 0.05), x, y, F + 0.432, 0, topHex)
+  // 台面：圆角木板 + 一圈收边（下沿比台面略窄 → 有厚度感）
+  p.add(roundedBoxGeo(HW * 2, HW * 2, 0.045, 0.018, 3), x, y, F + 0.435, 0, topHex)
+  p.add(roundedBoxGeo(HW * 1.86, HW * 1.86, 0.03, 0.012, 3), x, y, F + 0.408, 0, topHex)
+}
+
+/**
+ * v1.6.0（3D 美化 P3）：台球桌正上方**三头吊灯**（台球厅的灵魂灯具）。
+ *
+ * ## 为什么必须补这盏灯
+ *
+ * 此前「中央顶光」只是 ROOM_PAL.lamps 里一条**烘焙用的假光源**
+ * （pos [0,0,2.30]，无实体灯具）—— 画面里桌上空无一物，房间像
+ * 「家具摆在没有灯的空盒子里」。真实台球厅视觉的第一识别元素就是
+ * 悬在球桌正上方的长条吊灯。
+ *
+ * ## 挂在哪
+ *
+ * 必须挂进 `CeilingGroup`：俯视相机升到层高（2.85）之上时该组整体
+ * 隐藏，吊灯随之消失，**不会挡住俯视看球桌的视线**（这是硬约束）。
+ *
+ * ## 材质
+ *
+ * 与房间其它道具一致：烘焙顶点色 + MeshBasicMaterial（不受光、
+ * toneMapped:false）。灯罩内胆用近白色表达「灯亮着」，黄铜杆用低亮度
+ * 铜色。真正的照明与阴影由 view.ts 的 SpotLight 承担（见 indoorTable）。
+ */
+function buildBilliardLamp(pal: IndoorPalette): Mesh {
+  const geos: BufferGeometry[] = []
+  const push = (
+    g: BufferGeometry,
+    color: number | ((out: Color) => void)
+  ): void => {
+    bakeIndoor(g, pal, (out) => {
+      if (typeof color === "function") color(out)
+      else out.setHex(color)
+    })
+    const ni = g.index ? g.toNonIndexed() : g
+    if (ni !== g) g.dispose()
+    geos.push(ni)
+  }
+
+  const BRASS = 0x8a6a3c
+  const BRASS_D = 0x6d5330
+  const SHADE_OUT = 0xe8dcc2 // 奶白灯罩外壁（受房间光，亮度中等）
+
+  // ① 吸顶盘（贴天花板 z=2.85）
+  const canopy = new CylinderGeometry(0.085, 0.1, 0.05, 16)
+  canopy.translate(0, 0, 2.82)
+  push(canopy, BRASS_D)
+
+  // ② 中吊杆：吸顶盘 → 横杆（z 2.80 → 2.44）
+  const rod = new CylinderGeometry(0.011, 0.011, 0.36, 8)
+  rod.translate(0, 0, 2.62)
+  push(rod, BRASS_D)
+
+  // ③ 黄铜横杆（沿 X，跨度 1.34m —— 覆盖 2.54m 球桌的长度方向中部）
+  const bar = new BoxGeometry(1.34, 0.042, 0.042)
+  bar.translate(0, 0, 2.44)
+  push(bar, BRASS)
+
+  // ④ 三头灯罩 + 悬杆
+  const headX = [-0.6, 0, 0.6]
+  for (const x of headX) {
+    const stem = new CylinderGeometry(0.009, 0.009, 0.1, 8)
+    stem.translate(x, 0, 2.39)
+    push(stem, BRASS_D)
+
+    // 灯罩：上窄下宽的开口锥（真实台球灯罩形制），罩口朝下
+    const shade = new CylinderGeometry(0.075, 0.175, 0.17, 20, 1, true)
+    shade.translate(x, 0, 2.25)
+    push(shade, SHADE_OUT)
+
+    // 罩口内胆：一片朝下的发光圆盘，代表灯泡光
+    const glow = new CircleGeometry(0.16, 20)
+    glow.rotateX(Math.PI) // 法线朝下
+    glow.translate(x, 0, 2.168)
+    push(glow, (out) => out.setRGB(1, 0.965, 0.88))
+
+    // 罩顶封盖（避免从上方看进罩内是空心）
+    const cap = new CircleGeometry(0.078, 16)
+    cap.translate(x, 0, 2.335)
+    push(cap, SHADE_OUT)
+  }
+
+  const m = new Mesh(mergeColored(geos), envMaterial())
+  m.name = "billiardLamp"
+  m.castShadow = false
+  m.receiveShadow = false
+  return m
 }
 
 function buildRoom(): Group {
@@ -4051,7 +4131,10 @@ function buildRoom(): Group {
   // 传 AO 会把整面墙按最大遮蔽压暗，与「亮度均匀的纯色米黄墙」相悖。
   g.add(buildIndoorFloor(ROOM_PAL, null, INDOOR_AO))
   g.add(buildIndoorWalls(ROOM_PAL_FLAT))
-  g.add(buildIndoorCeiling(ROOM_PAL_FLAT))
+  const ceiling = buildIndoorCeiling(ROOM_PAL_FLAT)
+  // v1.6.0：三头台球吊灯挂进顶棚组 —— 俯视时随顶棚一起隐藏，不挡视线
+  ceiling.add(buildBilliardLamp(ROOM_PAL))
+  g.add(ceiling)
   const p = new Props(ROOM_PAL, INDOOR_AO)
 
   /**
@@ -4088,6 +4171,33 @@ function buildRoom(): Group {
   const LAMP_POLE = 0xe6e0d2 // 浅色灯杆（参考图灯杆是浅色而非黑）
   addFloorLamp(p, -5.38, -3.42, LAMP_SHADE, LAMP_POLE)
   addFloorLamp(p, 5.38, -3.42, LAMP_SHADE, LAMP_POLE)
+
+  /**
+   * v1.6.0（P3）：踢脚线 + 墙面挂画。
+   *
+   * 此前墙面是一整片素色，除家具外没有任何建筑细节 —— 这是"空盒子"感
+   * 的另一半来源。踢脚线（沿墙脚一圈 9cm 木条）与两幅挂画把墙从
+   * 「一块色板」变回「一面墙」。
+   */
+  const SKIRT = 0xcdb68f // 踢脚线（比墙略深，与地板同色系）
+  const FRAME = 0x6b4a2a // 画框（深木）
+  const CANVAS = [0xaccbe0, 0xc3d2a8] // 两幅画芯（雾蓝 / 浅苔绿，明快不抢戏）
+  const inset = 0.055
+  const skirtH = 0.09
+  // 四面墙各一条踢脚线（贴墙、只比墙厚一点点）
+  p.add(boxGeo(ROOM_HX * 2 - inset * 2, 0.02, skirtH), 0, ROOM_HY - inset, ROOM_FLOOR_Z + 0.001, 0, SKIRT)
+  p.add(boxGeo(ROOM_HX * 2 - inset * 2, 0.02, skirtH), 0, -ROOM_HY + inset, ROOM_FLOOR_Z + 0.001, 0, SKIRT)
+  p.add(boxGeo(0.02, ROOM_HY * 2 - inset * 2, skirtH), ROOM_HX - inset, 0, ROOM_FLOOR_Z + 0.001, 0, SKIRT)
+  p.add(boxGeo(0.02, ROOM_HY * 2 - inset * 2, skirtH), -ROOM_HX + inset, 0, ROOM_FLOOR_Z + 0.001, 0, SKIRT)
+  // 两幅挂画（±X 墙上、沙发上方）
+  for (let i = 0; i < 2; i++) {
+    const sx = i === 0 ? 1 : -1
+    const wx = sx * (ROOM_HX - 0.06)
+    // 画框 0.07 厚，内表面在 wx − sx·0.035；画芯必须再往前 0.005 才不会
+    // 被画框盒吞掉（首次实机就踩了：画芯整体埋在框里，墙上只有一块深色板）
+    p.add(boxGeo(0.07, 1.05, 0.72), wx, -1.30, ROOM_FLOOR_Z + 1.62, 0, FRAME)
+    p.add(boxGeo(0.02, 0.92, 0.60), wx - sx * 0.042, -1.30, ROOM_FLOOR_Z + 1.68, 0, CANVAS[i])
+  }
 
   g.add(p.mesh("RoomProps"))
 

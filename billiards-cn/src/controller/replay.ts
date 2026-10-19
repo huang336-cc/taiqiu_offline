@@ -157,6 +157,20 @@ export class Replay extends ControllerBase {
   private static readonly REPLAY_LEAD_MS = 80
 
   /**
+   * v1.5.6（#81）：判定「拖到了进度条尽头」的阈值。
+   * 取 0.999 而非 1.0 —— 进度条是 0~1000 的整数刻度，拖到最右端时
+   * `seekEl.value` 未必恰好 1000（实测常停在 998/999），留一格余量。
+   */
+  private static readonly SEEK_END_FRAC = 0.999
+
+  /**
+   * v1.5.6（#81）：进度条吸附阈值（进度条比例）。松手位置与某个进球时刻的
+   * 距离小于它，就吸附到该进球时刻。末端豁免判据 `1 - SEEK_SNAP_FRAC` 也用
+   * 它，两处必须同源，否则会出现「刚豁免完又被吸附」的边界抖动。
+   */
+  private static readonly SEEK_SNAP_FRAC = 0.025
+
+  /**
    * v1.2.17：回放全局倍速档位（用户手动选择）。
    * 取值为 1 表示常速；击球→进球的真实时间间隔不被压缩、也不被拉长。
    */
@@ -206,6 +220,12 @@ export class Replay extends ControllerBase {
    * 会把 `replayPaused` 复位成 false —— 那样用户按的暂停会被一次拖动无意取消掉。
    */
   private userPaused = false
+  /**
+   * v1.5.8（#90）：整局播完的终局跳转只做一次。
+   * handleStationary 在「帧首已静止」的判定下可能被再次触发，不设闸会反复
+   * 重跑末杆（画面不变但白耗一次完整物理重跑）。
+   */
+  private playFinished = false
   /** v1.3.75：「暂停 / 继续」按钮引用与点击处理 */
   private pauseBtn: HTMLButtonElement | null = null
   private onPauseClick = () => {
@@ -231,6 +251,16 @@ export class Replay extends ControllerBase {
     if (this.speedBtn) {
       this.speedBtn.textContent = this.cycleReplaySpeed()
     }
+  }
+  /**
+   * v1.5.5（#76）：「俯视」按钮 —— 切回原有俯视视角。
+   * 与 v1.5.4 之前的回放俯视完全同源（Camera.topView，整台俯视看原点）。
+   * 按下后 mode=topView，每帧由相机自身驱动；用户再次拖动画面时
+   * onFreePointerDown 会按需切回自由视角。
+   */
+  private topBtn: HTMLButtonElement | null = null
+  private onTopBtnClick = () => {
+    this.container.view.camera.forceMode(this.container.view.camera.topView)
   }
   /**
    * v1.5.4（#70）：回放**自由视角**。
@@ -348,14 +378,20 @@ export class Replay extends ControllerBase {
     } catch (e) {
       console.error("[replay] updateFromShortSerialised failed:", e)
     }
+    // v1.5.5（#77）：进入回放把时间轴清零 —— 语义「新回放从 0 开始」。
+    // 注：最初怀疑的「init 序列化残留陈旧 time」经实机挂钩证伪（hook 初始值
+    // 恒为 0），真正的污染源是 idx=-1 空闲期 Container.animate 空转推进
+    // time（见 tickSeekUI 内实锤③注释）；这里清零保留作为防御性兜底。
+    this.container.table.time = 0
     console.log(`shots: ${this.shots.length}`)
     console.log(`shots: ${JSON.stringify(this.shots)}`)
-    // v1.5.4（#70）：图解 / 开伦仍沿用固定俯视（这两种是战术示意，不需要自由视角）；
-    // 其余一律进入**自由视角** —— 相机永远对着球台，用户可自行转动/缩放。
-    if (this.diagram || this.container.rules.rulename == "threecushion") {
-      this.container.view.camera.forceMode(this.container.view.camera.topView)
-    } else {
-      this.container.view.camera.forceFreeView()
+    // v1.5.5（#76）：回放**默认使用原有俯视视角**（用户要求保留俯视）。
+    // 自由视角手势照常绑定 —— 用户在画面上拖动 / 捏合 / 滚轮的瞬间会自动
+    // 切到自由视角（见 onFreePointerDown 的 forceFreeView）；
+    // 控制栏新增「俯视」按钮可随时一键切回俯视（见 setupReplaySeek）。
+    // 图解 / 开伦仍固定俯视且不绑手势（战术示意不需要自由视角）。
+    this.container.view.camera.forceMode(this.container.view.camera.topView)
+    if (!this.diagram && this.container.rules.rulename != "threecushion") {
       this.setupReplayFreeCam()
     }
     // v1.2.11 #user：进入回放前预跑完整局，填满 shotMeta，
@@ -852,6 +888,18 @@ export class Replay extends ControllerBase {
   private seekToFraction(frac: number) {
     const { cum, total } = this.gameTotals()
     if (total <= 0) return
+    // v1.5.8（#90）：用户拖到**非尽头**才解除终局跳转闸门（拖回中段后仍要能
+    // 暂停/继续，且随后的自然播完要能再次跳终局）；拖到尽头时**保持**闸门 ——
+    // 终局 seek 自己会把画面与时钟对齐到位，若此时重置闸门，终局 seek 的
+    // hit() 一旦跨帧产生 StationaryEvent，handleStationary 会再跑一次终局
+    // 分支 → 末杆物理被反复重跑，极端情况下形成自循环（DIAG3 实测定性）。
+    // 暂停按钮的恢复与闸门解耦：任何拖动都恢复（播完时它被禁用）。
+    if (frac < Replay.SEEK_END_FRAC) {
+      this.playFinished = false
+    }
+    if (this.pauseBtn && this.pauseBtn.disabled) {
+      this.pauseBtn.disabled = false
+    }
     // v1.3.59：清 timer 必须放在这里，不能只放在 onSeekStart。
     // onSeekEnd 同时绑在 change 上（键盘方向键 / 程序触发只走 input + change，
     // 不经过 onSeekStart），不清 timer 的话，杆间 delay 的那个 timer 到期仍会
@@ -896,9 +944,21 @@ export class Replay extends ControllerBase {
     // 拖动进度条落到「碰撞解算不收敛」的杆段时按已推进到的位置收尾。
     const step = this.container.step
     let guard = 0
+    // v1.5.6（#81）：拖到进度条尽头时，必须把这一杆真正跑到静止，而不是
+    // 卡在「时间到达 duration」的那一瞬。
+    //
+    // 病灶：循环判据是 `table.time < localTarget`，而 localTarget 来自
+    // 预演估算的 duration。估算值偏小时（实测拖到 100% 后 globalT 只到
+    // total 的 99.6%），循环在时间到点时就退出，可球还在滚 —— 用户把进度条
+    // 拉到最后，看到的却是一个「球仍在运动的中途画面」，而不是对局结束的
+    // 终局台面（探针实测末尾仍有 2 颗球 inMotion）。
+    //
+    // 拖到尽头 = 用户想看结果，此时忽略时间上限，一路推进到 allStationary
+    // （guard 仍兜底防不收敛）。非尽头的拖动保持原样，避免改变手感。
+    const toEnd = frac >= Replay.SEEK_END_FRAC
     try {
       while (
-        this.container.table.time < localTarget &&
+        (toEnd || this.container.table.time < localTarget) &&
         !this.container.table.allStationary() &&
         guard++ < 500000
       ) {
@@ -906,6 +966,15 @@ export class Replay extends ControllerBase {
       }
     } catch {
       console.warn("[replay] seek advance hit Depth-exceeded, settle at current position")
+    }
+    // v1.5.6（#81 补）：实跑与预演的收杆时刻天然有偏差 —— 实测末杆预演记
+    // 5210.9ms，而 live 桌子 3978.5ms 就静止（差 1232ms，2037 步 vs 2668 步；
+    // 同一份 meta 在 simTable 上复算则与 duration 分毫不差）。球已静止、画面
+    // 就是终局，可进度条按 `cum + table.time` 计算，只能读到 98.5%，看着像
+    // 「没拖到底」。末尾剩下的全是「球已静止」的死时间，这里把时钟对齐到本杆
+    // 名义时长，让进度条读满 100%，台面保持终局状态不变。
+    if (toEnd && this.container.table.time < localTarget) {
+      this.container.table.time = localTarget
     }
     this.container.table.updateBallMesh(0)
     // v1.5.4（#70）：自由视角下 seek 不再重定位相机 —— 镜头完全由用户控制，
@@ -968,7 +1037,35 @@ export class Replay extends ControllerBase {
       const { cum, total } = this.gameTotals()
       if (total > 0) {
         const idx = this.currentShotIndex < 0 ? 0 : this.currentShotIndex
-        const cur = cum[idx] + this.container.table.time
+        // v1.5.5（#77 实锤③）：第一杆 HitEvent 到来前 currentShotIndex=-1，
+        // 而 Container.advance 对静止桌面仍无条件调 table.advance（该循环
+        // 没有静止守卫，Table.advance 里 `time += t*1000` 照加）——空闲期
+        // table.time 以真实速率空转累积（实机挂钩实测：进回放数秒即被推到
+        // 46.7s，进度条显示 65%，第一杆开打 hit() 归零后猛跳回 0 —— 即
+        // 用户报的「进度条错误」）。进度条只认「已播杆累计时长 + 当前杆内
+        // 物理时间」：未开杆时 time 一律视为 0，空闲期累积值不得入账。
+        // v1.5.8（#90）：杆末 / 杆间的时钟空转不得计入进度。
+        //
+        // 病灶：`Container.advance` 的物理循环没有「本杆已结束」的上界，球
+        // 停下之后 `Table.advance` 里 `time += t*1000` 仍在以真实速率累加
+        // —— 杆间 delay 的几百毫秒、以及末杆播完到用户点退出之间的整段
+        // 等待，全都记到了**当前这一杆**头上。DIAG2 实机抓到倒数第二杆
+        // 的时钟被空转到 11115ms（该杆名义时长只有 5127ms），进度条因此
+        // 顶满 1000/1000，而画面还停在倒数第二杆 —— 用户把进度条拉/看到
+        // 「最后」，看到的却不是对局终局。
+        //
+        // v1.5.5（#77）只堵了「未开杆（idx<0）」的空转，杆内和杆间没管。
+        // 这里给每杆时钟加上名义时长上界：本杆该走多久就最多算多久，
+        // 超出部分一律是本杆结束后的死时间。
+        const dur =
+          this.shotMeta[idx] && this.shotMeta[idx].duration > 0
+            ? this.shotMeta[idx].duration
+            : Number.POSITIVE_INFINITY
+        const shotTime =
+          this.currentShotIndex < 0
+            ? 0
+            : Math.min(this.container.table.time, dur)
+        const cur = cum[idx] + shotTime
         const frac = Math.min(cur / total, 1)
         this.seekEl.value = String(Math.round(frac * 1000))
       }
@@ -1018,35 +1115,67 @@ export class Replay extends ControllerBase {
     clearTimeout(this.timer)
     this.timer = undefined
   }
-  private onSeekInput = () => {
-    if (!this.seekEl) return
-    let frac = Number(this.seekEl.value) / 1000
-    // v1.2.11 #F11：吸附检测在全局位置做（所有已记录杆的 pots）
+  /**
+   * v1.5.6（#80）：把进度条值吸附到最近的进球时刻。
+   *
+   * ⚠️ 这段原先在 onSeekInput 里**每帧**执行，由此产生「磁滞」：拖动途中
+   * value 被吸附改写，下一步 move 又从被改写后的值继续，于是最终停在哪个
+   * 时刻取决于「从哪个方向拖过来」—— 同一个位置，第一次拖到落在 24.9s、
+   * 第二次却落在 22.6s（实测球局差 1.149 米）。用户报的「滑回原位置，实际
+   * 时间点对不上」就是这个。
+   *
+   * 吸附只在**松手时**做一次，判据是松手瞬间的 value，与拖动路径无关，
+   * 同一个落点无论从哪个方向拖来都停在同一个时刻。
+   */
+  private snapFraction(frac: number): number {
     const { cum, total } = this.gameTotals()
-    if (total > 0) {
-      const SNAP = 0.025 // 吸附阈值（进度条比例）
-      let best = -1
-      let bestD = SNAP
-      for (let i = 0; i < this.shotMeta.length; i++) {
-        const meta = this.shotMeta[i]
-        for (const p of meta.pots) {
-          const globalT = cum[i] + (p.t - Replay.REPLAY_LEAD_MS)
-          const sf = Math.max(0, Math.min(1, globalT / total))
-          const d = Math.abs(frac - sf)
-          if (d < bestD) {
-            bestD = d
-            best = sf
-          }
+    if (total <= 0) return frac
+    const SNAP = Replay.SEEK_SNAP_FRAC // 吸附阈值（与末端豁免同源，见常量处注释）
+    let best = -1
+    let bestD = SNAP
+    for (let i = 0; i < this.shotMeta.length; i++) {
+      const meta = this.shotMeta[i]
+      for (const p of meta.pots) {
+        const globalT = cum[i] + (p.t - Replay.REPLAY_LEAD_MS)
+        const sf = Math.max(0, Math.min(1, globalT / total))
+        const d = Math.abs(frac - sf)
+        if (d < bestD) {
+          bestD = d
+          best = sf
         }
       }
-      if (best >= 0) {
-        frac = best
-        this.seekEl.value = String(Math.round(frac * 1000))
-      }
     }
-    this.seekToFraction(frac)
+    return best >= 0 ? best : frac
+  }
+
+  private onSeekInput = () => {
+    if (!this.seekEl) return
+    // 拖动过程保持线性：不做吸附，落点只由松手位置决定（见 snapFraction）
+    this.seekToFraction(Number(this.seekEl.value) / 1000)
   }
   private onSeekEnd = () => {
+    if (this.seekEl) {
+      const raw = Number(this.seekEl.value) / 1000
+      // v1.5.6（#81 补）：末端吸附豁免。
+      // 把进度条拖到头是想要「对局终局」，不该被最后一个进球点拽回去 ——
+      // 实测一局最后进球点落在 0.9893，落在吸附阈值 0.025 之内，于是拖到
+      // 100% 却被改写成 987/1000，画面停在「最后一颗球刚落袋」而 balls 还没
+      // 停稳，正是用户报的「拉到底不是对局结束时刻」。落点已进入最后一个
+      // 吸附窗口时一律不吸附。
+      //
+      // v1.5.7（#88）：豁免之后还要**一路顶到 1**，不能停在松手位置。
+      //
+      // 真机上「拖到尽头」根本拖不到 1000：滑块 thumb 有宽度，指针压到轨道
+      // 最右端时 input 的 value 通常只能到 97x~99x。停在 0.99 就过不了
+      // seekToFraction 里的 `toEnd = frac >= 0.999` 判据 —— 于是既不把这一杆
+      // 推进到静止、也不做时钟对齐，画面停在「差一点点」的中途，用户看到的
+      // 依旧是「拉到底不是对局结束」。既然已经判定用户意图是「看终局」，
+      // 就直接把落点顶到 1，让 toEnd 分支真正生效。
+      const frac =
+        raw >= 1 - Replay.SEEK_SNAP_FRAC ? 1 : this.snapFraction(raw)
+      this.seekEl.value = String(Math.round(frac * 1000))
+      this.seekToFraction(frac)
+    }
     this.userScrubbing = false
     // v1.3.75：拖完是否恢复播放取决于用户有没有按过暂停，不能一律复位
     this.applyPauseState()
@@ -1134,6 +1263,13 @@ this.tickSeekUI()
       speed.textContent = this.currentSpeedLabel()
       speed.addEventListener("click", this.onSpeedClick)
     }
+    // v1.5.5（#76）：挂载「俯视」按钮 —— 一键切回原有俯视视角。
+    // 自由视角下用户转乱了/想回全局视野时用；拖动画面又可再进自由视角。
+    const topBtn = document.getElementById("replayTopBtn") as HTMLButtonElement | null
+    this.topBtn = topBtn
+    if (topBtn) {
+      topBtn.addEventListener("click", this.onTopBtnClick)
+    }
     // v1.5.4（#70）：原「视角切换按钮（跟随/俯视）」已随跟随视角一并移除，
     // 自由视角不再需要按钮 —— 直接在画面上拖动即可转向、捏合/滚轮缩放。
     // 若旧版 HTML 仍残留该按钮，则主动隐藏，避免出现一个点了没反应的死按钮。
@@ -1144,11 +1280,20 @@ this.tickSeekUI()
       this.seekEl.addEventListener("pointerup", this.onSeekEnd)
       this.seekEl.addEventListener("input", this.onSeekInput)
       this.seekEl.addEventListener("change", this.onSeekEnd)
+      // v1.5.5（#77 实锤②）：拖动被打断的兜底 —— 真机上手指拖进度条时来电、
+      // 下拉通知、系统手势、弹窗抢占等都会触发 pointercancel（触摸流为
+      // touchcancel），此后 pointerup/touchend **不会再派发**，onSeekEnd 永不
+      // 执行 → userScrubbing 永久卡在 true → 物理冻结 + 进度条停更，回放
+      // 无提示停死（用户报的「偶发停止」）。cancel 是幂等收尾：与 onSeekEnd
+      // 同一处理器，timer 守卫会挡掉与正常路径的重复调度。
+      this.seekEl.addEventListener("pointercancel", this.onSeekEnd)
+      this.seekEl.addEventListener("lostpointercapture", this.onSeekEnd)
       // 触屏兜底（部分 WebView 不派发 pointer 事件）
       this.seekEl.addEventListener("touchstart", this.onSeekStart, {
         passive: true,
       })
       this.seekEl.addEventListener("touchend", this.onSeekEnd)
+      this.seekEl.addEventListener("touchcancel", this.onSeekEnd)
     }
   }
 
@@ -1161,8 +1306,11 @@ this.tickSeekUI()
       this.seekEl.removeEventListener("pointerup", this.onSeekEnd)
       this.seekEl.removeEventListener("input", this.onSeekInput)
       this.seekEl.removeEventListener("change", this.onSeekEnd)
+      this.seekEl.removeEventListener("pointercancel", this.onSeekEnd)
+      this.seekEl.removeEventListener("lostpointercapture", this.onSeekEnd)
       this.seekEl.removeEventListener("touchstart", this.onSeekStart)
       this.seekEl.removeEventListener("touchend", this.onSeekEnd)
+      this.seekEl.removeEventListener("touchcancel", this.onSeekEnd)
     }
     this.container.replayPaused = false
     this.userScrubbing = false
@@ -1187,6 +1335,11 @@ this.tickSeekUI()
     if (this.speedBtn) {
       this.speedBtn.removeEventListener("click", this.onSpeedClick)
       this.speedBtn = null
+    }
+    // v1.5.5（#76）：解绑俯视按钮
+    if (this.topBtn) {
+      this.topBtn.removeEventListener("click", this.onTopBtnClick)
+      this.topBtn = null
     }
     // v1.5.4（#70）：解绑自由视角手势（跟随/俯视按钮已移除）
     this.teardownReplayFreeCam()
@@ -1240,6 +1393,29 @@ this.container.timeScale = 1
       // v1.2.11 #user：回放结束后先暂停，不弹「回放结束」按钮，
       // 保留进度条与「退出回放」按钮，让用户先自行拖动进度条回看本局。
       this.container.timeScale = 1
+      // v1.5.8（#90）：整局播完 = 用户要看对局终局，直接 seek 到 100%。
+      //
+      // 病灶（三重叠加，实机 DIAG2 取证）：
+      //   ① 末杆实跑普遍比预演短（末杆预演 7500ms、live 桌子提前静止），
+      //      进度条按 `cum + table.time` 只算到 910/1000；
+      //   ② 杆末时钟空转（已由 tickSeekUI 的上界修掉）；
+      //   ③ 自然播放会少播最后一杆 —— 事件序列末尾形如
+      //      `AIM, AIM, PLACEBALL, SCORE`，最后那个 AIM 的出杆迟迟不落地，
+      //      播完时 currentShotIndex 停在 metaLen-2（14 杆的局停在 12），
+      //      画面是倒数第二杆的台面，进度条也跟着缺一截。
+      //
+      // 拖动到尽头有 toEnd 分支兜住（v1.5.6 #81），自然播放到底这条路径
+      // 从来没有对齐过 —— 用户报的「进度条最后依旧不是对局结束」就是它。
+      // 这里复用同一条已验证的终局链路：播完即 seek 到 100%，末杆确定性
+      // 重跑到静止，画面与进度条同时落到对局终局。
+      if (!this.playFinished) {
+        this.playFinished = true
+        try {
+          this.seekToFraction(1)
+        } catch (e) {
+          console.warn("[replay] seek to end on finish failed:", (e as Error)?.message)
+        }
+      }
       this.container.replayPaused = true
       // v1.3.75：整局回放播完后禁用暂停按钮 —— 此时物理已经走完，
       // 再点「继续」只会让空转的 timeScale 恢复，没有任何画面可看。
@@ -1260,6 +1436,9 @@ this.container.timeScale = 1
 
   override handleBreak(event: BreakEvent): Controller {
     this.container.table.updateFromShortSerialised(event.init)
+    // v1.5.5（#77 同源）：换局重建球局后同样清零时间轴（语义：新局从 0 开始），
+    // 与构造函数清零一致，避免空闲期空转累积叠加到新局进度条上。
+    this.container.table.time = 0
     this.shots = [...event.shots]
     // v1.3.59：换局后事件序列整批替换，旧的 shotMeta / currentShotIndex 全部失效，
     // 必须一并重置，否则 shotEventOffsets 指向新序列、shotMeta 仍是旧局的，
@@ -1295,6 +1474,8 @@ this.container.timeScale = 1
     // v1.2.9 #F5：隐藏回放进度条
     this.hideReplaySeek()
     this.container.table.updateFromShortSerialised(this.init)
+    // v1.5.5（#77 同源）：重打重建球局后清零时间轴（语义：新局从 0 开始）。
+    this.container.table.time = 0
     // v1.5.4（#71）：offTable 是上一杆物理动画留下的运行时标志（渲染层据此
     // 隐藏出界球），重打会完全重置球局，这里必须一并清掉，否则瞄准阶段
     // 白球会因残留标志而隐身。

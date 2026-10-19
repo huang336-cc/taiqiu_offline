@@ -6,7 +6,7 @@ import {
   sliding,
   surfaceVelocityFull,
 } from "../model/physics/physics"
-import { g } from "../model/physics/constants"
+import { g, μs } from "../model/physics/constants"
 import { BallMesh } from "../view/ballmesh"
 import { Pocket } from "./physics/pocket"
 import { BallAppearance } from "../view/ballappearance"
@@ -95,6 +95,13 @@ export class Ball {
    */
   static readonly airborneThreshold = 0.05
 
+  /**
+   * v1.5.6（#78）：落地冲击对水平速度的**最大**损失比例（0.6 = 最多损失 60%）。
+   * 物理上 Δv 可以超过水平速度（球落地即停），但那会让跳球越过障碍后完全
+   * 失去走位能力、观感突变，故留 40% 保底。见 applyLandingLoss。
+   */
+  static readonly landingMaxLossRatio = 0.6
+
   constructor(pos, color?, label?: number, appearance?: BallAppearance) {
     this.pos = pos.clone()
     this.label = label
@@ -140,6 +147,11 @@ export class Ball {
    * v1.3.94（跳球）：空中运动积分。只受重力，水平分量空中不衰减（无台面
    * 摩擦）。梯形法积分竖直：z' = z + (vz + vz')·t/2，vz' = vz - g·t。
    * 落地（z ≤ 0）夹回 z=0、清除竖直速度，再按水平/角速度关系交还滚动或滑动。
+   *
+   * v1.5.6（#78）：落地必须付出水平速度代价 —— 此前只把 vz 清零，水平速度
+   * 一毫不受损，球从空中砸下来却像没发生过撞击一样继续全速前冲（实测落地
+   * 前后水平速度 1.4573 → 1.4501，差值仅来自正常台呢摩擦），用户报「跳球后
+   * 球速错误」。按库仑摩擦冲量补上这部分损失，见 applyLandingLoss。
    */
   private updateAirborne(t: number) {
     // v1.3.95：留下腾空痕迹，供 Table.checkOffTable 判断出界合法性
@@ -153,9 +165,33 @@ export class Ball {
     this.vel.z = vzAfter
     if (this.pos.z <= 0) {
       this.pos.z = 0
+      const vzImpact = Math.abs(this.vel.z)
       this.vel.z = 0
+      this.applyLandingLoss(vzImpact)
       this.state = this.isRolling() ? State.Rolling : State.Sliding
     }
+  }
+
+  /**
+   * v1.5.6（#78）：落地冲击造成的水平速度损失。
+   *
+   * 物理：球以竖直速度 `vzImpact` 砸到台呢，法向冲量 J_n = m·|vz|（完全非弹性，
+   * 落地不反弹、vz 直接清零）。该冲量同时带来切向摩擦冲量上限 J_t = μs·J_n，
+   * 折算成水平速度损失 Δv = μs·|vz| —— 用台呢滑动摩擦系数 μs（=0.2，与
+   * constants.ts 的 Mathavan 台面系数同一套，不自造常数）。
+   *
+   * 冲击越强损失越大：温和跳球（vz≈1 m/s）损约 0.2 m/s，高速砸地（vz≈4.4 m/s）
+   * 损约 0.88 m/s。为避免极端情况下球一落地几乎停死（Δv ≥ 水平速度时物理上
+   * 应该停住，但那会让跳球战术完全失效、观感突兀），损失比例上限取 60%。
+   */
+  private applyLandingLoss(vzImpact: number) {
+    if (vzImpact <= 0) return
+    const vh = Math.hypot(this.vel.x, this.vel.y)
+    if (vh <= 0) return
+    const dv = Math.min(μs * vzImpact, vh * Ball.landingMaxLossRatio)
+    const k = 1 - dv / vh
+    this.vel.x *= k
+    this.vel.y *= k
   }
 
   private updatePosition(t: number) {

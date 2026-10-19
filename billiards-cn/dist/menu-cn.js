@@ -2920,6 +2920,68 @@ $("setKeepViews").checked = settings.keepAllViews !== false
       encodeURIComponent(rule || "nineball")
   }
 
+  // v1.5.5（#75）：删除回放的二次确认弹窗。
+  // 不用 window.confirm —— 真机 WebView 可能吞掉原生弹窗（项目已有多起先例），
+  // 与回放列表一致走自绘 DOM 弹层。pendingDeleteId 记录待删条目，确认后才删。
+  var pendingDeleteId = null
+  // v1.5.5（#75 修复②）：列表刷新回调。renderList 是 initReplays 的内部函数，
+  // 模块级的 bindDeleteConfirm / openDeleteConfirm 直接引用会 ReferenceError
+  // （被 .catch 吞掉）—— 表现为「确认删除后库里已删、列表却仍显示该条目」。
+  // 由 initReplays 把真正的 renderList 注入进来。
+  var refreshList = null
+  function openDeleteConfirm(record) {
+    var box = document.getElementById("replayDeleteConfirm")
+    if (!box) {
+      // 弹层 DOM 缺失（异常环境）：退回旧行为直接删，至少功能可用
+      replayDelete(record.id)
+        .then(function () { if (refreshList) refreshList() })
+        .catch(function (err) { console.error("delete replay failed", err) })
+      return
+    }
+    pendingDeleteId = record.id
+    var nameEl = document.getElementById("replayDelName")
+    if (nameEl) {
+      nameEl.textContent =
+        (record.label || record.rule || "未命名回放") +
+        " · " + replayFmtDate(record.createdAt)
+    }
+    box.hidden = false
+  }
+  function closeDeleteConfirm() {
+    var box = document.getElementById("replayDeleteConfirm")
+    if (box) box.hidden = true
+    pendingDeleteId = null
+  }
+  function bindDeleteConfirm(refresh) {
+    refreshList = refresh || refreshList
+    var box = document.getElementById("replayDeleteConfirm")
+    if (!box) return
+    Array.prototype.forEach.call(
+      box.querySelectorAll("[data-replay-del-cancel]"),
+      function (el) {
+        el.addEventListener("click", closeDeleteConfirm)
+      }
+    )
+    var yes = document.getElementById("replayDelYes")
+    if (yes) {
+      yes.addEventListener("click", function () {
+        if (!pendingDeleteId) {
+          closeDeleteConfirm()
+          return
+        }
+        var id = pendingDeleteId
+        closeDeleteConfirm()
+        replayDelete(id)
+          .then(function () {
+            if (refreshList) refreshList()
+          })
+          .catch(function (err) {
+            console.error("delete replay failed", err)
+          })
+      })
+    }
+  }
+
   // v1.2.12：恢复首页「查看回放」按钮（v1.2.11 #3 删除「我的回放」时误删了本按钮的绑定）。
   // 仅绑定首页 btnReplays + 回放列表 overlay；「我的回放」（关于页）按需求已删除，不再接线。
   function initReplays() {
@@ -2970,15 +3032,11 @@ $("setKeepViews").checked = settings.keepAllViews !== false
             del.type = "button"
             del.className = "replay-del"
             del.textContent = "删除"
+            // v1.5.5（#75）：删除前二次确认 —— 点击「删除」先弹确认框，
+            // 点「确认删除」才真正落库，防单次误触直接删掉回放。
             del.addEventListener("click", function (e) {
               e.stopPropagation()
-              replayDelete(r.id)
-                .then(function () {
-                  renderList()
-                })
-                .catch(function (err) {
-                  console.error("delete replay failed", err)
-                })
+              openDeleteConfirm(r)
             })
 
             row.appendChild(info)
@@ -2998,6 +3056,8 @@ $("setKeepViews").checked = settings.keepAllViews !== false
         renderList()
       })
     }
+    // v1.5.5（#75）：绑定删除确认弹窗按钮（一次即可，重复绑定防抖由 DOM 初始化顺序保证）
+    bindDeleteConfirm(renderList)
   }
 
   if (document.readyState === "loading") {

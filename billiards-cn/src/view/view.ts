@@ -13,6 +13,7 @@ import {
   DoubleSide,
   DirectionalLight,
   HemisphereLight,
+  SpotLight,
   PCFShadowMap,
   BasicShadowMap,
   Fog,
@@ -26,8 +27,10 @@ import { Drawing } from "./drawing"
 import { LineData } from "../events/chatevent"
 import { AimEvent } from "../events/aimevent"
 import { Table } from "../model/table"
+import { Session } from "../network/client/session"
 import { Grid } from "./grid"
 import { renderer, ensureWebRenderer, refreshPixelRatio } from "../utils/webgl"
+import { getBilliardHallEnvironment, getOutdoorSkyEnvironment } from "./environmentmap"
 import { Assets } from "./assets"
 import { Snooker } from "../controller/rules/snooker"
 import { Settings, getEnvScene } from "../utils/settings"
@@ -223,6 +226,24 @@ export class View {
    */
   private indoorDir?: DirectionalLight
   /**
+   * v1.6.0（3D 美化 P3）：台球桌吊灯的真实聚光灯。
+   *
+   * ## 为什么单加一盏
+   *
+   * 室内原有的三件套里没有一个「从正上方来」的灯（indoorDir 是 23° 低仰角
+   * 斜射，负责家具的落地长影）。球桌正上方的吊灯亮着，球却投不出向上的
+   * **短促接触阴影** —— 球看起来像贴纸一样「印」在台呢上，这是最后一块
+   * 缺失的空间线索。这盏 SpotLight 与 sceneenvironment 的三头吊灯几何
+   * 同位置，专门负责把球「压」在台面上。
+   *
+   * ## 与既有阴影的关系
+   *
+   * 与 indoorDir 的阴影**并存**（两者投影方向不同：一盏垂直、一盏斜射，
+   * 物理上就是吊灯 + 环境光两个光源的真实结果）。为控制移动端开销，
+   * 阴影贴图 1024²、视锥紧贴球桌，低画质档（lod 0）不投影。
+   */
+  private indoorTable?: SpotLight
+  /**
    * 各场景的色调映射（v1.3.63：表驱动，每次显式赋值）。
    *
    * 旧实现是「进雪景存下旧值 → 出雪景还原」。但 renderer 惰性重建后
@@ -237,6 +258,14 @@ export class View {
   > = {
     // 雪景：ACES 防雪面高光裁到纯白
     snow: { mapping: ACESFilmicToneMapping, exposure: 0.95 },
+    // v1.6.0（3D 美化 P1）：室内场景启用 ACES。
+    //
+    // 原因：接入台球厅环境贴图后，球的 clearcoat / 桌框金属件开始出现
+    // 真实高光，NoToneMapping 会把高光直接裁平（亮部糊成一片色块），
+    // ACES 的肩部压缩能把高光层次保留下来。exposure 1.12 补偿 ACES
+    // 对中间调的压暗（室内照明仍由 indoor 三件套主导，体感亮度持平）。
+    // 环境物体是 toneMapped:false 的烘焙顶点色，不受此影响。
+    room: { mapping: ACESFilmicToneMapping, exposure: 0.98 },
   }
   /** 当前 3D 场景环境（足球场/篮球场/雪山）；null 表示用立方体房间 */
   sceneEnv: Group | null = null
@@ -552,6 +581,38 @@ export class View {
     this.scene.add(this.indoorDir)
     this.scene.add(this.indoorDir.target)
 
+    /**
+     * v1.6.0（3D 美化 P3）：吊灯聚光灯 —— 垂直向下照球桌，给球短促的
+     * 接触阴影（「球被压在台呢上」的关键线索）。位置与 sceneenvironment
+     * 的三头吊灯一致（罩口 z≈2.17，取 z=2.35 作为等效光源中心）。
+     * 衰减用物理模式（decay=2，distance=0 无限）—— 灯光强度按
+     * 照度反解：桌面距光源 ~2.35m，intensity ≈ 2.35² × 目标照度。
+     */
+    // 强度 14（实测：与 env 0.35 叠加后，台呢明度落在「比改造前亮 20%」档）：只负责「把球压出台呢 + 桌心一小片暖光池」，
+    // 不改变房间整体曝光。76 曾把墨绿台呢洗成灰绿（实测）。
+    this.indoorTable = new SpotLight(0xfff3dd, 14)
+    this.indoorTable.position.set(0, 0, 2.35)
+    this.indoorTable.target.position.set(0, 0, 0)
+    this.indoorTable.angle = 0.72
+    this.indoorTable.penumbra = 0.62
+    this.indoorTable.decay = 2
+    this.indoorTable.distance = 0
+    this.indoorTable.visible = false
+    this.indoorTable.castShadow = true
+    this.indoorTable.shadow.mapSize.set(1024, 1024)
+    // 聚光灯的阴影相机是透视相机，视锥由 angle + focus 决定（没有
+    // left/right/top/bottom）；focus 0.92 把阴影贴图的采样集中在光锥
+    // 中轴附近 → 球桌区域的纹素密度最高，球的接触阴影最锐利。
+    const tsc = this.indoorTable.shadow.camera
+    tsc.near = 0.8
+    tsc.far = 4.2
+    this.indoorTable.shadow.focus = 0.92
+    this.indoorTable.shadow.bias = -0.0006
+    this.indoorTable.shadow.normalBias = 0.02
+    this.indoorTable.shadow.radius = 2.5
+    this.scene.add(this.indoorTable)
+    this.scene.add(this.indoorTable.target)
+
     // Request D-v2：3D 房间（天空盒）作为环境，台球桌置于房间中央，
     // 得到「台球桌放在真实场景里的 3D 效果」。
     if (this.assets.background) this.scene.add(this.assets.background)
@@ -800,6 +861,12 @@ export class View {
     if (this.indoorAmb) this.indoorAmb.visible = spec.indoor
     if (this.indoorHemi) this.indoorHemi.visible = spec.indoor
     if (this.indoorDir) this.indoorDir.visible = spec.indoor
+    if (this.indoorTable) {
+      this.indoorTable.visible = spec.indoor
+      // 低画质档（0 极速 / 1 流畅）不投影：吊灯阴影是氛围项，
+      // 低端机优先保帧率（实测软件渲染下第二张 1024² 阴影图 +11% 帧时）。
+      this.indoorTable.castShadow = Session.getLod() >= 2
+    }
 
     /**
      * v1.3.86：阴影总开关。
@@ -843,6 +910,29 @@ export class View {
       const tone = View.SCENE_TONE[sceneId]
       this.renderer.toneMapping = tone ? tone.mapping : NoToneMapping
       this.renderer.toneMappingExposure = tone ? tone.exposure : 1
+
+      /**
+       * v1.6.0（3D 美化 P1）：室内场景挂程序化台球厅环境贴图。
+       *
+       * PBR 材质（球的 clearcoat、桌框木纹/金属件、球杆漆面）的高光
+       * 需要一个环境去反射；没有 environment 时 clearcoat 反射一片黑，
+       * 球像哑光塑料珠。environmentIntensity 0.55 是「能映出吊灯长条
+       * 高光、又不至于把台呢色洗掉」的实测定值。
+       *
+       * 户外场景（雪山/沙滩/球场）保持 null —— 它们的明暗全部烘焙在
+       * 顶点色里（bakeSun 假想太阳），挂室内反射会穿帮。
+       * renderer 惰性重建后本方法会再跑一次，WeakMap 缓存保证不重复烘焙。
+       */
+      if (spec.indoor) {
+        this.scene.environment = getBilliardHallEnvironment(this.renderer)
+        this.scene.environmentIntensity = 0.35
+      } else {
+        // v1.6.0（P4）：户外场景给一张极简天空环境 —— 球/球杆的 PBR 高光
+        // 在户外同样需要反射出处（原先只有室内有）。强度 0.3 且户外明暗
+        // 是烘焙顶点色，故不改变已标定的场景观感，只补上球的反射层。
+        this.scene.environment = getOutdoorSkyEnvironment(this.renderer)
+        this.scene.environmentIntensity = 0.3
+      }
     }
 
     // 非黑兜底色

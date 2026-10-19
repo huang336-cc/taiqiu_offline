@@ -1452,6 +1452,44 @@ kbd {
 .replay-close:active {
   transform: scale(0.94);
 }
+/* v1.5.5（#75）：删除回放的二次确认弹窗 */
+.replay-del-modal {
+  width: min(340px, 88vw);
+  padding: 20px 18px 16px;
+  gap: 6px;
+}
+.replay-del-modal h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #f3d79a;
+  font-family: var(--font-family-primary, sans-serif);
+}
+.replay-del-text {
+  margin: 0;
+  color: rgba(243, 243, 243, 0.92);
+  font-size: 14px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+.replay-del-warn {
+  margin: 2px 0 14px;
+  color: rgba(255, 122, 100, 0.9);
+  font-size: 12px;
+}
+.replay-del-actions {
+  display: flex;
+  gap: 10px;
+}
+.replay-del-actions .btn {
+  flex: 1;
+  min-height: 44px;
+}
+.btn-danger {
+  background: linear-gradient(180deg, #b8402e 0%, #8f2c1e 100%);
+  border: 1px solid rgba(255, 150, 130, 0.5);
+  color: #fff2ee;
+}
 .replay-list {
   padding: 10px 12px;
   overflow-y: auto;

@@ -790,10 +790,24 @@
           还没有保存的回放。<br />在每局结束后点击「保存回放」即可在此回看。
         </div>
       </div>
+      <!-- v1.5.5（#75）：删除回放前的二次确认弹窗（防误删，自绘 DOM 不用 window.confirm ——
+           真机 WebView 可能吞 confirm，项目已有先例一律用自绘弹层）。 -->
+      <div id="replayDeleteConfirm" class="replay-overlay" hidden>
+        <div class="replay-backdrop" data-replay-del-cancel></div>
+        <div class="replay-modal replay-del-modal" role="alertdialog" aria-label="确认删除">
+          <h3>删除这条回放？</h3>
+          <p class="replay-del-text" id="replayDelName"></p>
+          <p class="replay-del-warn">删除后无法恢复。</p>
+          <div class="replay-del-actions">
+            <button type="button" class="btn btn-ghost" data-replay-del-cancel>取消</button>
+            <button type="button" class="btn btn-danger" id="replayDelYes">确认删除</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <script>
-      window.__BILLIARDS_VERSION__ = "1.5.4-26092804";
+      window.__BILLIARDS_VERSION__ = "1.6.1-26101620";
     </script>
     <script src="menu-cn.js"></script>
     <script>

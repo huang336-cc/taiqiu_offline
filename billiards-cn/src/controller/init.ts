@@ -69,19 +69,18 @@ export class Init extends ControllerBase {
      *
      * 修复：人机模式下按本地默认位置直接落位并进 `Aim`，跳过交互摆球。
      * 位置由 `rules.placeBall()` 给出，与机器人侧同一套规则，不会错位。
+     *
+     * ⚠️ v1.5.6（#83）：上面这段「跳过交互摆球」本身成了新的问题 ——
+     * 人机模式的开场提示明明写的是「你先开球」，玩家却拿不到摆球权：白球被
+     * 强制按 `rules.placeBall()` 的默认点落位，点球桌 / 拖白球都没有任何反应
+     * （实测开局 controller 序列只有 `[Aim]`，从未进入 PlaceBall）。
+     * 真实台球开球是可以在开球线后自选位置的，这条捷径把玩家的开球选择权
+     * 一并砍掉了。
+     *
+     * 现改为人机模式照常走交互式 PlaceBall。v1.3.85 担心的「卡在 PlaceBall」
+     * 由 PlaceBall 自带的兜底覆盖：规则不允许摆球时它会自行补一个 SpaceUp
+     * 直接落位（见 PlaceBall.onFirst），不会再出现白楔常驻的死锁。
      */
-    if (Session.isBotMode()) {
-      const cueball = this.container.table.cueball
-      cueball.pos.copy(this.container.rules.placeBall())
-      cueball.setStationary()
-      cueball.fround()
-      this.container.table.cue.aimMode()
-      this.container.table.cue.moveTo(cueball.pos)
-      this.container.sendEvent(
-        new BreakEvent(this.container.table.shortSerialise())
-      )
-      return new Aim(this.container)
-    }
     return (
       this.container.rules.initialController?.() ??
       new PlaceBall(this.container)
@@ -121,19 +120,7 @@ export class Init extends ControllerBase {
       )
       return new Aim(this.container)
     }
-    // 同 handleBegin：人机模式跳过交互式摆球，避免卡在 PlaceBall
-    if (Session.isBotMode()) {
-      const cueball = this.container.table.cueball
-      cueball.pos.copy(this.container.rules.placeBall())
-      cueball.setStationary()
-      cueball.fround()
-      this.container.table.cue.aimMode()
-      this.container.table.cue.moveTo(cueball.pos)
-      this.container.sendEvent(
-        new BreakEvent(this.container.table.shortSerialise())
-      )
-      return new Aim(this.container)
-    }
+    // v1.5.6（#83）：同 handleBegin —— 人机模式恢复交互式摆球（理由见上）。
     return (
       this.container.rules.initialController?.() ??
       new PlaceBall(this.container)

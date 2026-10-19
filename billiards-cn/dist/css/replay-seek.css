@@ -230,7 +230,13 @@
   height: 0;
   transform: translateY(-50%);
   pointer-events: none;
-  z-index: 1;
+  /* v1.5.6（#79）：层级必须压过进度条本身 —— #replaySeek 是
+     `position: relative; z-index: 2`，而这一层原先只有 z-index: 1，
+     于是 7px 的进球点被 input 的轨道整条盖住，DOM 里明明有 6 个点、
+     颜色也算对了，屏幕上却一个都看不见，用户自然以为「进球时刻被删了」。
+     提到 3 之后圆点稳定显示在轨道与滑块之上（pointer-events: none 保证
+     它只负责显示、不抢走拖动手势）。 */
+  z-index: 3;
 }
 
 .replay-snap {

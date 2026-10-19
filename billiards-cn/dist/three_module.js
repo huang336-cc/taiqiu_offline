@@ -1,4 +1,4 @@
-"use strict";(self.webpackChunkbilliards=self.webpackChunkbilliards||[]).push([[668],{"./node_modules/three/build/three.module.js"(e,t,r){r.d(t,{JeP:()=>WebGLRenderer});var i=r("./node_modules/three/build/three.core.js");/**
+"use strict";(self.webpackChunkbilliards=self.webpackChunkbilliards||[]).push([[668],{"./node_modules/three/build/three.module.js"(e,t,r){r.d(t,{BdL:()=>PMREMGenerator,JeP:()=>WebGLRenderer});var i=r("./node_modules/three/build/three.core.js");/**
  * @license
  * Copyright 2010-2026 Three.js Authors
  * SPDX-License-Identifier: MIT

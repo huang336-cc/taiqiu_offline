@@ -269,7 +269,12 @@ export class EightBall implements Rules {
       const hasGroupBalls = this.container.table.balls.some(
         (b) => b !== cueball && b.label !== 8 && b.onTable()
       )
-      if (session.p1type !== 0 && hasGroupBalls) {
+      // v1.5.5（#73）：球桌开放（p1type===0，含开球杆及开球后未分球阶段）打进
+      // 黑8 **不算输** —— 复位黑8按犯规处理（与 handlePot 的提前进黑8同款）。
+      // 旧行为：未分球阶段黑8进袋直接判负，用户开球白球黑8同进就输掉整局。
+      // 已分球后有组球 → 同样 respot（原行为）；已分球且本方组球已清完 →
+      // 犯规进黑8判负（合法结束被犯规打断，保留原判）。
+      if (session.p1type === 0 || hasGroupBalls) {
         return this.respotEightBallFoul()
       }
       return this.handleGameEnd(false, "8-ball pocketed on foul")

@@ -13,6 +13,15 @@ export function surfaceVelocityFull(v, w) {
   return sv.copy(v).addScaledVector(upCross(w), R)
 }
 
+/**
+ * v1.5.7（#86）：抬杆击球时，**杆头速度的竖直分量有多少真正变成起跳速度**。
+ *
+ * 标定依据见 `cueStrike()` 里的注释与 tools/render/probe-jump157.js 的实测：
+ * 不打折时满力 72° 会飞到 1 米高（真实跳球 5~20cm）；取 0.48 后
+ * 30°/45°/72° 分别约 6.5cm / 12.9cm / 23.7cm，落在真实区间内。
+ */
+const JUMP_VZ_EFFICIENCY = 0.48
+
 const delta = { v: new Vector3(), w: new Vector3() }
 
 export function sliding(v, w) {
@@ -235,7 +244,24 @@ export function cueStrike(
   const vel = norm(new Vector3(cos(angle), sin(angle), 0)).multiplyScalar(speed)
   const velCos = vel.clone().multiplyScalar(cos(elevation))
   // v1.3.94（跳球）：抬杆时线速度同时含竖直分量（speed·sin elevation）
-  velCos.z = speed * Math.sin(elevation)
+  //
+  // v1.5.7（#86）：竖直分量要乘**起跳效率** JUMP_VZ_EFFICIENCY。
+  //
+  // 旧式 `vz = speed·sin(elevation)` 把杆头速度的竖直分量**全额**变成起跳
+  // 速度，等于假设球是被杆头「向上抛」出去的。真实跳球完全不是这样：
+  // 杆头是**斜向下**压球，球被压向台面，靠台面给的法向冲量反弹起来；
+  // 这个过程中竖直动量大部分被台面吸收（还有杆头与球的挤压变形损失），
+  // 只有一部分转成起跳速度。
+  //
+  // 不打折的后果（tools/render/probe-jump157.js 满力实测）：
+  //   30° → 最高 24.7cm / 飞 195cm
+  //   45° → 最高 54.0cm / 飞 227cm
+  //   72° → 最高 99.4cm / 飞 133cm   ← 飞一米高，台面才 2.8m 长
+  // 对照真实跳球（越过一颗球即可，高度 5~20cm、飞越 20~60cm）明显失真。
+  //
+  // 乘 0.48 后的理论值：30°→6.5cm/94cm，45°→12.9cm/108cm，72°→23.7cm/64cm。
+  // 既贴真实，又保留了「仰角越大跳得越高越近、越小跳得越远越贴地」的手感。
+  velCos.z = speed * Math.sin(elevation) * JUMP_VZ_EFFICIENCY
 
   return {
     vel: velCos,

@@ -297,6 +297,23 @@ export class AimInputs {
    * 复位，力度从未复位）。复位值取 35% 轻杆：足以把白球推出可感知的距离，
    * 又几乎没有跟袋风险；首杆（开球）不受影响，保留 65% 的开球默认力度。
    */
+  /**
+   * v1.5.7（#87）：出杆**当下**就把打点 / 抬杆 / 力度清回基准值。
+   *
+   * 此前只挂在 setDisabled(false)（控件启用 = 新回合开始）这一条路径上。
+   * 它覆盖了绝大多数情况，但只要某条回到回合的路径没经过
+   * setDisabled(true)→(false) 这一对翻转，打点就会原样带到下一杆：
+   * 玩家上一杆点了高杆，这一杆不动任何控件直接出杆，白球照样跟进落袋 ——
+   * 用户报的「轮到我的回合，未调整白球击球点直接击球还是高杆进袋」。
+   *
+   * 现在在 HitEvent 已经发出之后立刻清零：本杆的参数丝毫不影响（事件里
+   * 已经序列化完了），但从这一刻起 aim 就是干净的，任何后续路径都不可能
+   * 再把上一杆的杆法带过去。setDisabled(false) 的复位保留作为双保险。
+   */
+  resetSpinAfterShot() {
+    this.resetSpinForNewTurn()
+  }
+
   private resetSpinForNewTurn() {
     const cue = this.container.table.cue
     if (cue.aim.offset.x !== 0 || cue.aim.offset.y !== 0) {

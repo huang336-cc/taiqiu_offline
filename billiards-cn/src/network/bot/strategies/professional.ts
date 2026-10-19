@@ -15,6 +15,82 @@ import { cueIntersectsAnything } from "../../../utils/cueintersect"
 import { Table } from "../../../model/table"
 import { Cue } from "../../../view/cue"
 
+/**
+ * v1.5.7（#85）：**两库解球**的库对表。
+ *
+ * 一库镜像法解不开的局面，真实台球里通常靠绕两库解决 —— 旧代码完全没有
+ * 这条路径，用户反馈的「两库撞球后力度不够」正是撞在这面墙上。
+ * 12 组 = 4 条库 × 4 条库，去掉「连续两次撞同一条库」（那等价于一库）。
+ */
+const TWO_RAIL_PAIRS: {
+  ax1: "x" | "y"
+  sg1: number
+  ax2: "x" | "y"
+  sg2: number
+}[] = (() => {
+  const out: {
+    ax1: "x" | "y"
+    sg1: number
+    ax2: "x" | "y"
+    sg2: number
+  }[] = []
+  const rails: ("x" | "y")[] = ["x", "y"]
+  for (const ax1 of rails) {
+    for (const sg1 of [1, -1]) {
+      for (const ax2 of rails) {
+        for (const sg2 of [1, -1]) {
+          if (ax1 === ax2 && sg1 === sg2) continue
+          out.push({ ax1, sg1, ax2, sg2 })
+        }
+      }
+    }
+  }
+  return out
+})()
+
+/** 线段 from→to 与库面（ax 方向、坐标 plane）的交点；不相交返回 null */
+function railHit(
+  from: Vector3,
+  to: Vector3,
+  ax: "x" | "y",
+  plane: number
+): { p: Vector3; t: number } | null {
+  const f = ax === "x" ? from.x : from.y
+  const g = ax === "x" ? to.x : to.y
+  const denom = g - f
+  if (Math.abs(denom) < 1e-6) return null
+  const t = (plane - f) / denom
+  if (t <= 0 || t >= 1) return null
+  return { p: from.clone().lerp(to, t), t }
+}
+
+/** 把点 p 关于库面（ax 方向、坐标 plane）做镜像 */
+function mirrorAbout(p: Vector3, ax: "x" | "y", plane: number): Vector3 {
+  return ax === "x"
+    ? new Vector3(2 * plane - p.x, p.y, 0)
+    : new Vector3(p.x, 2 * plane - p.y, 0)
+}
+
+/**
+ * v1.5.7（#85）：一库解球最多试几条候选线。
+ *
+ * 镜像法对每颗目标球 × 4 条库最多给出 4N 条线；全部跑一遍克隆台物理太贵
+ * （每条线还要试 4 档力度）。按总程升序只试前几条：短程线更准、也更容易
+ * 验过，实测 6 条足够覆盖真实斯诺克局面，再多只是浪费算力。
+ */
+const MAX_KICK_LINES = 8
+
+/**
+ * v1.5.7（#85）：解球自验的**物理模拟预算**（按「跑一次完整克隆台」计）。
+ *
+ * 每次自验 = 全桌推进到静止，约 2000 步 × 16 球。实测最坏局面下单杆决策
+ * 会跑到 1.3 秒（kickwhy 变体 B），手机上已经有可感知的卡顿。这里给两遍
+ * 搜索各设一个预算上限，超了就停 —— 宁可偶尔少找一条解球线，也不要让
+ * AI 在真机上「思考」到卡死。
+ */
+const KICK_PROBE_BUDGET = 40
+const KICK_SCAN_BUDGET = 20
+
 // ── v1.3.91：专业级决策层（新增） ──
 import {
   DecisionContext,
@@ -1204,26 +1280,42 @@ export class Professional extends TheFarJaw {
     ]
     const desperate = open.length === 0 // 真无解 → 认命模式
     const basePower = powerOverride ?? AimCalculator.DEFAULT_SHOT_POWER
-    let chosenShot: { hit: any; ball: Ball } | null = null
-    for (const t of ordered) {
-      const legalHere = legalSet.has(t)
-      // ① 含噪出杆（保留拟人误差）
-      const noisy = makeShot(
-        t,
-        p.aimNoise,
-        jitterPower(basePower, p.powerJitter)
-      )
-      if (probeHitsTarget(AimEvent.fromJson(noisy.tablejson.aim), t, legalHere && !desperate)) {
-        chosenShot = { hit: noisy, ball: t }
-        break
+    // v1.5.7（#85）：**先严格轮、再认命轮**，不再让 desperate 一上来就放宽。
+    //
+    // 旧代码把 strict 写成 `legalHere && !desperate`：一旦进入认命模式，
+    // strict 恒为 false，判据退化成「打到任何球就算数」。于是「瞄 1 号球」
+    // 的杆只要路上蹭到挡路的 9 号就通过首撞自验 —— 出杆后首撞是**对方球**，
+    // 八球规则下照样犯规、照样送对手自由球。实测（kickaudit 变体 B）
+    // 专业档 18 局里 10 局就是这样犯的。
+    //
+    // 现在跑两轮：第一轮一律严格要求「首撞必须是这颗球本身」，把还有可能
+    // 合法击中的球挑出来；第一轮全灭才进第二轮认命（碰到任何球都行）。
+    // 严格轮让 desperate 局面下的 AI 仍优先打出合法首撞，认命轮只在真的
+    // 完全无解时兜底（此时犯规不可避免，但至少不会把对手的球撞进袋）。
+    const tryRound = (strict: boolean): { hit: any; ball: Ball } | null => {
+      for (const t of ordered) {
+        if (!strict && !legalSet.has(t)) continue // 认命轮只考虑合法目标，别主动瞄对方球
+        // ① 含噪出杆（保留拟人误差）
+        const noisy = makeShot(
+          t,
+          p.aimNoise,
+          jitterPower(basePower, p.powerJitter)
+        )
+        if (probeHitsTarget(AimEvent.fromJson(noisy.tablejson.aim), t, strict)) {
+          return { hit: noisy, ball: t }
+        }
+        // ② 零噪声重出（兜底使命优先于拟人误差）
+        const clean = makeShot(t, 0, basePower)
+        if (probeHitsTarget(AimEvent.fromJson(clean.tablejson.aim), t, strict)) {
+          return { hit: clean, ball: t }
+        }
       }
-      // ② 零噪声重出（兜底使命优先于拟人误差）
-      const clean = makeShot(t, 0, basePower)
-      if (probeHitsTarget(AimEvent.fromJson(clean.tablejson.aim), t, legalHere && !desperate)) {
-        chosenShot = { hit: clean, ball: t }
-        break
-      }
+      return null
     }
+    // 严格轮：首撞必须是本方球。认命轮只在它全灭时才跑（真无解，犯规不可
+    // 避免，但至少不主动瞄对方球、不把对手的球往袋口送）。
+    const chosenShot: { hit: any; ball: Ball } | null =
+      tryRound(true) ?? tryRound(false)
     if (chosenShot) {
       this.lastShotPath = desperate ? "safety:desp" : "safety"
       return [
@@ -1298,11 +1390,21 @@ export class Professional extends TheFarJaw {
     const X = TableGeometry.X
     const Y = TableGeometry.Y
     const pockets = calculator.pockets
-    let bestMirror: Vector3 | null = null
-    let bestTarget: Ball | null = null
-    let bestTotal = Infinity
-    let bestD1 = 0
-    let bestD2 = 0
+    // v1.5.7（#85）：**收集全部候选解球线**，不再只留总程最短的那一条。
+    //
+    // 旧实现只保留最短的一条，它在克隆台上验不过就整条路放弃、交回上层
+    // 「认命兜底」硬打最近的球 —— 而那颗球常常是**对方球**，于是稳定
+    // 首撞犯规。实测（tools/harness/kickwhy.ts 变体 B）：tryKickShot 9 次
+    // 调用只成功 1 次，失败里既有「首撞非目标」也有「镜像法零候选」。
+    // 现在按总程升序依次试前 MAX_KICK_LINES 条，任一条验过就采用。
+    const lines: {
+      mirror: Vector3
+      target: Ball
+      d1: number
+      d2: number
+      total: number
+      rails: number
+    }[] = []
 
     for (const b of balls) {
       // 四条库的镜像点与反弹点
@@ -1363,69 +1465,220 @@ export class Professional extends TheFarJaw {
         // 两段路径都必须畅通（各自的线段排除线段端点的球）
         if (lineBlocked(cue.pos, bounce, allBalls, cue, b)) continue
         if (lineBlocked(bounce, b.pos, allBalls, b)) continue
-        const total = d1 + d2
-        if (total < bestTotal) {
-          bestTotal = total
-          bestMirror = c.mirror
-          bestTarget = b
-          bestD1 = d1
-          bestD2 = d2
+        lines.push({
+          mirror: c.mirror,
+          target: b,
+          d1,
+          d2,
+          total: d1 + d2,
+          rails: 1,
+        })
+      }
+
+      // ── v1.5.7（#85）：两库解球候选 ──
+      //
+      // 目标球先关于「第二库」镜像得 T1，T1 再关于「第一库」镜像得 T2；
+      // 母球直瞄 T2，物理上就会依次在库 A、库 B 反弹后走到目标球。
+      // 一库走不通时这是唯一的活路，旧代码却根本没有它。
+      for (const pr of TWO_RAIL_PAIRS) {
+        const planeA = (pr.ax1 === "x" ? X : Y) * pr.sg1
+        const planeB = (pr.ax2 === "x" ? X : Y) * pr.sg2
+        const t1 = mirrorAbout(b.pos, pr.ax2, planeB)
+        const t2 = mirrorAbout(t1, pr.ax1, planeA)
+        const h1 = railHit(cue.pos, t2, pr.ax1, planeA)
+        if (!h1) continue
+        const h2 = railHit(h1.p, t1, pr.ax2, planeB)
+        if (!h2) continue
+        let nearPocket = false
+        for (const pk of pockets) {
+          if (h1.p.distanceTo(pk) < 2.1 * R || h2.p.distanceTo(pk) < 2.1 * R) {
+            nearPocket = true
+            break
+          }
         }
+        if (nearPocket) continue
+        const s1 = cue.pos.distanceTo(h1.p)
+        const s2 = h1.p.distanceTo(h2.p)
+        const s3 = h2.p.distanceTo(b.pos)
+        if (s1 < 1.5 * R || s2 < 2 * R || s3 < 2 * R) continue
+        // 三段路径都必须畅通
+        if (lineBlocked(cue.pos, h1.p, allBalls, cue, b)) continue
+        if (lineBlocked(h1.p, h2.p, allBalls, cue, b)) continue
+        if (lineBlocked(h2.p, b.pos, allBalls, b)) continue
+        lines.push({
+          mirror: t2,
+          target: b,
+          d1: s1,
+          d2: s2 + s3,
+          total: s1 + s2 + s3,
+          rails: 2,
+        })
       }
     }
-    if (!bestMirror || !bestTarget) return null
+    if (lines.length === 0) return null
+    // 一库优先（更准、更好控制），其次才试两库；同库数内按总程升序。
+    lines.sort((p, q) => p.rails - q.rails || p.total - q.total)
 
-    const railPower = cueSpeedFor(
-      bestD1,
-      bestD2 + POCKET_RADIUS_CORNER,
-      POCKET_RADIUS_CORNER,
-      1,
-      0,
-      0,
-      1.3
-    )
-    const power = Math.min(
-      Math.max(railPower * 1.35, 34 * R),
-      72 * R
-    )
-    const aimPoint = bestMirror.clone()
-
-    // v1.3.92：**一库解球必须自己先验证「不会把母球送进袋」**。
-    //
-    // 对局级实测（tools/harness/_diagmatch.ts，第2局）暴露了一个死循环：
-    // 剩最后一颗球时 AI 连续 50+ 杆都走 [防守:kick]、力度恒为 40R，且
-    // **每一杆都摔袋**。原因是一库解球只管「母球撞库后能否碰到目标球」，
-    // 完全没检查母球撞库后的去向 —— 反弹方向如果指向袋口，就是白送摔袋。
-    // 摔袋后母球被重摆回库边，局面高度相似，AI 下一杆又选出几乎相同的
-    // 解球线，于是无限循环、整局作废。
-    //
-    // 这里用与主进攻路径**同一套**物理预测复核（predictCueStop 误差 0.000R）：
-    // 若母球会落袋、或停位离袋口过近，就把力度逐级收小再试；
-    // 全部试完仍会摔袋则放弃这条解球线（返回 null，让上层换别的策略）。
-    for (const scale of [1.0, 0.8, 0.62, 0.48]) {
-      const trial = Math.max(18 * R, power * scale)
-      const stop = this.probeKickStop(context, calculator, aimPoint, trial)
-      if (!stop) continue // 母球进袋 → 这一力度不行
-      const near = stopNearestPocket(stop, calculator.pockets)
-      if (near < 2.2 * R) continue // 停位贴着袋口，下一杆极易摔袋
-      const hit = calculator.generateShot(
-        context.table,
-        this.profile.aimNoise,
-        jitterPower(trial, this.profile.powerJitter),
-        aimPoint,
-        new Vector3(0, 0, 0)
+    let probes = 0
+    for (const line of lines.slice(0, MAX_KICK_LINES)) {
+      if (probes >= KICK_PROBE_BUDGET) break // 预算耗尽 → 不再试更多线
+      const bestD1 = line.d1
+      const bestD2 = line.d2
+      const bestTotal = line.total
+      const bestTarget = line.target
+      const railPower = cueSpeedFor(
+        bestD1,
+        bestD2 + POCKET_RADIUS_CORNER,
+        POCKET_RADIUS_CORNER,
+        1,
+        0,
+        0,
+        1.3
       )
-      // v1.4.6：**首撞自验** —— 镜像法是近似，反弹后的真实方向可能先碰到
-      // 别的球（首撞犯规）。出杆前在克隆台用含噪出杆参数跑一遍真实物理，
-      // 首撞不是解球目标（或母球零接触）就换下一档力度；全部不行则放弃
-      // 这条解球线（返回 null，上层转稳妥兜底）。
-      const aimEvent = AimEvent.fromJson(hit.tablejson.aim)
-      const firstLabel = this.probeFirstHitLabel(context, aimEvent)
-      if (firstLabel !== bestTarget.label) continue
-      return [aimEvent, hit]
+      const power = Math.min(
+        Math.max(railPower * 1.35, 34 * R),
+        72 * R
+      )
+      const aimPoint = line.mirror.clone()
+
+      // v1.3.92：**一库解球必须自己先验证「不会把母球送进袋」**。
+      //
+      // 对局级实测（tools/harness/_diagmatch.ts，第2局）暴露了一个死循环：
+      // 剩最后一颗球时 AI 连续 50+ 杆都走 [防守:kick]、力度恒为 40R，且
+      // **每一杆都摔袋**。原因是一库解球只管「母球撞库后能否碰到目标球」，
+      // 完全没检查母球撞库后的去向 —— 反弹方向如果指向袋口，就是白送摔袋。
+      // 摔袋后母球被重摆回库边，局面高度相似，AI 下一杆又选出几乎相同的
+      // 解球线，于是无限循环、整局作废。
+      //
+      // 这里用与主进攻路径**同一套**物理预测复核（predictCueStop 误差 0.000R）：
+      // 若母球会落袋、或停位离袋口过近，就把力度逐级收小再试；
+      // 全部试完仍会摔袋则放弃这条解球线（返回 null，让上层换别的策略）。
+      // v1.5.7（#85）：收力下限从固定 18R 改为「物理上够得着目标球」的反解。
+      //
+      // 18R = 0.59 m/s，纯滚动只够走约 2.1 m；而解球实测总程 3.1~5.0 m，
+      // 还要扣掉库边能量损失 —— 收到 18R 时母球必然在半路停住（空杆），
+      // 首撞自验随即判失败 → 整条解球线被放弃 → 上层转「认命兜底」硬打
+      // 最近的球，而那颗往往是**对方球** —— 于是用户看到「两库撞球后力度
+      // 不够导致犯规」。实测（tools/harness/kickaudit.ts 变体 B）专业档
+      // 首撞合法率只有 27.8%，犯规杆全部来自这条链路。
+      //
+      // 同时判据**分级**（与 decision/defense.ts 同源）：
+      //   · 首撞必须命中目标球  —— 否则立即犯规，绝不妥协
+      //   · 母球不能进袋        —— 同样是立即犯规
+      //   · 停位离袋口 ≥ 2.2R   —— 只是下一杆的风险，可以让步
+      // 旧代码三者一视同仁 `continue`，等于为了躲「未来风险」稳定打出
+      // 「当前犯规」。现在先找全满足的，找不到就退到「首撞合法 + 没摔袋」里
+      // 停位离袋口最远的那一档。
+      const reachPower = cueSpeedFor(
+        bestTotal / 0.75,
+        6 * R,
+        2 * R,
+        1,
+        0,
+        0,
+        1.0
+      )
+      let fallback: { events: GameEvent[]; clearance: number } | null = null
+      const tried = new Set<number>()
+      for (const scale of [1.0, 0.8, 0.62, 0.48]) {
+        if (probes >= KICK_PROBE_BUDGET) break
+        const trial = Math.max(reachPower, power * scale)
+        if (tried.has(trial)) continue // 被 reachPower 顶到同一档 → 不必重算
+        tried.add(trial)
+        probes++ // probeKickStop + probeFirstHitLabel = 一次完整自验
+        const stop = this.probeKickStop(context, calculator, aimPoint, trial)
+        if (!stop) continue // 母球进袋 → 这一力度不行
+        const near = stopNearestPocket(stop, calculator.pockets)
+        const hit = calculator.generateShot(
+          context.table,
+          this.profile.aimNoise,
+          jitterPower(trial, this.profile.powerJitter),
+          aimPoint,
+          new Vector3(0, 0, 0)
+        )
+        // v1.4.6：**首撞自验** —— 镜像法是近似，反弹后的真实方向可能先碰到
+        // 别的球（首撞犯规）。出杆前在克隆台用含噪出杆参数跑一遍真实物理，
+        // 首撞不是解球目标（或母球零接触）就换下一档力度；全部不行则放弃
+        // 这条解球线（返回 null，上层转稳妥兜底）。
+        const aimEvent = AimEvent.fromJson(hit.tablejson.aim)
+        const firstLabel = this.probeFirstHitLabel(context, aimEvent)
+        if (firstLabel !== bestTarget.label) continue
+        if (near >= 2.2 * R) return [aimEvent, hit]
+        if (!fallback || near > fallback.clearance) {
+          fallback = { events: [aimEvent, hit], clearance: near }
+        }
+      }
+      // 没有「完美解球线」时：宁可停位贴袋，也绝不空杆。
+      if (fallback) return fallback.events
+    } // end for (const line of lines) —— 这条线走不通，换下一条候选线
+
+    // ── v1.5.7（#85）第二遍：**窄窗口扫描** ──
+    //
+    // 暴力枚举（tools/harness/kickbrute.ts，变体 B，5°×5 档网格）显示：
+    // 这类被做死的局面**确实都有解**（8/8 局），但合法出杆方向只占全部
+    // 方向的 0.6%~2.5% —— 是名副其实的「针尖解」。镜像法给出的十几个
+    // 离散方向正好从针尖两边擦过去，于是标准线全灭。
+    // 现在在最优几条线的方向上做 ±0.8°~±2.5° 的小幅扫描补枪：每条只跑
+    // 一次首撞自验（首撞对了才再跑一次摔袋检查），成本可控。
+    return this.kickScanWindow(context, calculator, cue, lines)
+  }
+
+  /**
+   * v1.5.7（#85）：解球「窄窗口扫描」—— 在镜像法给出的方向附近小幅抖动，
+   * 找那条被离散方向错过的针尖解。
+   *
+   * 只在标准候选线**全部失败**时才调用，正常局面零额外开销。
+   */
+  private kickScanWindow(
+    context: BotShotContext,
+    calculator: AimCalculator,
+    cue: Ball,
+    lines: { mirror: Vector3; target: Ball; total: number }[]
+  ): GameEvent[] | null {
+    const OFFSETS_DEG = [-2.5, -1.5, -0.8, 0.8, 1.5, 2.5]
+    let probes = 0
+    for (const line of lines.slice(0, 4)) {
+      if (probes >= KICK_SCAN_BUDGET) break
+      const base = line.mirror.clone().sub(cue.pos)
+      const len = base.length()
+      if (len < 1e-6) continue
+      const ang0 = Math.atan2(base.y, base.x)
+      const power = Math.min(
+        72 * R,
+        Math.max(
+          cueSpeedFor(line.total / 0.75, 6 * R, 2 * R, 1, 0, 0, 1.15),
+          40 * R
+        )
+      )
+      for (const dDeg of OFFSETS_DEG) {
+        if (probes >= KICK_SCAN_BUDGET) break
+        probes++
+        const a = ang0 + (dDeg * Math.PI) / 180
+        const aimPoint = cue.pos
+          .clone()
+          .add(new Vector3(Math.cos(a) * len, Math.sin(a) * len, 0))
+        let hit
+        try {
+          hit = calculator.generateShot(
+            context.table,
+            0, // 扫描阶段不加噪声：窗口本来就是针尖，再抖就必失
+            power,
+            aimPoint,
+            new Vector3(0, 0, 0)
+          )
+        } catch {
+          continue
+        }
+        const aimEvent = AimEvent.fromJson(hit.tablejson.aim)
+        if (this.probeFirstHitLabel(context, aimEvent) !== line.target.label) {
+          continue // 首撞不是目标球 → 换下一个角度
+        }
+        if (!this.probeKickStop(context, calculator, aimPoint, power)) {
+          continue // 母球会进袋 → 同样不能要
+        }
+        return [aimEvent, hit]
+      }
     }
-    // 所有力度都会摔袋 → 这条解球线本质不安全，交回上层
-    // v1.4.6：连同「首撞自验」一起判 —— 见 probeFirstHitLabel。
     return null
   }
 

@@ -561,12 +561,19 @@ this.botName === "TheFarJaw"
     // v1.1.24：同上，容器一建好立刻跑渲染循环
     this.container.animate(performance.now())
     this.container.init()
-    this.container.notify({
-      type: "Info",
-      title: ruleName(this.ruletype),
-      subtext: "自由练习",
-      extra: "祝你好运",
-    } as const)
+    // v1.5.6（#82）：回放模式不再弹「自由练习 / 祝你好运」开场横幅。
+    //
+    // 回放走的就是本地初始化路径（URL 上没有 ?bot=），于是每次进回放都会先糊
+    // 一条「8球 · 自由练习 · 祝你好运」的通知 —— 用户明明是来看录像的，却被
+    // 当成开了一局自由练习，纯属误导。回放不是练习，这条提示对它没有任何意义。
+    if (!this.replay) {
+      this.container.notify({
+        type: "Info",
+        title: ruleName(this.ruletype),
+        subtext: "自由练习",
+        extra: "祝你好运",
+      } as const)
+    }
   }
 
   onAssetsReady() {

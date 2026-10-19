@@ -321,6 +321,10 @@
       <!-- v1.2.17 #4：全局倍速按钮（回放模式常驻），在 0.5x/1x/2x/4x 间循环，
            不自动按击球/进球提速，完全由用户选择，保证击球到进球的真实时间间隔。 -->
       <button id="replaySpeedBtn" class="replay-speed-btn" type="button">1x</button>
+      <!-- v1.5.5（#76）：恢复「俯视」按钮 —— v1.5.4 回放改为自由视角后，用户要求
+           保留原有俯视视角。现回放默认俯视，在画面拖动/捏合/滚轮自动切自由视角，
+           点本按钮随时一键切回俯视。 -->
+      <button id="replayTopBtn" class="replay-speed-btn" type="button">俯视</button>
       <!-- v1.5.4（#70）：删除「视角切换（固定/俯视）」按钮 —— 回放改为自由视角，
            直接在画面上拖动即可转向、双指捏合/滚轮缩放，不需要按钮切换。 -->
       <button id="replayExitBtn" class="replay-exit-btn" type="button" hidden>退出回放</button>
@@ -334,8 +338,9 @@
       <div class="cueball-popup-body">
         <div class="cb-area cb-disc-area">
           <div class="cb-area-head">
+            <!-- v1.5.7（#84）：删除击球点下方的说明文字「拖动白球设置位置，
+                 球桌上同步显示行进路线」—— 用户要求去掉。标题保留。 -->
             <div class="cb-area-title">白球击球点</div>
-            <div class="cb-area-desc">拖动白球设置位置，球桌上同步显示行进路线</div>
           </div>
           <div id="ballContainerWrapper" class="ballContainerWrapper">
             <div id="ballContainer" class="ballContainer">

@@ -21,6 +21,7 @@ import { Settings, getSkin, getTableSkin } from "../utils/settings"
 import { buildSceneEnvironment, GROUND_Z } from "./sceneenvironment"
 import {
   getClothTexture,
+  getClothNormalTexture,
   getFrameTexture,
   getCushionTexture,
 } from "./tableskinfactory"
@@ -345,6 +346,17 @@ export class Assets {
           if (cfg.clothTexture) {
             mat.map = cfg.clothTexture
           }
+          // v1.6.0（3D 美化 P1）：台呢绒面法线贴图 —— 织物微起伏。
+          // 有它之后掠射光下台呢出现细密明暗，才不再像「染色的布」。
+          const cn = getClothNormalTexture(Settings.get().tableSkin)
+          if (cn) {
+            ;(mat as any).normalMap = cn
+            ;(mat as any).normalScale?.set?.(0.4, 0.4)
+          }
+          // 台呢对环境反射最敏感（sheen + 绒面本就吃散射光），全量环境
+          // 会把墨绿洗成灰绿。压到 0.18 —— 只留极轻微通透感，色相基本
+          // 回到改造前。
+          ;(mat as any).envMapIntensity = 0.18
           mat.needsUpdate = true
         } else if (name.includes("cushion")) {
           // 【v1.4.5 P5】库边 UV：GLTF 的库边 mesh 连 TEXCOORD_0 都没有
@@ -374,6 +386,8 @@ export class Assets {
           if (cfg.cushionTexture) {
             ;(mat as any).map = cfg.cushionTexture
           }
+          // v1.6.0：库边吃环境反射的轻度档（皮革/橡胶质感，太强会发灰）
+          ;(mat as any).envMapIntensity = 0.45
           mat.needsUpdate = true
         } else if (name.includes("wood")) {
           // 桌框：底色 + 发光（emissive）。无发光时 emissive 置黑。
@@ -399,6 +413,8 @@ export class Assets {
             ;(mat as any).roughnessMap = cfg.frameRoughness
             ;(mat as any).roughness = 1
           }
+          // v1.6.0：桌框木漆吃较强环境反射（清漆木器的高光来源）
+          ;(mat as any).envMapIntensity = 0.7
           mat.needsUpdate = true
         } else if (name === "blackpocket" || name.includes("pocket")) {
           // v1.3.53-fix：袋口（球洞）颜色不再固定使用深色库边色；
@@ -525,14 +541,21 @@ export class Assets {
     }
     let phys = this.clothMatCache.get(mat)
     if (phys) return phys
+    /**
+     * v1.6.0（3D 美化 P1）：sheen 0.55 → 0.3、泛光色偏移 0.35 → 0.18。
+     *
+     * sheen 模拟织物的掠射泛白（backscatter），本身是对的 —— 但 0.55
+     * 在瞄准视角（相机几乎与台呢相切的极端掠射）下会把墨绿台呢泛成
+     * 灰绿，压过本色。0.3 保留「绒面有光晕」的质感又不抢色相。
+     */
     phys = new MeshPhysicalMaterial({
       map: mat?.map ?? null,
       color: mat?.color ? mat.color.clone() : new Color(clothColor),
       roughness: 0.95,
       metalness: 0,
-      sheen: 0.55,
-      sheenRoughness: 0.5,
-      sheenColor: new Color(clothColor).lerp(new Color(0xffffff), 0.35),
+      sheen: 0.3,
+      sheenRoughness: 0.55,
+      sheenColor: new Color(clothColor).lerp(new Color(0xffffff), 0.18),
     })
     phys.name = mat?.name ?? ""
     this.clothMatCache.set(mat, phys)
