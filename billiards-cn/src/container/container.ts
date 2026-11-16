@@ -45,6 +45,8 @@ import { BallTray } from "../view/ball-tray"
 import { ExportUtils } from "../utils/export-utils"
 import { TurnTimer } from "../utils/turntimer"
 import { ConcedeEvent } from "../events/concedeevent"
+import { setupFarGestures } from "../view/far-gestures"
+import { BallReturn } from "../view/ball-return"
 
 type ActivePlayer = 0 | 1 | 2
 
@@ -78,6 +80,7 @@ export class Container {
   relay: MessageRelay | null = null
   scoreReporter: ScoreReporter | null = null
   frame: (timestamp: number) => void
+  ballReturn: BallReturn
   turnTimer: TurnTimer = new TurnTimer()
   /** 标记上一次 updateController 时玩家是否在场上（用于启停计时器） */
   private wasPlayerTurn: boolean = false
@@ -161,9 +164,13 @@ try {
       keyboard.onDragEnd = () => {
         this.table.cue.endAimInteraction()
       }
-      // v1.3.76：打点面板刚被这次按下收起时，整段拖拽手势都不产生瞄准输入
+      // v1.3.76：打点面板刚被这次按下收起时，整段拖拽手势都不产生瞄准输入。
+      // v1.8.2：全桌机位下拖屏是「转相机」，绝不能顺手改瞄准角 —— 复用
+      // 同一条已验证的屏蔽链（比在 far-gestures 里 stopPropagation 更保险，
+      // interact.js 的 start/move 不一定都走 element 的冒泡阶段）。
       keyboard.shouldIgnoreDrag = () =>
-        !!this.table.cue.aimInputs?.isAimSuppressed()
+        !!this.table.cue.aimInputs?.isAimSuppressed() ||
+        this.view.camera.mode === this.view.camera.farView
     }
     this.sound = assets.sound
     this.chat = new Chat(this.sendChat)
@@ -175,6 +182,22 @@ try {
     this.menu = new Menu(this)
     this.comment = new Comment(this)
     this.table.addToScene(this.view.scene)
+
+    // v1.8.2：全桌机位自由化（旋转 + 缩放）与落袋回球通道，都是纯视觉/输入层。
+    // 手势常驻绑容器，按机位门控；回球动画挂 advance 首行的每帧 hook。
+    this.ballReturn = new BallReturn(this.view.scene)
+    setupFarGestures(
+      this.view.element as HTMLElement,
+      this.view.camera,
+      () => this.view.canvas,
+      () => { this.lastEventTime = performance.now() }
+    )
+    this.frame = (dt: number) => {
+      if (this.ballReturn.update(dt, this.table.balls, this.replayMode)) {
+        // 球全静止后容器 60s 会停 render；动画期间必须持续续命，否则会冻结
+        this.lastEventTime = performance.now()
+      }
+    }
     this.view.onLineDrawn = (line) => {
       this.sendEvent(new ChatEvent(this.id, "", line))
     }

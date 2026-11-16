@@ -14,6 +14,22 @@
         if (q.replace("?", "").length === 0) location.replace("menu.html");
       })();
     </script>
+    <!-- v1.8.7 统一主题：游戏内弹窗与首页共用同一套主题。
+         只写 data-ui-theme（不写 data-home-theme），避免影响游戏内二级屏样式。
+         必须在样式表之前执行，避免弹窗闪默认色。 -->
+    <script>
+      (function () {
+        var OK = { paper: 1, felt: 1, arcade: 1 };
+        var t = null;
+        try {
+          var raw = localStorage.getItem('billiards_cn_settings_v1');
+          var saved = raw ? JSON.parse(raw) : null;
+          if (saved && OK[saved.uiTheme]) t = saved.uiTheme;
+        } catch (e) {}
+        if (!OK[t]) t = 'paper';
+        document.documentElement.setAttribute('data-ui-theme', t);
+      })();
+    </script>
     <title>奥特曼的台球 · 离线版</title>
     <link rel="icon" type="image/png" href="favicon.png" />
     <meta charset="UTF-8" />
@@ -80,6 +96,11 @@
     <link rel="stylesheet" type="text/css" href="css/scoreboard-v2.css?v=1.2.20" />
     <!-- v1.2.9 #F5：回放进度条（可滑动 + 进球吸附点） -->
     <link rel="stylesheet" type="text/css" href="css/replay-seek.css?v=1.2.20" />
+    <!-- v1.8.7 统一主题 token：最后引入以覆盖 notification.css 等的中性色默认值。
+         纯变量层，不含任何布局规则，不会重染球台 3D 场景。 -->
+    <link rel="stylesheet" type="text/css" href="css/theme-tokens.css" />
+    <!-- v1.8.8：游戏内操作区（底部栏 / 比分卡 / 齿轮 / 回放条）主题落地 -->
+    <link rel="stylesheet" type="text/css" href="css/ui-theme-play.css" />
   </head>
 
   <body>
@@ -376,6 +397,94 @@
     <script defer src="three_examples.js"></script>
     <script defer src="index.js"></script>
     <script defer src="back-confirm-cn.js"></script>
+
+    <!-- v1.8.8：系统返回键的**兜底实现**。
+         背景（用户报的严重 bug）：Android 端 onBackPressed() 在 play.html 上一律
+         调用 window.__onAndroidBack() 并直接 return，意味着只要这个函数不存在
+         （back-confirm-cn.js 未加载成功 / 被别的脚本覆盖 / 缓存损坏），返回键就会
+         **完全没反应**，且所有游戏内界面都一样。
+         这里在外部脚本之前先挂一个最小可用的版本：真回不到二次确认弹窗，也一定
+         能退回主菜单。back-confirm-cn.js 加载成功后会整体覆盖本函数。 -->
+    <script>
+      (function () {
+        if (typeof window.__onAndroidBack === "function") return
+        window.__onAndroidBack = function () {
+          try { window.__exitConfirmed = true } catch (e) {}
+          try {
+            if (typeof window.__onExitToMenu === "function") window.__onExitToMenu()
+          } catch (e) {}
+          try {
+            window.location.replace("menu.html")
+          } catch (e) {
+            try { window.location.href = "menu.html" } catch (e2) {}
+          }
+          return true
+        }
+      })()
+    </script>
+
+    <!-- 主题同步（只读）：切换入口已收敛到「设置」页，这里按存档把主题
+         应用到本页与帮助 iframe。iframe 是独立文档，同源直接改 <html>，
+         再补一条 postMessage 兜底（覆盖 iframe 尚未 load 完的时序）。 -->
+    <script>
+      (function () {
+        var KEY = "billiards_cn_settings_v1"
+        var OK = { paper: 1, felt: 1, arcade: 1 }
+        function read() {
+          try {
+            return JSON.parse(localStorage.getItem(KEY) || "{}") || {}
+          } catch (e) {
+            return {}
+          }
+        }
+        function current() {
+          // 以 <html> 上实际生效的值为准（页面加载时 head 脚本已按存档写好），
+          // 存档只作为兜底；避免"画面已换肤但按钮还亮着旧主题"。
+          var t = document.documentElement.getAttribute("data-ui-theme")
+          if (OK[t]) return t
+          var saved = read().uiTheme
+          return OK[saved] ? saved : "paper"
+        }
+        function apply(t) {
+          if (!OK[t]) t = "paper"
+          document.documentElement.setAttribute("data-ui-theme", t)
+          var f = document.querySelector("#helpOverlay iframe")
+          try {
+            if (f && f.contentDocument && f.contentDocument.documentElement) {
+              f.contentDocument.documentElement.setAttribute("data-ui-theme", t)
+            }
+          } catch (e) {}
+          try {
+            if (f && f.contentWindow) {
+              f.contentWindow.postMessage({ type: "billiards-theme", theme: t }, "*")
+            }
+          } catch (e) {}
+        }
+        // v1.8.8：主题切换入口已收敛到「设置」页，游戏内不再放按钮。
+        // 这里只负责把存档里的主题同步到本页与帮助 iframe，不再提供改值入口。
+        function init() {
+          var cur = document.documentElement.getAttribute("data-ui-theme")
+          if (!OK[cur]) cur = current()
+          apply(cur)
+        }
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", init)
+        } else {
+          init()
+        }
+        // 齿轮打开菜单时再同步一次（iframe 可能刚被创建/重载）
+        document.addEventListener("click", function (e) {
+          var t = e.target
+          if (t && t.closest && t.closest("#menu")) {
+            setTimeout(function () {
+              apply(current())
+            }, 60)
+          }
+        })
+        // 供外部（自动化验收）调用
+        window.__applyPlayTheme = apply
+      })()
+    </script>
 
     <!-- v1.3.19：游戏内界面语言（读取与主菜单共用的 localStorage，并监听设置覆盖层发来的切换） -->
     <script>

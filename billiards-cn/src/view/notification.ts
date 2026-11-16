@@ -438,6 +438,20 @@ export class Notification {
     })
   }
 
+  /**
+   * v1.8.4：把按钮从「忙碌」态还原。
+   *
+   * 点击任何 data-notification-action 按钮都会先置 busy（转圈 + disabled），
+   * 且没有任何自动清除机制 —— 对会跳转的动作无所谓，但对「点了却停在原地」
+   * 的动作（叫出确认弹窗、被用户取消）就是长期的转圈卡死。
+   */
+  private releaseButton(button?: HTMLElement | null) {
+    if (!button) return
+    button.dataset.busy = ""
+    button.classList.remove("is-busy")
+    button.removeAttribute("disabled")
+  }
+
   private handleAction(
     action: string,
     url?: string,
@@ -465,6 +479,12 @@ export class Notification {
         // 现改为与系统返回键共用同一套金棕木纹确认弹窗（提示会清零系列赛比分），
         // 由弹窗在用户确认后才真正 resetSeries + 跳转；无弹窗脚本时退回原行为。
         {
+          // v1.8.4：这条路径**不立即跳转** —— 它只是把确认弹窗叫出来。
+          // 而点击瞬间按钮已被置为忙碌态（转圈 + disabled），旧代码没有任何
+          // 地方清除它：用户在弹窗里点「继续游戏」回到结算面板后，按钮永远
+          // 停在转圈且点不动，用户报的「点返回主菜单、再点继续游戏就转圈卡死」
+          // 就是这一步。这里在弹窗接管的瞬间就把按钮还原。
+          this.releaseButton(button)
           const confirmExit = (
             globalThis as unknown as { __showExitConfirm?: () => void }
           ).__showExitConfirm

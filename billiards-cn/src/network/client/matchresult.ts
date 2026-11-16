@@ -16,6 +16,10 @@ import { storeReplayAndNavigate } from "../../utils/replay-nav"
 export interface MatchResult {
   winner: string
   loser?: string
+  /** v1.8.4：获胜方的网络身份。局域网对战时双方 playername 都叫「玩家」，
+   * 只靠名字无法判断「我是赢家吗」，必须用 clientId 比较。 */
+  winnerClientId?: string
+  loserClientId?: string
   winnerScore: number
   loserScore?: number
   ruleType: string
@@ -88,16 +92,19 @@ export class MatchResultHelper {
     forcedAmIWinner?: boolean,
     endSubtext?: string
   ): boolean {
-    const { p1, p2 } = session.orderedScoresForHud()
-
-    const winnerIndex = p1 >= p2 ? 0 : 1
-    const playerIndex = session.playerIndex
+    // v1.8.4：原来这里同时用了两套坐标 —— `orderedScoresForHud()` 返回的是
+    // **本地视角**（p1 恒为「我」），却被拿去和**座位号** `session.playerIndex`
+    // 比较（`winnerIndex === playerIndex`）。座位号 1 的从机因此永远判反：
+    // 分高时 winnerIndex=0 ≠ 1 → 判输，分低时 1 === 1 → 判赢。
+    // 局域网「主机输了却判赢」就是它。直接比较本地分数即可，不再掺座位号。
+    const myScore = session.myScore()
+    const opponentScore = session.opponentScore()
+    const iHaveMore = myScore > opponentScore
 
     if (forcedAmIWinner !== undefined) {
       if (endSubtext?.toLowerCase().includes("conceded")) {
         return forcedAmIWinner
       }
-      const isWinnerByScore = winnerIndex === playerIndex
       if (Session.isBotMode()) {
         // If it's a natural end (forcedAmIWinner came from rules), score should be considered
         // If it's a concession (forcedAmIWinner=false passed to rules), forcedAmIWinner should be respected.
@@ -108,12 +115,12 @@ export class MatchResultHelper {
       // For games like NineBall/EightBall, forcedAmIWinner (potting 9-ball/8-ball) is king.
       // For Snooker, score is king.
       if (rulename === "snooker") {
-        return isWinnerByScore
+        return iHaveMore
       }
       return forcedAmIWinner
     }
 
-    return winnerIndex === playerIndex
+    return iHaveMore
   }
 
   private static notifyEndState(
@@ -133,7 +140,13 @@ export class MatchResultHelper {
   }
 
   static isWinner(result: MatchResult): boolean {
-    return result.winner === Session.getInstance().playername
+    const session = Session.getInstance()
+    // v1.8.4：局域网对战里双方 playername 都是「玩家」，用名字比较会让
+    // 两边都判成赢家（各自上传战绩 + 放庆祝粒子）。优先用 clientId。
+    if (result.winnerClientId && session.clientId) {
+      return result.winnerClientId === session.clientId
+    }
+    return result.winner === session.playername
   }
 
   private static notifyWin(container: Container, subtext: string) {
@@ -423,6 +436,9 @@ export class MatchResultHelper {
 
     const result: MatchResult = {
       winner: winnerName,
+      winnerClientId: iWon
+        ? session.clientId
+        : (session.opponentClientId ?? undefined),
       winnerScore: winnerScore,
       ruleType: rulename,
       bot: Session.isBotMode(),
@@ -430,6 +446,9 @@ export class MatchResultHelper {
 
     if (session.opponentName) {
       result.loser = loserName
+      result.loserClientId = iWon
+        ? (session.opponentClientId ?? undefined)
+        : session.clientId
       result.loserScore = loserScore
     }
 

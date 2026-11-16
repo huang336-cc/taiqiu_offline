@@ -28,7 +28,6 @@ import {
   CylinderGeometry,
   IcosahedronGeometry,
   SphereGeometry,
-  TorusGeometry,
   BackSide,
   BufferGeometry,
   BufferAttribute,
@@ -40,6 +39,7 @@ import {
 } from "three"
 import { makeValueNoise2D, fbm2D, makeSeededRng } from "../utils/noise"
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js"
+import { loadPoolRoom, loadPoolEnvironment } from "./poolassets"
 import { getBeachTexture } from "./beachtexturefactory"
 
 /**
@@ -127,7 +127,7 @@ export const SNOW_SKY_RADIUS = 145
 /**
  * 8 个场景的环境规格（v1.3.63 表驱动，见上方 EnvSpec 注释）。
  *
- * `geometric` 目前只有 snow / football / basketball 为 true —— 其余 5 个
+ * `geometric` 目前 snow / beach / room / tea / cell / seed 均为 true —— 早期
  * 场景的几何环境在步 3~6 逐个补上后改为 true（view 仍以 buildSceneEnvironment
  * 是否返回 null 为准，表的字段超前不会出错）。
  */
@@ -170,1183 +170,25 @@ export const ENV_SPECS: Record<string, EnvSpec> = {
     indoor: false,
     geometric: true,
   },
-  // ── 球场：室内体育馆观感，无天穹（步 6 重做后再复核）──
-  football: {
-    far: 160, skyRadius: 110, outdoor: false, fog: null,
-    realShadow: false, indoor: false, geometric: true,
+  // v1.8.3：足球场 / 篮球场 / UFC 八角笼三个场景已下线，对应 EnvSpec 移除
+  // v1.8.0：三个资源包 v2 环境。都是全封闭室内布景，复用 room 的
+  // 室内三件套灯光（indoorAmb / indoorHemi / indoorDir + 吊灯 SpotLight）
+  // 与台球厅环境反射；amb 归零同样是避免那盏绿色全局灯把场景染绿。
+  tea: {
+    far: 70, skyRadius: 0, outdoor: false, fog: null,
+    amb: { color: 0xffffff, intensity: 0 },
+    realShadow: false, indoor: true, geometric: true,
   },
-  basketball: {
-    far: 100, skyRadius: 110, outdoor: false, fog: null,
-    realShadow: false, indoor: false, geometric: true,
+  cell: {
+    far: 70, skyRadius: 0, outdoor: false, fog: null,
+    amb: { color: 0xffffff, intensity: 0 },
+    realShadow: false, indoor: true, geometric: true,
   },
-  // ── UFC 八角笼：室内暗场馆，同球场用天穹当顶棚 ──
-  ufc: {
-    far: 70, skyRadius: 40, outdoor: false, fog: null,
-    realShadow: false, indoor: false, geometric: true,
+  seed: {
+    far: 70, skyRadius: 0, outdoor: false, fog: null,
+    amb: { color: 0xffffff, intensity: 0 },
+    realShadow: false, indoor: true, geometric: true,
   },
-}
-
-// ══════════════════════════════════════════════════════════════════════
-//                球场（football / basketball）
-// ══════════════════════════════════════════════════════════════════════
-
-/**
- * v1.3.63 重做：球场原先是**按 Y-up 建的**（地面躺在 XZ 平面、法线 +Y），
- * 可世界是 Z-up —— 实测 `camera.up = (0,0,1)`，球桌底沿在 z = GROUND_Z。
- * 于是整块球场在世界里是**立起来的**，看台沿世界 Z 方向一层层往上堆。
- * 这才是「3D 做了但视野极差」的真正原因；v1.3.60 只把尺度从 22×14 缩到
- * 5.5×3.5，没碰朝向，等于白调。现在整套改成 Z-up：地面是 XY 平面、法线 +Z，
- * 与雪山 / 室内场景完全一致。
- *
- * 尺寸按可见性反推（与室内同一套结论）：瞄准相机的可见高度上限是
- * 0.295 + 0.035·d，于是
- *   · 球门在 5m 外 → 只看得到门柱下段 0.47m，横梁与球网恒不入画
- *   · 看台在 7~11m 外 → 可见 0.54~0.68m，排高 0.30m 时刚好看到前 2 排
- *   · 篮板 3.05m、篮筐 3.05m → 怎么都入不了画（竖屏上限也只有 0.9m），
- *     仍然建模，只为让篮球架的支撑结构在近处有个交代
- * 所以看台只做 3 排、座椅只做前 2 排朝向场内的那一面，再往上纯属浪费。
- */
-/**
- * v1.3.90b：球场改为真实比例。
- *
- * 之前为迁就台球桌把球场缩到 8×4.8m（篮球）/ 10×6.4m（足球），
- * 但篮板 1.8m、篮筐 3.05m、球门 7.32m 仍按真实尺寸建，导致器材
- * 相对于球场大得离谱，整体像「玩具场地上插真实器材」。现在统一
- * 按真实运动场地尺寸重建：
- *   - 篮球 FIBA：28m × 15m
- *   - 足球 FIFA：105m × 68m
- * 球桌保持真实 2.84m 左右，在全景中会是场地中央的一个小桌，
- * 这是正确比例；aim 机位仍紧贴台面，不影响游玩。
- */
-const FB_HX = 52.5 // 105m / 2
-const FB_HY = 34.0 // 68m / 2
-const BK_HX = 14.0 // 28m / 2
-const BK_HY = 7.5  // 15m / 2
-const FIELD_Z = GROUND_Z - 0.004
-const LINE_Z = GROUND_Z + 0.008
-/**
- * 天穹半径。足球场真实尺寸下对角约 125m，相机退到一端上方时
- * 最远点超过 120m；篮球 28×15 对角 31.8m。取 110 同时覆盖两者。
- */
-const FIELD_SKY_R = 110
-
-/** 球场线：XY 平面上的一条白条（Z-up 下无需旋转） */
-function lineGeo(w: number, l: number, x: number, y: number): BufferGeometry {
-  const g = new PlaneGeometry(w, l)
-  g.translate(x, y, LINE_Z)
-  return g
-}
-
-/** 圆环线（中圈 / 罚球弧） */
-function ringGeo(
-  rIn: number,
-  rOut: number,
-  x: number,
-  y: number,
-  thetaStart = 0,
-  thetaLength = Math.PI * 2
-): BufferGeometry {
-  const g = new RingGeometry(rIn, rOut, 72, 1, thetaStart, thetaLength)
-  g.translate(x, y, LINE_Z)
-  return g
-}
-
-/** 实心圆点（中点 / 罚球点） */
-function dotGeo(r: number, x: number, y: number): BufferGeometry {
-  const g = new CircleGeometry(r, 20)
-  g.translate(x, y, LINE_Z + 0.002)
-  return g
-}
-
-/** 直立件：X=宽 Y=长 Z=高，原点在底面中心 */
-function stakeGeo(
-  w: number,
-  l: number,
-  h: number,
-  x: number,
-  y: number,
-  z = FIELD_Z
-): BufferGeometry {
-  const g = new BoxGeometry(w, l, h)
-  g.translate(x, y, z + h / 2)
-  return g
-}
-
-/** 只合并 position/normal（线条这类统一白色的部件，颜色交给 bakeVertices 生成） */
-function mergePlain(geos: BufferGeometry[]): BufferGeometry {
-  /**
-   * v1.3.89c：合并前统一展开 index。
-   *
-   * BoxGeometry(24 顶点+36 索引) / PlaneGeometry / SphereGeometry 全是
-   * indexed 几何，只拷顶点数组会丢索引；返回的 non-indexed 几何按「每 3
-   * 个连续顶点一个三角形」渲染，BoxGeometry 8 个三角形里 4 个跨面乱连
-   * —— 实拍症状：观众盒/记分牌数码段/篮球全部撕裂成斜三角碎片，大块
-   * 墙面因乱三角彼此相邻、颜色渐变相近而看不出破绽。office / cybercafe
-   * 的 Props 路径一直是先 toNonIndexed 再合并（所以那两个场景完好），
-   * 这里补齐同一手法。toNonIndexed 会同步展开 color 属性。
-   */
-  const flat = geos.map((g) => {
-    const ni = g.index ? g.toNonIndexed() : g
-    if (ni !== g) g.dispose()
-    return ni
-  })
-  let total = 0
-  for (const g of flat) total += g.attributes.position.count
-  const pos = new Float32Array(total * 3)
-  const nrm = new Float32Array(total * 3)
-  let o = 0
-  for (const g of flat) {
-    pos.set(g.attributes.position.array as Float32Array, o * 3)
-    nrm.set(g.attributes.normal.array as Float32Array, o * 3)
-    o += g.attributes.position.count
-    g.dispose()
-  }
-  /**
-   * v1.3.84h：清洗退化顶点。
-   *
-   * `RingGeometry`（中圈 / 罚球弧 / 角弧）与 `CircleGeometry`（开球点 /
-   * 罚球点）在闭合处会出现坐标重合的**退化三角形**，`computeVertexNormals`
-   * 对那些面做 normalize 时得到 0 长度向量 → NaN 法线。NaN 会经
-   * `bakeByPos` 的顶点循环扩散到顶点色，最终写进 `normal` / `color` 属性。
-   *
-   * 真机 WebGL 遇到 NaN 顶点坐标/法线时可能直接抛错（与 v1.3.84f 空几何体
-   * 闪退同源），因此这里统一兜底：
-   *   · 非法 position → 归零；
-   *   · 非法 normal  → 归 (0,0,1)（贴地标线的正确朝向，不影响观感）；
-   * 正常顶点一个不动。
-   */
-  for (let i = 0; i < pos.length; i++) if (!Number.isFinite(pos[i])) pos[i] = 0
-  for (let i = 0; i < nrm.length; i += 3) {
-    if (
-      !Number.isFinite(nrm[i]) ||
-      !Number.isFinite(nrm[i + 1]) ||
-      !Number.isFinite(nrm[i + 2])
-    ) {
-      nrm[i] = 0
-      nrm[i + 1] = 0
-      nrm[i + 2] = 1
-    }
-  }
-  const out = new BufferGeometry()
-  out.setAttribute("position", new BufferAttribute(pos, 3))
-  out.setAttribute("normal", new BufferAttribute(nrm, 3))
-  return out
-}
-
-/**
- * v1.3.89：合并**已填顶点色**的几何（position/normal/color 三属性）。
- *
- * 观众彩点这类「每件一个颜色」的批量小件：先逐件涂色再合并成一个 Mesh，
- * 避免 100+ 个 draw call。与 mergePlain 同源的 NaN 清洗。
- */
-function mergeBaked(geos: BufferGeometry[]): BufferGeometry {
-  // v1.3.89c：与 mergePlain 同款修复 —— 先展开 index 再拷数组，否则
-  // indexed 小件（观众盒/数码段）合并后跨面乱连成斜三角碎片。
-  const flat = geos.map((g) => {
-    const ni = g.index ? g.toNonIndexed() : g
-    if (ni !== g) g.dispose()
-    return ni
-  })
-  let total = 0
-  for (const g of flat) {
-    if (!g.attributes.color) throw new Error("mergeBaked: 缺 color 属性")
-    total += g.attributes.position.count
-  }
-  const pos = new Float32Array(total * 3)
-  const nrm = new Float32Array(total * 3)
-  const col = new Float32Array(total * 3)
-  let o = 0
-  for (const g of flat) {
-    pos.set(g.attributes.position.array as Float32Array, o * 3)
-    nrm.set(g.attributes.normal.array as Float32Array, o * 3)
-    col.set(g.attributes.color.array as Float32Array, o * 3)
-    o += g.attributes.position.count
-    g.dispose()
-  }
-  for (let i = 0; i < pos.length; i++) if (!Number.isFinite(pos[i])) pos[i] = 0
-  for (let i = 0; i < nrm.length; i += 3) {
-    if (
-      !Number.isFinite(nrm[i]) ||
-      !Number.isFinite(nrm[i + 1]) ||
-      !Number.isFinite(nrm[i + 2])
-    ) {
-      nrm[i] = 0
-      nrm[i + 1] = 0
-      nrm[i + 2] = 1
-    }
-  }
-  for (let i = 0; i < col.length; i++)
-    if (!Number.isFinite(col[i])) col[i] = 0.5
-  const out = new BufferGeometry()
-  out.setAttribute("position", new BufferAttribute(pos, 3))
-  out.setAttribute("normal", new BufferAttribute(nrm, 3))
-  out.setAttribute("color", new BufferAttribute(col, 3))
-  return out
-}
-
-/** v1.3.89：给单个 geometry 全部顶点填一个颜色（LED 自发光语义） */
-function fillBaked(geo: BufferGeometry, hex: number): BufferGeometry {
-  const n = geo.attributes.position.count
-  const cols = new Float32Array(n * 3)
-  const c = new Color(hex) // sRGB hex → 线性工作空间
-  for (let v = 0; v < n; v++) {
-    /**
-     * v1.3.89c：直写线性分量。旧版在此套 SRGBToDisplay 是双重编码——
-     * vertexColors 路径不做 sRGB 解码、属性值被 shader 当 linear，GPU
-     * 输出（outputColorSpace=SRGB）又做一次 linear→sRGB 提亮，LED 件
-     * 整体过曝一档（观众马卡龙化 / 数码段发粉的元凶）。bakeVertices 之
-     * 所以没这个问题，是它末尾 setRGB(..., SRGBColorSpace) 把显示空间
-     * 数值转回了线性再落属性 —— 这里直写线性分量，GPU 输出后精确还原
-     * hex。
-     */
-    cols[v * 3] = c.r
-    cols[v * 3 + 1] = c.g
-    cols[v * 3 + 2] = c.b
-  }
-  geo.setAttribute("color", new BufferAttribute(cols, 3))
-  return geo
-}
-
-/** bakeVertices 的 base 只给法线 z，这里补一版能拿到世界坐标的 */
-function bakeByPos(
-  geo: BufferGeometry,
-  shade: { AMB: number[]; SUN: number[]; GAMMA: number },
-  bakeSun: number[],
-  albedo: (out: Color, p: Vector3, i: number) => void
-): void {
-  const pos = geo.attributes.position
-  const P = new Vector3()
-  bakeVertices(geo, shade, bakeSun, (out, _nz, i) => {
-    P.fromBufferAttribute(pos, i)
-    albedo(out, P, i)
-  })
-}
-
-/**
- * 四面看台。台阶是实心 box，座椅只做**朝向场内**的那一面（背面与顶面在
- * 低视角下永远看不见），座椅分隔靠顶点色条纹做出来 —— 这样每排座椅只要
- * 一个 plane，而不是几十个 box。
- */
-function buildStands(
-  hx: number,
-  hy: number,
-  lenX: number,
-  lenY: number,
-  rows: number,
-  stepZ: number,
-  stepD: number,
-  gap: number,
-  stepHex: number,
-  seatHexes: number[]
-): BufferGeometry[] {
-  const out: BufferGeometry[] = []
-  const step = new Color(stepHex)
-  const sides: { onX: boolean; sign: number }[] = [
-    { onX: false, sign: 1 },
-    { onX: false, sign: -1 },
-    { onX: true, sign: 1 },
-    { onX: true, sign: -1 },
-  ]
-  for (const sd of sides) {
-    const len = sd.onX ? lenY : lenX
-    for (let i = 0; i < rows; i++) {
-      const d = (sd.onX ? hx : hy) + gap + i * stepD
-      const h = (i + 1) * stepZ
-      // 台阶
-      const g = sd.onX
-        ? stakeGeo(stepD, len, h, sd.sign * d, 0)
-        : stakeGeo(len, stepD, h, 0, sd.sign * d)
-      out.push(g)
-      // 座椅正面：只有前两排排得进画面（见文件头注释）
-      if (i < 2) {
-        const face = new PlaneGeometry(len, 0.45, Math.round(len * 3), 2)
-        /**
-         * v1.3.89c：旋转链路重写 —— 原 rotateY 在 Z-up 世界里把 8m 长边
-         * 转到了 z 轴上，座椅面变成「贯穿天地」的竖直长条，实拍正中一根
-         * 深红柱（mergePlain 撕裂修复后现出原形）。正确链路：先 rotateX
-         * (-90°) 把 XY 面片放平（长沿 x、高沿 z），再按侧别把长边转向排
-         * 向、法线转向场内。
-         */
-        face.rotateX(-Math.PI / 2)
-        if (sd.onX) {
-          face.rotateZ(sd.sign > 0 ? Math.PI / 2 : -Math.PI / 2)
-          face.translate(sd.sign * (d - stepD / 2), 0, FIELD_Z + h + 0.225)
-        } else {
-          if (sd.sign > 0) face.rotateY(Math.PI)
-          face.translate(0, sd.sign * (d - stepD / 2), FIELD_Z + h + 0.225)
-        }
-        out.push(face)
-      }
-    }
-  }
-  void step
-  void seatHexes
-  return out
-}
-
-/** 座椅条纹：每 0.55m 一个座位，缝隙压暗；按段换色（主队/客队看台） */
-function seatStripe(out: Color, u: number, seatHexes: number[]): void {
-  const seg = Math.floor((u + 60) / 0.55)
-  out.setHex(seatHexes[seg % seatHexes.length])
-  const f = (u + 60) / 0.55 - seg
-  if (f < 0.08 || f > 0.92) out.offsetHSL(0, 0, -0.12)
-}
-
-/**
- * 场外地面（跑道 / 水泥地）。
- *
- * 必须一直铺到天穹脚下：草皮只盖球场本体，中间那圈裸露的空白在掠射下会
- * 露出天穹的下半球，形成一条突兀的色带。haze 把外缘混向地平线色收边。
- */
-function buildOuterGround(
-  hx: number,
-  hy: number,
-  hex: number,
-  horizon: number[],
-  shade: { AMB: number[]; SUN: number[]; GAMMA: number },
-  bakeSun: number[]
-): Mesh {
-  const W = (hx + 9) * 2
-  const L = (hy + 9) * 2
-  const geo = new PlaneGeometry(W, L, 64, 52)
-  geo.translate(0, 0, FIELD_Z - 0.012)
-  const c = new Color(hex)
-  const rMax = Math.hypot(hx + 9, hy + 9)
-  bakeByPos(geo, shade, bakeSun, (out, P) => {
-    out.copy(c)
-    const n = hash2(Math.round(P.x * 3), Math.round(P.y * 3))
-    out.offsetHSL(0, 0, (n - 0.5) * 0.05)
-  })
-  // 大气透视单独走一遍（要在光照之后）
-  const col = geo.attributes.color as BufferAttribute
-  const tmp = new Color()
-  const pos = geo.attributes.position
-  for (let i = 0; i < pos.count; i++) {
-    const r = Math.hypot(pos.getX(i), pos.getY(i))
-    const t = smoothstep(rMax * 0.55, rMax * 0.98, r)
-    if (t <= 0) continue
-    tmp.setRGB(col.getX(i), col.getY(i), col.getZ(i), SRGBColorSpace)
-    const dr = SRGBToDisplay(tmp.r)
-    const dg = SRGBToDisplay(tmp.g)
-    const db = SRGBToDisplay(tmp.b)
-    tmp.setRGB(
-      dr + (horizon[0] - dr) * t,
-      dg + (horizon[1] - dg) * t,
-      db + (horizon[2] - db) * t,
-      SRGBColorSpace
-    )
-    col.setXYZ(i, tmp.r, tmp.g, tmp.b)
-  }
-  col.needsUpdate = true
-  const m = new Mesh(geo, envMaterial())
-  m.name = "OuterGround"
-  return m
-}
-
-// ───────────────────────── 足球场 ─────────────────────────
-
-const FB_SHADE = { AMB: [0.40, 0.42, 0.40], SUN: [0.72, 0.74, 0.66], GAMMA: 1.2 }
-const FB_BAKE_SUN = [0.681, -0.454, 0.574]
-const FB_HORIZON = [0.941, 0.851, 0.690] // 0xf0d9b0 傍晚地平线
-const FB_TURF_A = new Color(0x3f8544)
-const FB_TURF_B = new Color(0x357539)
-
-export function buildFootballField(): Group {
-  const g = new Group()
-  g.name = "Football"
-  g.add(
-    buildSkyDome(
-      0xf0d9b0,
-      0x7fb0d8,
-      0x2a6bb0,
-      FIELD_SKY_R,
-      0x6a7d5a,
-      false,
-      [0.012, 0.05]
-    )
-  )
-  g.add(
-    buildOuterGround(FB_HX, FB_HY, 0x5f6f52, FB_HORIZON, FB_SHADE, FB_BAKE_SUN)
-  )
-
-  // 草皮：横向割草条纹（每 5.5m 一道，接近真实球场割草宽度）
-  const turf = new PlaneGeometry(FB_HX * 2, FB_HY * 2, 160, 100)
-  turf.translate(0, 0, FIELD_Z)
-  bakeByPos(turf, FB_SHADE, FB_BAKE_SUN, (out, P) => {
-    const s = Math.floor((P.y + 100) / 5.5) % 2
-    out.copy(s === 0 ? FB_TURF_A : FB_TURF_B)
-    const n = hash2(Math.round(P.x * 2), Math.round(P.y * 2))
-    out.offsetHSL(0, 0, (n - 0.5) * 0.05)
-  })
-  const tm = new Mesh(turf, envMaterial())
-  tm.name = "Turf"
-  g.add(tm)
-
-  // 标线：真实 FIFA 尺寸
-  const centerR = 9.15
-  const penaltyD = 16.5
-  const penaltyW = 40.32
-  const goalAreaD = 5.5
-  const goalAreaW = 18.32
-  const spotD = 11.0
-  const arcR = 9.15
-  const cornerR = 1.0
-  const lines: BufferGeometry[] = [
-    lineGeo(FB_HX * 2, 0.12, 0, FB_HY),
-    lineGeo(FB_HX * 2, 0.12, 0, -FB_HY),
-    lineGeo(0.12, FB_HY * 2, FB_HX, 0),
-    lineGeo(0.12, FB_HY * 2, -FB_HX, 0),
-    lineGeo(FB_HX * 2, 0.10, 0, 0),
-    ringGeo(centerR - 0.05, centerR + 0.05, 0, 0),
-    dotGeo(0.12, 0, 0),
-  ]
-  for (const sgn of [-1, 1]) {
-    const yb = sgn * FB_HY
-    // 大禁区
-    lines.push(lineGeo(penaltyW, 0.12, 0, yb - sgn * penaltyD / 2))
-    lines.push(lineGeo(0.12, penaltyD, -penaltyW / 2, yb - sgn * penaltyD / 2))
-    lines.push(lineGeo(0.12, penaltyD, penaltyW / 2, yb - sgn * penaltyD / 2))
-    // 小禁区
-    lines.push(lineGeo(goalAreaW, 0.10, 0, yb - sgn * goalAreaD / 2))
-    lines.push(lineGeo(0.10, goalAreaD, -goalAreaW / 2, yb - sgn * goalAreaD / 2))
-    lines.push(lineGeo(0.10, goalAreaD, goalAreaW / 2, yb - sgn * goalAreaD / 2))
-    // 罚球点 + 弧
-    lines.push(dotGeo(0.12, 0, yb - sgn * spotD))
-    lines.push(
-      ringGeo(arcR - 0.05, arcR + 0.05, 0, yb - sgn * spotD, sgn > 0 ? Math.PI * 1.20 : Math.PI * 0.20, Math.PI * 0.60)
-    )
-    // 角弧
-    for (const sx of [-1, 1]) {
-      const cornerAng = sx * sgn > 0 ? 0 : Math.PI
-      lines.push(
-        ringGeo(cornerR - 0.04, cornerR + 0.04, sx * FB_HX, yb, cornerAng, Math.PI * 0.5)
-      )
-    }
-  }
-  const lg = mergePlain(lines)
-  bakeByPos(lg, FB_SHADE, FB_BAKE_SUN, (out) => out.setRGB(1, 1, 1))
-  const lm = new Mesh(lg, envMaterial())
-  lm.name = "FieldLines"
-  g.add(lm)
-
-  // 泛光灯塔：四根大灯柱
-  const props: BufferGeometry[] = []
-  for (const sx of [-1, 1])
-    for (const sy of [-1, 1]) {
-      props.push(stakeGeo(0.8, 0.8, 18.0, sx * 55, sy * 38))
-      props.push(stakeGeo(1.6, 1.6, 0.4, sx * 55, sy * 38))
-    }
-
-  // 球门
-  for (const sgn of [-1, 1])
-    for (const m of buildGoal(sgn * FB_HX, sgn)) g.add(m)
-
-  const standGeos = buildStands(
-    FB_HX,
-    FB_HY,
-    100,  // 沿长边看台长度
-    64,   // 沿短边看台长度
-    3,
-    0.45,
-    0.90,
-    3.0,
-    0x545e69,
-    [0x2f5d8a, 0x8a3f3a]
-  )
-  const all = props.concat(standGeos)
-  const pg = mergePlain(all)
-  bakeByPos(pg, FB_SHADE, FB_BAKE_SUN, (out, P) => {
-    const ax = Math.abs(P.x)
-    const ay = Math.abs(P.y)
-    // 门柱/横梁（buildGoal 里的 box）高度在 2.44m 左右
-    if (P.z > FIELD_Z + 2.0 && ax < FB_HX + 2 && ay < FB_HY + 2) {
-      out.setHex(0xf2f2ee)
-      return
-    }
-    // 灯塔
-    if (ax > FB_HX + 15 || ay > FB_HY + 15) {
-      out.setHex(0x3f4650)
-      return
-    }
-    // 看台台阶
-    const inStand = (ax > FB_HX + 2.5 && ax < FB_HX + 6.0) || (ay > FB_HY + 2.5 && ay < FB_HY + 6.0)
-    if (inStand) {
-      out.setHex(0x545e69)
-      return
-    }
-    seatStripe(out, ax > ay ? P.y : P.x, [0x2f5d8a, 0x8a3f3a])
-  })
-  const pm = new Mesh(pg, envMaterial())
-  pm.name = "FieldProps"
-  g.add(pm)
-
-  // 场边 LED 广告围挡
-  const paintFlatCb = (
-    geo: BufferGeometry,
-    cb: (out: Color, px: number, py: number, pz: number) => void
-  ) => {
-    const pos = geo.attributes.position as BufferAttribute
-    const cols = new Float32Array(pos.count * 3)
-    const c = new Color()
-    for (let v = 0; v < pos.count; v++) {
-      cb(c, pos.getX(v), pos.getY(v), pos.getZ(v))
-      cols[v * 3] = SRGBToDisplay(c.r)
-      cols[v * 3 + 1] = SRGBToDisplay(c.g)
-      cols[v * 3 + 2] = SRGBToDisplay(c.b)
-    }
-    geo.setAttribute("color", new BufferAttribute(cols, 3))
-    return new Mesh(geo, envMaterial())
-  }
-
-  const adGeos: BufferGeometry[] = []
-  const addAdBoard = (cx: number, cy: number, alongY: boolean, seed: number) => {
-    const base = new BoxGeometry(
-      alongY ? 0.12 : 3.0,
-      alongY ? 3.0 : 0.12,
-      1.2
-    )
-    base.translate(cx, cy, FIELD_Z + 0.6)
-    const r = hash2(seed, 3)
-    fillBaked(base, r < 0.62 ? 0x123368 : r < 0.85 ? 0x7a1f2c : 0x0d5a34)
-    adGeos.push(base)
-    const n = 3 + Math.floor(hash2(seed, 11) * 3)
-    for (let k = 0; k < n; k++) {
-      const u = (k + 0.5) / n + (hash2(seed, k + 20) - 0.5) * 0.1
-      const w = 0.2 + hash2(seed, k + 40) * 0.28
-      const zc = FIELD_Z + 0.55 + hash2(seed, k + 60) * 0.18
-      const off = (u - 0.5) * 2.8
-      const dir = cy >= 0 ? -1 : 1
-      const t = new BoxGeometry(
-        alongY ? 0.03 : w,
-        alongY ? w : 0.03,
-        0.3
-      )
-      t.translate(
-        alongY ? cx - 0.08 : cx + off,
-        alongY ? cy + off : cy + dir * 0.08,
-        zc
-      )
-      fillBaked(t, 0xf2f6fa)
-      adGeos.push(t)
-    }
-  }
-  // 长边围挡（x = +FB_HX 外侧）
-  const adY = FB_HY + 3.5
-  const adX = FB_HX + 3.5
-  for (let i = -5; i <= 5; i++) addAdBoard(adX, i * 6, true, i + 100)
-  // 底线后围挡
-  for (const sgn of [-1, 1]) {
-    for (let i = -7; i <= 7; i++) addAdBoard(i * 7, sgn * adY, false, 200 + sgn * 20 + i)
-  }
-  const adMerged = mergeBaked(adGeos)
-  const adMesh = new Mesh(adMerged, envMaterial())
-  adMesh.name = "AdBoards"
-  g.add(adMesh)
-
-  // 看台观众
-  const FB_CROWD = [
-    0x6a3a34, 0x3a4a6a, 0x7a6a38, 0x8a867e, 0x3d3d44, 0x3a5a4a, 0x7a5434,
-    0x4a3e5e,
-  ]
-  const fbCrowdGeos: BufferGeometry[] = []
-  const addCrowdFb = (
-    rowX: number,
-    rowY: number,
-    alongX: boolean,
-    from: number,
-    to: number,
-    topZ: number
-  ) => {
-    for (let u = from; u <= to; u += 0.6) {
-      const px = alongX ? u : rowX
-      const py = alongX ? rowY : u
-      if (hash2(Math.round(px * 13) + 1, Math.round(py * 7)) < 0.12) continue
-      const idx =
-        Math.floor(
-          hash2(Math.round(px * 31) + 7, Math.round(py * 17) + 3) *
-            FB_CROWD.length
-        ) % FB_CROWD.length
-      const body = new BoxGeometry(0.45, 0.35, 0.7)
-      body.translate(px, py, FIELD_Z + topZ + 0.35)
-      const cDim = new Color(FB_CROWD[idx])
-      cDim.multiplyScalar(0.45)
-      fbCrowdGeos.push(fillBaked(body, cDim.getHex()))
-    }
-  }
-  const facade = (cx: number, cy: number, alongY: boolean, from: number, to: number, h: number) => {
-    const len = to - from
-    const f = alongY
-      ? new BoxGeometry(0.8, len, h)
-      : new BoxGeometry(len, 0.8, h)
-    f.translate(alongY ? cx : (from + to) / 2, alongY ? (from + to) / 2 : cy, FIELD_Z + h / 2)
-    fbCrowdGeos.push(fillBaked(f, 0x39424e))
-  }
-  // 看台位置：gap=3.0, stepD=0.9, stepZ=0.45
-  const fD1 = FB_HX + 3.0 + 0 * 0.9
-  const fD2 = FB_HX + 3.0 + 1 * 0.9
-  const fD3 = FB_HX + 3.0 + 2 * 0.9
-  const fY1 = FB_HY + 3.0 + 0 * 0.9
-  const fY2 = FB_HY + 3.0 + 1 * 0.9
-  const fY3 = FB_HY + 3.0 + 2 * 0.9
-  facade(fD1, 0, true, -FB_HY, FB_HY, 0.45)
-  facade(fD2, 0, true, -FB_HY, FB_HY, 0.90)
-  facade(fD3, 0, true, -FB_HY, FB_HY, 1.35)
-  addCrowdFb(fD1, 0, false, -FB_HY, FB_HY, 0.45)
-  addCrowdFb(fD2, 0, false, -FB_HY, FB_HY, 0.90)
-  addCrowdFb(fD3, 0, false, -FB_HY, FB_HY, 1.35)
-  facade(0, fY1, false, -FB_HX, FB_HX, 0.45)
-  facade(0, fY2, false, -FB_HX, FB_HX, 0.90)
-  facade(0, fY3, false, -FB_HX, FB_HX, 1.35)
-  addCrowdFb(0, fY1, true, -FB_HX, FB_HX, 0.45)
-  addCrowdFb(0, fY2, true, -FB_HX, FB_HX, 0.90)
-  addCrowdFb(0, fY3, true, -FB_HX, FB_HX, 1.35)
-  facade(0, -fY1, false, -FB_HX, FB_HX, 0.45)
-  facade(0, -fY2, false, -FB_HX, FB_HX, 0.90)
-  facade(0, -fY3, false, -FB_HX, FB_HX, 1.35)
-  addCrowdFb(0, -fY1, true, -FB_HX, FB_HX, 0.45)
-  addCrowdFb(0, -fY2, true, -FB_HX, FB_HX, 0.90)
-  addCrowdFb(0, -fY3, true, -FB_HX, FB_HX, 1.35)
-  const fbCrowdMerged = mergeBaked(fbCrowdGeos)
-  const fbCrowdMesh = new Mesh(fbCrowdMerged, envMaterial())
-  fbCrowdMesh.name = "Crowd"
-  g.add(fbCrowdMesh)
-
-  // 四角角旗
-  for (const sx of [-1, 1])
-    for (const sy of [-1, 1]) {
-      const pole = new BoxGeometry(0.06, 0.06, 1.5)
-      pole.translate(sx * FB_HX, sy * FB_HY, FIELD_Z + 0.75)
-      const pm0 = paintFlatCb(pole, (out) => out.setHex(0xe8e8e2))
-      pm0.name = `FlagPole${sx}${sy}`
-      g.add(pm0)
-      const flag = new BoxGeometry(0.03, 0.6, 0.4)
-      flag.translate(sx * FB_HX, sy * (FB_HY - 0.35), FIELD_Z + 1.35)
-      const fm0 = paintFlatCb(flag, (out) => out.setHex(0xf2c53d))
-      fm0.name = `FlagCloth${sx}${sy}`
-      g.add(fm0)
-    }
-  return g
-}
-
-// ───────────────────────── 篮球场 ─────────────────────────
-
-/**
- * v1.3.89：室外场 → 室内馆的烘焙配比。原先 AMB 0.42 + SUN 0.70 是
- * 「晴天直射」语义 —— 室内化后正墙面朝 -x 全部背光（nd=0 → 0.42），
- * 墙体/墙裙/横幅/记分牌集体变黑剪影。改「天窗漫射馆」：环境光抬到
- * 0.72 为主、方向光压到 0.35（高窗天光的柔和方向性），背光面 0.72
- * 不再糊黑，向阳面（地板）0.91 保持木色不过曝。
- */
-const BK_SHADE = { AMB: [0.72, 0.72, 0.73], SUN: [0.35, 0.35, 0.36], GAMMA: 1.15 }
-const BK_BAKE_SUN = [0.681, -0.454, 0.574]
-// v1.3.89：BK_HORIZON 删除（室外 OuterGround 已随室内化移除）
-const BK_WOOD_A = new Color(0xc99f63)
-const BK_WOOD_B = new Color(0xbd8f52)
-
-export function buildBasketballCourt(): Group {
-  const g = new Group()
-  g.name = "Basketball"
-  /**
-   * v1.3.90b：按真实 FIBA 28m×15m 重建后，馆体也同步放大。
-   * 墙体坐落在看台后方，给场地留出真实缓冲带。
-   */
-  const WALL_X = 19.0
-  const WALL_Y = 13.0
-  const WALL_H = 6.0
-  const PAD_H = 1.2
-  const wallGeos: BufferGeometry[] = []
-  wallGeos.push(stakeGeo(0.3, WALL_Y * 2, WALL_H, WALL_X, 0))
-  for (const sgn of [-1, 1])
-    wallGeos.push(stakeGeo(WALL_X + 0.3, 0.3, WALL_H, 0, sgn * WALL_Y))
-  const wallMerged = mergePlain(wallGeos)
-  bakeByPos(wallMerged, BK_SHADE, BK_BAKE_SUN, (out, P) => {
-    if (P.z < FIELD_Z + PAD_H) {
-      out.setHex(0x24406e)
-      const u = P.x > WALL_X - 0.4 ? P.y : P.x
-      const f = (u + 60) / 0.8 - Math.floor((u + 60) / 0.8)
-      if (f < 0.05) out.setHex(0x182c4e)
-      return
-    }
-    out.setHex(0x3d4652)
-  })
-  const wallMesh = new Mesh(wallMerged, envMaterial())
-  wallMesh.name = "GymWalls"
-  g.add(wallMesh)
-
-  // 馆内地面：木地板之外的跑道/水泥过道
-  const aisle = new PlaneGeometry(WALL_X * 2, WALL_Y * 2)
-  aisle.translate(0, 0, FIELD_Z - 0.004)
-  bakeByPos(aisle, BK_SHADE, BK_BAKE_SUN, (out) => out.setHex(0x59534d))
-  const aisleMesh = new Mesh(aisle, envMaterial())
-  aisleMesh.name = "GymAisle"
-  g.add(aisleMesh)
-
-  // 记分牌 + 横幅 + 记录台
-  const boardGeos: BufferGeometry[] = []
-  boardGeos.push(stakeGeo(0.06, 3.0, 1.0, WALL_X - 0.18, 0, FIELD_Z + 1.5))
-  const boardMerged = mergePlain(boardGeos)
-  bakeByPos(boardMerged, BK_SHADE, BK_BAKE_SUN, (out) => out.setHex(0x141d2a))
-  const boardMesh = new Mesh(boardMerged, envMaterial())
-  boardMesh.name = "Scoreboard"
-  g.add(boardMesh)
-
-  const segGeos: BufferGeometry[] = []
-  const segX = [-1.0, -0.55, -0.1, 0.35, 0.8]
-  for (const sx of segX) {
-    const seg = new BoxGeometry(0.02, 0.4, 0.55)
-    seg.translate(WALL_X - 0.22, sx, FIELD_Z + 1.75)
-    segGeos.push(fillBaked(seg, 0xff4030))
-  }
-  for (const lx of [-1.3, 1.3]) {
-    const lamp = new BoxGeometry(0.02, 0.12, 0.12)
-    lamp.translate(WALL_X - 0.22, lx, FIELD_Z + 1.65)
-    segGeos.push(fillBaked(lamp, 0xf2c53d))
-  }
-  const segMerged = mergeBaked(segGeos)
-  const segMesh = new Mesh(segMerged, envMaterial())
-  segMesh.name = "ScoreboardDigits"
-  g.add(segMesh)
-
-  const decoGeos: BufferGeometry[] = []
-  for (const bx of [-4.5, 4.5])
-    decoGeos.push(stakeGeo(0.06, 3.6, 1.0, WALL_X - 0.18, bx, FIELD_Z + 1.5))
-  const decoMerged = mergePlain(decoGeos)
-  bakeByPos(decoMerged, BK_SHADE, BK_BAKE_SUN, (out, P) => {
-    out.setHex(0x8a3038)
-    if (P.z > FIELD_Z + 2.2) out.setHex(0xe8e0cc)
-  })
-  const decoMesh = new Mesh(decoMerged, envMaterial())
-  decoMesh.name = "WallDeco"
-  g.add(decoMesh)
-
-  const deskGeos: BufferGeometry[] = [
-    stakeGeo(1.0, 3.2, 0.1, WALL_X - 0.9, 0, FIELD_Z + 0.85),
-    stakeGeo(0.9, 3.0, 0.8, WALL_X - 0.95, 0, FIELD_Z + 0.05),
-  ]
-  const deskMerged = mergePlain(deskGeos)
-  bakeByPos(deskMerged, BK_SHADE, BK_BAKE_SUN, (out, P) => {
-    out.setHex(P.z > FIELD_Z + 0.8 ? 0x8a3038 : 0x303844)
-  })
-  const deskMesh = new Mesh(deskMerged, envMaterial())
-  deskMesh.name = "ScorerTable"
-  g.add(deskMesh)
-
-  // 观众：按新看台位置排布
-  const CROWD_COLORS = [
-    0x6a3a34, 0x3a4a6a, 0x7a6a38, 0x8a867e, 0x3d3d44, 0x3a5a4a, 0x7a5434,
-    0x4a3e5e,
-  ]
-  const crowdGeos: BufferGeometry[] = []
-  const addCrowdRow = (
-    rowX: number,
-    rowY: number,
-    alongX: boolean,
-    from: number,
-    to: number,
-    topZ: number
-  ) => {
-    for (let u = from; u <= to; u += 0.45) {
-      const px = alongX ? u : rowX
-      const py = alongX ? rowY : u
-      if (hash2(Math.round(px * 13), Math.round(py * 7)) < 0.12) continue
-      const idx =
-        Math.floor(
-          hash2(Math.round(px * 31) + 7, Math.round(py * 17) + 3) *
-            CROWD_COLORS.length
-        ) % CROWD_COLORS.length
-      const body = new BoxGeometry(0.35, 0.28, 0.55)
-      body.translate(px, py, FIELD_Z + topZ + 0.275)
-      const cDim = new Color(CROWD_COLORS[idx])
-      cDim.multiplyScalar(0.45)
-      crowdGeos.push(fillBaked(body, cDim.getHex()))
-    }
-  }
-  // 看台排距：gap=2.5, stepD=0.8, stepZ=0.4
-  const standD1 = BK_HX + 2.5 + 0 * 0.8
-  const standD2 = BK_HX + 2.5 + 1 * 0.8
-  const standY1 = BK_HY + 2.5 + 0 * 0.8
-  const standY2 = BK_HY + 2.5 + 1 * 0.8
-  addCrowdRow(standD1, 0, false, -12, -1.0, 0.4)
-  addCrowdRow(standD1, 0, false, 1.0, 12, 0.4)
-  addCrowdRow(standD2, 0, false, -12, -1.0, 0.8)
-  addCrowdRow(standD2, 0, false, 1.0, 12, 0.8)
-  addCrowdRow(0, standY1, true, -12, 12, 0.4)
-  addCrowdRow(0, standY2, true, -12, 12, 0.8)
-  addCrowdRow(0, -standY1, true, -12, 12, 0.4)
-  addCrowdRow(0, -standY2, true, -12, 12, 0.8)
-  const crowdMerged = mergeBaked(crowdGeos)
-  const crowdMesh = new Mesh(crowdMerged, envMaterial())
-  crowdMesh.name = "Crowd"
-  g.add(crowdMesh)
-
-  // 木地板
-  const floor = new PlaneGeometry(BK_HX * 2, BK_HY * 2, 140, 75)
-  floor.translate(0, 0, FIELD_Z)
-  bakeByPos(floor, BK_SHADE, BK_BAKE_SUN, (out, P) => {
-    const PW = 0.12 // 真实球馆窄板 ~120mm
-    const PL = 2.2
-    const row = Math.floor(P.y / PW)
-    const sx = P.x + row * PL * 0.4
-    out.copy(BK_WOOD_A).lerp(BK_WOOD_B, hash2(Math.floor(sx / PL), row))
-    const seam = Math.min(
-      Math.min(sx / PL - Math.floor(sx / PL), 1 - (sx / PL - Math.floor(sx / PL))) * PL,
-      Math.min(P.y / PW - row, 1 - (P.y / PW - row)) * PW
-    )
-    out.lerp(new Color(0x6d4f2c), (1 - smoothstep(0, 0.008, seam)) * 0.7)
-    // 三分线以内整体提亮一档
-    if (Math.hypot(P.x, P.y) < 12) out.offsetHSL(0, 0, 0.012)
-  })
-  const fmesh = new Mesh(floor, envMaterial())
-  fmesh.name = "CourtFloor"
-  g.add(fmesh)
-
-  // 标线：真实 FIBA 尺寸
-  const keyW = 4.9   // 罚球区/禁区宽度
-  const keyD = 5.8   // 禁区深度（端线到罚球线）
-  const ftCircleR = 1.8
-  const centerR = 1.8
-  const threeR = 6.75
-  const rimIn = 1.575 // 篮筐中心投影距端线
-  const lines: BufferGeometry[] = [
-    lineGeo(BK_HX * 2, 0.10, 0, BK_HY),
-    lineGeo(BK_HX * 2, 0.10, 0, -BK_HY),
-    lineGeo(0.10, BK_HY * 2, BK_HX, 0),
-    lineGeo(0.10, BK_HY * 2, -BK_HX, 0),
-    lineGeo(BK_HX * 2, 0.08, 0, 0),
-    ringGeo(centerR - 0.03, centerR + 0.03, 0, 0),
-  ]
-  for (const sgn of [-1, 1]) {
-    const yb = sgn * BK_HY
-    const ft = yb - sgn * keyD
-    // 罚球线
-    lines.push(lineGeo(keyW, 0.08, 0, ft))
-    // 罚球圈
-    lines.push(ringGeo(ftCircleR - 0.04, ftCircleR + 0.04, 0, ft))
-    // 禁区边线
-    lines.push(lineGeo(0.08, keyD, -keyW / 2, yb - sgn * keyD / 2))
-    lines.push(lineGeo(0.08, keyD, keyW / 2, yb - sgn * keyD / 2))
-    // 三分弧：圆心在篮筐投影
-    const cy = yb - sgn * rimIn
-    const dx = Math.sqrt(threeR * threeR - rimIn * rimIn)
-    const ang0 = Math.atan2(rimIn, dx)
-    const thetaStart = sgn > 0 ? ang0 : Math.PI - ang0
-    const thetaLen = Math.PI - 2 * ang0
-    lines.push(ringGeo(threeR - 0.04, threeR + 0.04, 0, cy, thetaStart, thetaLen))
-    // 三分线两端直边（从弧端点垂直到端线内侧）
-    lines.push(lineGeo(0.08, rimIn, dx, sgn * (BK_HY - rimIn / 2)))
-    lines.push(lineGeo(0.08, rimIn, -dx, sgn * (BK_HY - rimIn / 2)))
-  }
-  const lg = mergePlain(lines)
-  bakeByPos(lg, BK_SHADE, BK_BAKE_SUN, (out) => out.setRGB(1, 1, 1))
-  const lm = new Mesh(lg, envMaterial())
-  lm.name = "CourtLines"
-  g.add(lm)
-
-  // 三秒区涂漆：真实禁区 4.9m × 5.8m
-  const paintGeos: BufferGeometry[] = []
-  for (const sgn of [-1, 1]) {
-    const pg0 = new PlaneGeometry(keyW, keyD)
-    pg0.translate(0, sgn * (BK_HY - keyD / 2), GROUND_Z + 0.004)
-    paintGeos.push(pg0)
-  }
-  const paintMerged = mergePlain(paintGeos)
-  bakeByPos(paintMerged, BK_SHADE, BK_BAKE_SUN, (out) => out.setHex(0xb35a2e))
-  const paintMesh = new Mesh(paintMerged, envMaterial())
-  paintMesh.name = "CourtPaint"
-  g.add(paintMesh)
-
-  // 散落的篮球
-  const ballGeos: BufferGeometry[] = []
-  for (const [bx, by] of [
-    [4.0, 3.5],
-    [6.5, -3.8],
-    [8.5, 3.6],
-  ]) {
-    const bgeo = new SphereGeometry(0.15, 12, 9)
-    bgeo.translate(bx, by, FIELD_Z + 0.15)
-    ballGeos.push(bgeo)
-  }
-  const ballMerged = mergePlain(ballGeos)
-  bakeByPos(ballMerged, BK_SHADE, BK_BAKE_SUN, (out) => out.setHex(0xe06018))
-  const ballMesh = new Mesh(ballMerged, envMaterial())
-  ballMesh.name = "CourtBalls"
-  g.add(ballMesh)
-
-  // 队席垫
-  const benchGeos: BufferGeometry[] = []
-  for (const sgn of [-1, 1]) {
-    const bg = new BoxGeometry(0.6, 2.2, 0.3)
-    bg.translate(BK_HX - 0.8, sgn * (BK_HY - 2.0), FIELD_Z + 0.15)
-    benchGeos.push(bg)
-  }
-  const benchMerged = mergePlain(benchGeos)
-  bakeByPos(benchMerged, BK_SHADE, BK_BAKE_SUN, (out) => out.setHex(0x8a3038))
-  const benchMesh = new Mesh(benchMerged, envMaterial())
-  benchMesh.name = "TeamBenches"
-  g.add(benchMesh)
-
-  // 篮球架
-  for (const sgn of [-1, 1])
-    for (const m of buildHoop(sgn * BK_HY, sgn)) g.add(m)
-
-  const standGeos = buildStands(
-    BK_HX,
-    BK_HY,
-    26,   // 沿长边看台长度 ≈ 球场长
-    13,   // 沿短边看台长度 ≈ 球场宽
-    2,
-    0.40, // 每排升高
-    0.80, // 每排深度
-    2.5,  // 距场地间隙
-    0x4d5661,
-    [0x2f5d8a]
-  )
-  const pg = mergePlain(standGeos)
-  bakeByPos(pg, BK_SHADE, BK_BAKE_SUN, (out, P) => {
-    const ax = Math.abs(P.x)
-    const ay = Math.abs(P.y)
-    const inStand = (ax > BK_HX + 2.0 && ax < BK_HX + 4.0) || (ay > BK_HY + 2.0 && ay < BK_HY + 4.0)
-    if (P.z > FIELD_Z + 0.6 && inStand) {
-      seatStripe(out, ax > ay ? P.y : P.x, [0x2f5d8a])
-      return
-    }
-    out.setHex(0x4d5661)
-  })
-  const pm = new Mesh(pg, envMaterial())
-  pm.name = "CourtProps"
-  g.add(pm)
-  return g
-}
-
-// ══════════════════════════════════════════════════════════════════════
-//                        UFC 八角笼（ufc）
-//
-// 与球场同一套 Z-up 约定：地面躺在 XY 平面、法线 +Z，地面 z = FIELD_Z。
-//
-// 尺度依据（沿用 v1.3.64 球场踩过的坑）：瞄准相机高 0.295m、俯角 −16.33°，
-// 地面要到 d≈5.7m 才从台边露出来。真实 UFC 八角笼**对角 9.8m / 笼高 1.78m**，
-// 原样照搬会把笼子整个推出画面，只剩头顶一条网。这里取外接半径 4.3m
-// （对边 7.95m、边长 3.29m）、笼高 1.70m —— 与篮球场 8×4.8m 同量级，
-// 笼网立柱落在 d≈4.0~4.3m，正卡在可见区内侧，形成「隔着笼网看球桌」的框景。
-//
-// 笼网**不做整面片**：8 面网各用 17 根竖杆 + 4 道横杆的细 box 拼出，
-// 缝隙是真的空的 —— 看台能透出来，纵深感远好于一张半透明面片，也绕开了
-// 透明材质的排序问题（envMaterial 是不透明的）。合计 176 个 box / 4224
-// 顶点，成本可忽略。
-//
-// 配色走 UFC 转播的经典观感：**暗场馆 + 笼内被聚光灯打亮的帆布**，
-// 帆布（显示亮度约 117）与笼外地面（约 23）拉开近 5 倍，纵深感全靠这个对比。
-// ══════════════════════════════════════════════════════════════════════
-
-const UFC_R = 4.3 // 八角笼外接半径（顶点到中心）
-const UFC_A = UFC_R * Math.cos(Math.PI / 8) // 边心距 ≈ 3.973（边中点到中心）
-const UFC_E = 2 * UFC_R * Math.sin(Math.PI / 8) // 边长 ≈ 3.291
-const UFC_H = 1.7 // 笼网高（真实 1.78m）
-
-const UFC_SHADE = { AMB: [0.38, 0.39, 0.42], SUN: [0.62, 0.63, 0.66], GAMMA: 1.15 }
-const UFC_BAKE_SUN = [0.681, -0.454, 0.574]
-// v1.3.65b：haze 目标色原用 0x2b3138=(43,49,56)，与 clearColor 0x292f36 只差
-// 2~3 个灰阶 —— 竖屏 aim 视角能望到 r>10.3m 的远景地面，haze 把那里混成
-// clearColor 色，被判成大洞。压暗一档（0x1c212c）并经扫描确认「地面亮色 →
-// haze」混合路径全程不进 clearColor±3 色盒。
-const UFC_HORIZON = [0.11, 0.129, 0.173] // 0x1c212c 场馆暗调（远地面 haze 收边用）
-const UFC_OUT = new Color(0x1c2026) // 笼外地面（与 buildOuterGround 同色）
-const UFC_CANVAS = new Color(0x767b83) // 笼内帆布
-const UFC_RING = new Color(0x585e67) // 中央圆环带
-const UFC_LOGO = new Color(0x41464e) // 中央八边形
-const UFC_FENCE = 0x585e68 // 笼网钢丝
-const UFC_POST = 0x121418 // 八根角柱（黑漆钢管）
-
-/** 八条边的内法线（(k+0.5)·45°），预计算避免逐顶点重复 8 次三角函数 */
-const UFC_NX = [0, 1, 2, 3, 4, 5, 6, 7].map((k) =>
-  Math.cos((k + 0.5) * (Math.PI / 4))
-)
-const UFC_NY = [0, 1, 2, 3, 4, 5, 6, 7].map((k) =>
-  Math.sin((k + 0.5) * (Math.PI / 4))
-)
-
-/**
- * 正八边形的有向距离：笼内为负、笼外为正，0 即笼网所在的那条边。
- * 对凸多边形，8 个内法线方向上点积的最大值就是支撑函数，减去边心距即得
- * 「沿最近边法线到边界的距离」（角外侧会略小于真实欧氏距离，做着色够用）。
- *
- * @param R 该八边形的外接半径，默认 UFC_R；中心图案传更小的半径复用。
- */
-function octSDF(x: number, y: number, R = UFC_R): number {
-  let d = -Infinity
-  for (let k = 0; k < 8; k++) {
-    const v = x * UFC_NX[k] + y * UFC_NY[k]
-    if (v > d) d = v
-  }
-  return d - R * Math.cos(Math.PI / 8)
-}
-
-/**
- * 笼内地垫（帆布）。
- *
- * 用一整块覆盖外接正方形的 plane + 八边形 SDF 着色，而不是几何裁剪出八边形：
- * 后者（CircleGeometry(r,8)）只有 8 个三角形，顶点色根本画不出中央图案。
- * 八边形外的部分**必须**复制 buildOuterGround 的着色（同色 + 同 hash 噪声），
- * 否则接缝处会有一圈色差 —— 好在 haze 要到 r=10.3 才起效，地垫只到 6.08m，
- * 不吃 haze，两遍算出来的颜色天然一致。
- */
-function buildOctCanvas(): Mesh {
-  const S = UFC_R * 2
-  const geo = new PlaneGeometry(S, S, 192, 192)
-  geo.translate(0, 0, FIELD_Z)
-  bakeByPos(geo, UFC_SHADE, UFC_BAKE_SUN, (out, P) => {
-    const d = octSDF(P.x, P.y)
-    // 八边形外（含笼内那圈黑边框）：与场外地面同色同噪声，接缝不可见
-    if (d > -0.34) {
-      out.copy(UFC_OUT)
-      const n = hash2(Math.round(P.x * 3), Math.round(P.y * 3))
-      out.offsetHSL(0, 0, (n - 0.5) * 0.05)
-      return
-    }
-    // 帆布：细密织纹 + 大块深浅不匀
-    out.copy(UFC_CANVAS)
-    const weave = hash2(Math.round(P.x * 45), Math.round(P.y * 45))
-    const blotch = hash2(Math.round(P.x * 2.2), Math.round(P.y * 2.2))
-    out.offsetHSL(0, 0, (weave - 0.5) * 0.03 + (blotch - 0.5) * 0.045)
-    const r = Math.hypot(P.x, P.y)
-    // 聚光灯打在笼心：由内向外压一档，强化「亮笼子 / 暗场馆」
-    out.offsetHSL(0, 0, -0.1 * smoothstep(0.6, UFC_A, r))
-    // 中央圆环带（1.10~1.22m）
-    const ring =
-      smoothstep(1.1, 1.13, r) * (1 - smoothstep(1.19, 1.22, r))
-    if (ring > 0) out.lerp(UFC_RING, ring * 0.85)
-    // 中央八边形（外接 0.72m）+ 圆心点
-    if (octSDF(P.x, P.y, 0.72) < -0.05) out.lerp(UFC_LOGO, 0.6)
-    if (r < 0.14) out.offsetHSL(0, 0, 0.1)
-  })
-  const m = new Mesh(geo, envMaterial())
-  m.name = "OctCanvas"
-  return m
-}
-
-/**
- * 8 面笼网的细杆。
- *
- * 每面网：17 根竖杆（间距 0.206m、截面 22mm）+ 4 道横杆（含顶框）。
- * 竖杆的 box 要绕 Z 转 θ+90°，让长边（BoxGeometry 的 X）贴着该边的走向，
- * 转完再平移到边上的对应位置。
- */
-function buildOctFenceGeos(): BufferGeometry[] {
-  const out: BufferGeometry[] = []
-  for (let k = 0; k < 8; k++) {
-    const th = (k + 0.5) * (Math.PI / 4)
-    const cx = Math.cos(th) * UFC_A
-    const cy = Math.sin(th) * UFC_A
-    const dx = -Math.sin(th) // 边的走向（单位向量）
-    const dy = Math.cos(th)
-    const rot = th + Math.PI / 2
-    const N = 16
-    for (let i = 0; i <= N; i++) {
-      const u = -UFC_E / 2 + (i / N) * UFC_E
-      const g = new BoxGeometry(0.022, 0.022, UFC_H)
-      g.rotateZ(rot)
-      g.translate(cx + dx * u, cy + dy * u, FIELD_Z + UFC_H / 2)
-      out.push(g)
-    }
-    for (const hz of [0.055, 0.55, 1.12, UFC_H]) {
-      const g = new BoxGeometry(UFC_E, 0.028, 0.028)
-      g.rotateZ(rot)
-      g.translate(cx, cy, FIELD_Z + hz)
-      out.push(g)
-    }
-  }
-  return out
-}
-
-/** 8 根角柱，立在八边形顶点上，比笼网高一点（顶部露出一点柱头） */
-function buildOctPostGeos(): BufferGeometry[] {
-  const out: BufferGeometry[] = []
-  const H = UFC_H + 0.14
-  for (let k = 0; k < 8; k++) {
-    const th = k * (Math.PI / 4)
-    const g = new BoxGeometry(0.115, 0.115, H)
-    g.translate(
-      Math.cos(th) * UFC_R,
-      Math.sin(th) * UFC_R,
-      FIELD_Z + H / 2
-    )
-    out.push(g)
-  }
-  return out
-}
-
-export function buildUfcOctagon(): Group {
-  const g = new Group()
-  g.name = "UfcOctagon"
-  // 场馆顶棚：地平线暗灰蓝 → 天顶近黑。真实 UFC 场馆就是全场暗、只打亮笼内，
-  // 顺带让球桌（受光材质）在暗背景上更跳。
-  // v1.3.65b：天穹渐变在 **linear 空间**插值（three 的 Color.lerp 语义），
-  // 端点色选得不好时整条路径会从渲染器 clearColor 0x292f36=(41,47,54) 的
-  // ±3 色盒里穿过去 —— envcheck 的「无空洞」判据（逐通道 |px-clear|>3）就会
-  // 把画面顶部那条天空带判成洞，且横屏/竖屏命中 t 段不同、逐屏漂移。
-  // 0x143442 经全路径扫描，两端段到 clearColor 色盒的最近余量 10.2 / 18.0。
-  g.add(
-    buildSkyDome(
-      0x363e4a,
-      0x143442,
-      0x0a0c10,
-      FIELD_SKY_R,
-      0x101318,
-      false,
-      [0.012, 0.05]
-    )
-  )
-  g.add(
-    buildOuterGround(
-      UFC_R,
-      UFC_R,
-      0x1c2026,
-      UFC_HORIZON,
-      UFC_SHADE,
-      UFC_BAKE_SUN
-    )
-  )
-  g.add(buildOctCanvas())
-
-  const fg = mergePlain(buildOctFenceGeos())
-  bakeByPos(fg, UFC_SHADE, UFC_BAKE_SUN, (out) => out.setHex(UFC_FENCE))
-  const fm = new Mesh(fg, envMaterial())
-  fm.name = "OctFence"
-  g.add(fm)
-
-  const stands = buildStands(
-    UFC_R,
-    UFC_R,
-    12, // 看台长边（横屏视野更宽，X 方向铺满）
-    10,
-    2,
-    0.2,
-    0.8,
-    1.5,
-    0x2a2e35,
-    [0x22303f]
-  )
-  const pg = mergePlain(buildOctPostGeos().concat(stands))
-  bakeByPos(pg, UFC_SHADE, UFC_BAKE_SUN, (out, P) => {
-    const ax = Math.abs(P.x)
-    const ay = Math.abs(P.y)
-    // 角柱：八边形顶点上，|x|、|y| 都在 UFC_R 以内；看台最近也到 5.4，不会误判
-    if (ax < UFC_R + 0.12 && ay < UFC_R + 0.12) {
-      out.setHex(UFC_POST)
-      return
-    }
-    // 看台。座椅面在 z=FIELD_Z+0.40 以上，台阶顶面最高只到 +0.40，
-    // 取 0.45 把两者分开（第 1 排台阶顶正好 0.40，不会被当成座椅）。
-    if (P.z > FIELD_Z + 0.45 && Math.hypot(P.x, P.y) > 5.0) {
-      seatStripe(out, ax > ay ? P.y : P.x, [0x22303f, 0x2a2e35])
-      return
-    }
-    out.setHex(0x2a2e35)
-  })
-  const pm = new Mesh(pg, envMaterial())
-  pm.name = "OctProps"
-  g.add(pm)
-  return g
 }
 
 /**
@@ -1446,21 +288,43 @@ function buildSkyDome(
  */
 export function buildSceneEnvironment(sceneId: string): Group | null {
   switch (sceneId) {
-    case "football":
-      return buildFootballField()
-    case "basketball":
-      return buildBasketballCourt()
-    case "ufc":
-      return buildUfcOctagon()
     case "snow":
       return buildSnowMountainV3()
     case "beach":
       return buildBeach()
     case "room":
       return buildIndoorScene(sceneId)
+    case "tea":
+    case "cell":
+    case "seed":
+      return buildPoolEnvScene(sceneId)
     default:
       return null
   }
+}
+
+/**
+ * v1.8.0：资源包 v2 的三个环境（茶室 / 细胞培养舱 / 种子胚囊）。
+ *
+ * GLB 必须异步加载，而 buildSceneEnvironment 是同步接口 —— 沿用
+ * buildIndoorScene("room") 的「先返回空组、到达后挂子树」模式。资源
+ * 到达前的几十毫秒里画面只有球桌，不会阻断游玩；加载失败只留兜底
+ * 背景色，不回退到旧的立方体房间（那个盒子的尺度与新场景不兼容）。
+ */
+function buildPoolEnvScene(sceneId: string): Group {
+  const g = new Group()
+  g.name = "PoolEnvRoot_" + sceneId
+  loadPoolEnvironment(sceneId)
+    .then((env) => {
+      g.add(env)
+    })
+    .catch((e) => {
+      console.warn(
+        "[poolenv] 环境加载失败，仅保留兜底背景:",
+        (e as Error)?.message
+      )
+    })
+  return g
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -1927,7 +791,7 @@ function mergeColored(
  * @param post  可选：光照算完后的后处理，直接在**显示空间**改 rgb
  *              （大气透视必须在这里做 —— 见 TerrainStyle.hazeAfterShade）
  */
-function bakeVertices(
+export function bakeVertices(
   geo: BufferGeometry,
   shade: { AMB: number[]; SUN: number[]; GAMMA: number },
   bakeSun: number[],
@@ -1999,7 +863,7 @@ function bakeVertices(
  * —— 这正是「画面像色块平涂、没有立体感」的根因。
  *
  * ⚠️ 为什么必须传参分流、不能全局换：
- * 本函数同时服务 beach / football / basketball / ufc / snow。这些场景
+ * 本函数同时服务 beach / snow 等户外场景。这些场景
  * `outdoor` 为 false（snow 除外），太阳光与半球光都隐藏，环境物体**只吃**
  * view.ts 里那盏 `AmbientLight(0x009922, 0.3)`（绿、强度 0.3）。全局换 PBR
  * 会让它们整体变暗约九成并染绿。所以默认行为保持 basic 不变，只有显式
@@ -2051,93 +915,6 @@ function envMaterial(pbr?: {
     toneMapped: false,
     fog: envFogEnabled,
   })
-}
-
-/**
- * v1.3.90：体育器材框架件（篮球筐 / 足球门）。
- *
- * 此前两场景的「球门」是占位草模 —— 篮球只有 3.05m 篮板（无筐无网、
- * aim 机位恒不入画），足球只有 1.6m 门柱下段（横梁 2.0m、无网）。本
- * 轮按真实尺寸建模，让场景在 overview 机位下「一眼认出是哪一种球」。
- *
- * 一律用顶点色 flat 填充（fillBaked）：这些件在画面里占比小、远离相机，
- * 吃 shading 反而发灰；自发光式纯色更跳、更像真实器材的反光件。
- */
-
-// ── 篮球架（一端一只，yE = 端线 y，sgn = 朝向场心方向）──
-function buildHoop(yE: number, sgn: number): Mesh[] {
-  const z = FIELD_Z
-  const meshes: Mesh[] = []
-  // 真实尺寸：篮板内沿距端线 1.2m，篮筐中心投影距端线 1.575m，高 3.05m
-  const boardY = yE - sgn * 1.2
-  const rimY = yE - sgn * 1.575
-  // 立柱：端线后 0.9m，从地起 3.9m
-  const pole = new BoxGeometry(0.13, 0.13, 3.9)
-  pole.translate(0, yE + sgn * 0.9, z + 1.95)
-  meshes.push(new Mesh(fillBaked(pole, 0x5b6675), envMaterial()))
-  // 悬臂：从立柱顶伸到篮板（z 3.425）
-  const arm = new BoxGeometry(0.1, 0.75, 0.1)
-  arm.translate(0, yE + sgn * 0.45, z + 3.425)
-  meshes.push(new Mesh(fillBaked(arm, 0x5b6675), envMaterial()))
-  // 篮板：1.8(宽 X) × 1.05(高 Z) × 0.07(厚 Y)，底 2.90 顶 3.95
-  const board = new BoxGeometry(1.8, 0.07, 1.05)
-  board.translate(0, boardY, z + 3.425)
-  meshes.push(new Mesh(fillBaked(board, 0xf2f2ec), envMaterial()))
-  // 篮筐：橙圈 r0.225 管0.022，高 3.05
-  const rim = new TorusGeometry(0.225, 0.022, 8, 22)
-  rim.rotateX(Math.PI / 2)
-  rim.translate(0, rimY, z + 3.05)
-  meshes.push(new Mesh(fillBaked(rim, 0xe8651e), envMaterial()))
-  // 网：开口锥（上 r0.225 下 r0.12，高 0.40），白
-  const net = new CylinderGeometry(0.225, 0.12, 0.4, 18, 2, true)
-  net.translate(0, rimY, z + 3.05 - 0.2)
-  meshes.push(new Mesh(fillBaked(net, 0xe6e6e0), envMaterial()))
-  for (const m of meshes) m.name = "Hoop"
-  return meshes
-}
-
-// ── 足球门（一端一只，xE = 端线 x，sgn = 朝向场心方向）──
-function buildGoal(xE: number, sgn: number): Mesh[] {
-  const z = FIELD_Z
-  // 真实尺寸：门宽 7.32m（内沿），门高 2.44m
-  const gy = 3.66
-  const gh = 2.44
-  const postW = 0.12
-  const meshes: Mesh[] = []
-  // 两根门柱
-  for (const sy of [-1, 1]) {
-    const post = new BoxGeometry(postW, postW, gh)
-    post.translate(xE, sy * gy, z + gh / 2)
-    meshes.push(new Mesh(fillBaked(post, 0xeef0ec), envMaterial()))
-  }
-  // 横梁：沿 Y 跨 7.32m，高 gh
-  const bar = new BoxGeometry(postW, gy * 2, postW)
-  bar.translate(xE, 0, z + gh)
-  meshes.push(new Mesh(fillBaked(bar, 0xeef0ec), envMaterial()))
-  // 简易球网：白色细 box 拼成后框 + 斜撑，depth 1.5m
-  const netDepth = 1.5
-  const netColor = 0xe6e6e0
-  const backX = xE - sgn * netDepth
-  // 后横梁
-  const backBar = new BoxGeometry(postW, gy * 2, postW)
-  backBar.translate(backX, 0, z + gh)
-  meshes.push(new Mesh(fillBaked(backBar, netColor), envMaterial()))
-  // 后立柱（矮，挂网用）
-  for (const sy of [-1, 1]) {
-    const backPost = new BoxGeometry(postW, postW, gh * 0.6)
-    backPost.translate(backX, sy * gy, z + gh * 0.3)
-    meshes.push(new Mesh(fillBaked(backPost, netColor), envMaterial()))
-  }
-  // 顶网（稀疏网格，用薄板+透明不可行，改用细盒条）
-  for (let i = 1; i <= 4; i++) {
-    const t = i / 5
-    const yw = gy * 2 * (1 - t * 0.25)
-    const topStrut = new BoxGeometry(netDepth * (1 - t * 0.1), yw, postW * 0.5)
-    topStrut.translate((xE + backX) / 2, 0, z + gh * (1 - t * 0.15))
-    meshes.push(new Mesh(fillBaked(topStrut, netColor), envMaterial()))
-  }
-  for (const m of meshes) m.name = "Goal"
-  return meshes
 }
 
 /** 谷底高度：R0 以内是球桌所在的山顶平台，之外按 FLOOR_SLOPE 下降 */
@@ -3173,6 +1950,26 @@ const ROOM_HY = 4.0 // 房间半深（Y 向墙）
 export const INDOOR_CEIL_Z = 2.85
 /** 地面略低于 GROUND_Z，避免与桌脚/假阴影 z-fighting */
 const ROOM_FLOOR_Z = GROUND_Z - 0.004
+
+/**
+ * v1.8.9：每个场景「相机净空上界」—— 相机中心允许到达的最高 z。
+ *
+ * 与 INDOOR_CEIL_Z（顶棚显隐阈值）用途不同：那个是俯视时藏顶棚用的门限，
+ * 这个是限制全桌机位 / 回放自由机位**不要穿进天花板**的物理净空。
+ *
+ * 数值来自模型实测（取天花板板层底面，再留一点余量给相机近裁剪面）：
+ *   - room：`pool_scene_room.glb` Ceiling z[2.32,2.42]、Crown 2.16 → 2.32
+ *   - tea ：`pool_scene_tea.glb`  Ceiling z[2.30,2.40]、横梁 1.93 → 2.30
+ *   - cell/seed：顶部结构在 3.3~5.3，远高于任何机位上限(≤2.45)，不约束 → null
+ *   - snow/beach：户外无天花板 → null
+ *
+ * 未列出的场景一律 null（不约束），保持原行为。相机侧还会再减 CEIL_CLEARANCE。
+ */
+export const CAMERA_CEILING_Z: Record<string, number | null> = {
+  room: 2.32,
+  tea: 2.30,
+}
+
 
 /**
  * 道具禁区。瞄准相机绕球公转，最远能到 |x|≈1.408+0.786=2.19、
@@ -4214,13 +3011,42 @@ export function buildIndoorScene(sceneId: string): Group | null {
   let g: Group | null
   switch (sceneId) {
     case "room":
-      g = buildRoom()
-      break
+      // v1.7.0：优先用外部资源包的米制房间（泳池房：地板/墙/窗景/家具/
+      // 吊灯全套），异步到达后挂进这个空组；加载失败才回退程序化房间。
+      // 为什么要空组：buildIndoorScene 是同步接口，而 GLB 必须异步加载。
+      // 资源到达前画面里只有球桌（几十毫秒），可接受。
+      g = new Group()
+      g.name = "Room"
+      // v1.8.8：优先载资源包新版「现代台球厅」（pool_scene_room.glb，
+      // 写实 PBR 家具 + 玻璃吊灯 + 自绘装饰画）。它自带 16 球与球杆，
+      // loadPoolEnvironment 会按 Ball_XX / Cue_Placed 规则剔除，只留环境。
+      // 失败退回旧 pool_room.glb，再失败才用程序化房间。
+      const attach = (env: Group) => {
+        g!.add(env)
+        // 复用统一的阴影参与规则（地面/顶棚/墙只接收不投影）
+        applyIndoorShadows(g!)
+      }
+      loadPoolEnvironment("room")
+        .then(attach)
+        .catch((e) => {
+          console.warn(
+            "[room] 新版现代台球厅加载失败，回退旧房间:",
+            (e as Error)?.message
+          )
+          loadPoolRoom()
+            .then(attach)
+            .catch((e2) => {
+              console.warn(
+                "[room] 旧资源包房间加载失败，回退程序化房间:",
+                (e2 as Error)?.message
+              )
+              g!.add(buildRoom())
+            })
+        })
+      return g
     default:
       return null
   }
-  applyIndoorShadows(g)
-  return g
 }
 
 /**

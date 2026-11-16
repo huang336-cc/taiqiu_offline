@@ -7,7 +7,33 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0"
     />
     <title>游戏菜单</title>
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <!-- v1.8.8：本页是 play.html 的 iframe，独立同源文档，拿不到父页面的
+         实时属性 —— 必须自己读一次存档里的 uiTheme 再写到 <html>，
+         否则父页换成米白纸面时这里仍是深绿，白框里嵌一块黑。 -->
+    <script>
+      (function () {
+        var OK = { paper: 1, felt: 1, arcade: 1 };
+        var t = null;
+        try {
+          var raw = localStorage.getItem("billiards_cn_settings_v1");
+          var saved = raw ? JSON.parse(raw) : null;
+          if (saved && OK[saved.uiTheme]) t = saved.uiTheme;
+        } catch (e) {}
+        if (!OK[t]) t = "paper";
+        document.documentElement.setAttribute("data-ui-theme", t);
+        // 父页（play.html）打开菜单或存档主题变化时通过 postMessage 同步本 iframe
+        window.addEventListener("message", function (e) {
+          var d = e && e.data;
+          if (d && d.type === "billiards-theme" && OK[d.theme]) {
+            document.documentElement.setAttribute("data-ui-theme", d.theme);
+          }
+        });
+      })();
+    </script>
     <link rel="stylesheet" href="css/help-cn.css" />
+    <link rel="stylesheet" href="css/theme-tokens.css" />
+    <link rel="stylesheet" href="css/ui-theme-help.css" />
   </head>
   <body>
     <div class="tabs">
@@ -22,18 +48,18 @@
         <h3>触屏操作</h3>
         <ul>
           <li><b>左右拖动</b>：旋转瞄准方向</li>
-          <li><b>上下拖动</b>：调整视角俯仰</li>
-          <li><b>双指捏合</b>：缩放画面</li>
-          <li><b>击球按钮</b>：右下角圆形按钮，点击出杆</li>
+          <li><b>上下拖动</b>：抬高 / 降低镜头</li>
+          <li><b>双指捏合</b>：仅在「远台」视角下缩放画面</li>
+          <li><b>击球按钮</b>：底部操作栏最左侧的「击球」按钮，点击出杆（轮到你摆球时同一按钮显示为「摆球」）</li>
         </ul>
       </div>
       <div class="block">
         <h3>力度与杆法</h3>
         <ul>
           <li><b>力度条</b>：拖动调整，百分比实时显示</li>
-          <li><b>母球图示</b>：点选击球点，上=高杆，下=低杆，左右=加塞</li>
-          <li><b>「+」按钮</b>：调整球杆抬起角度</li>
-          <li><b>复位按钮</b>（圆盘左上角 ⟲）：一键把击球点恢复到正中心；双击母球图示也可复位</li>
+          <li><b>母球图示</b>：先点底部「击球点」按钮展开面板，再在白球上点选或拖出落点——上=高杆，下=低杆，左右=加塞</li>
+          <li><b>抬杆高度</b>：在「击球点」面板右侧拖动球杆，调整抬杆角度（用于跳球与弧线）</li>
+          <li><b>复位按钮</b>（击球点外框左上角 ⟲）：一键把击球点恢复到正中心</li>
           <li><b>细微瞄准条</b>：底部悬浮滑动条，左右拖动极精细修正瞄准角；滑块居中=本杆初始方向，松手自动归中，可一直拖动持续微调瞄准</li>
         </ul>
       </div>
@@ -46,8 +72,9 @@
               <path d="M12 6 L14 2 H22 L24 6 Z" fill="currentColor" stroke="none"/>
               <circle cx="18" cy="15" r="6" fill="none" stroke="currentColor" stroke-width="2.5"/>
             </svg>
-            循环切换：跟随 → 俯视 → 母球视角</li>
+            循环切换：瞄准 → 俯视 → 远台</li>
           <li>俯视视角适合观察全局与规划走位</li>
+          <li>远台视角可单指旋转、双指捏合缩放，看清整张球台与房间</li>
         </ul>
       </div>
     </div>
@@ -113,7 +140,7 @@
             <path d="M12 6 L14 2 H22 L24 6 Z" fill="currentColor" stroke="none"/>
             <circle cx="18" cy="15" r="6" fill="none" stroke="currentColor" stroke-width="2.5"/>
           </svg>
-          仅在「跟随 / 俯视」两视角间切换，不再拉远到母球视角。
+          只在「瞄准 / 俯视 / 远台」三档之间直接切换，不再自动拉远查看全台。
         </p>
       </div>
     </div>

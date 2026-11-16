@@ -13,6 +13,7 @@ import {
   MeshPhysicalMaterial,
   Scene,
   Line,
+  SphereGeometry,
 } from "three"
 import { State } from "../model/ball"
 import { norm, up, zero } from "./../utils/three-utils"
@@ -22,6 +23,7 @@ import { BallMaterialFactory } from "./ballmaterialfactory"
 import { Session } from "../network/client/session"
 import { BallAppearance } from "./ballappearance"
 import { Settings } from "../utils/settings"
+import { createPoolBallMaterial } from "./poolassets"
 
 export class BallMesh {
   private static _ballGeometry: IcosahedronGeometry
@@ -40,6 +42,25 @@ export class BallMesh {
       )
     }
     return this._ballGeometry
+  }
+
+  /**
+   * v1.7.0：带号码贴图的标准等距柱面球。
+   *
+   * 号码贴图是 1024×512 的 equirect（u=0.25/0.75 各一个号），必须用
+   * 有标准 UV 的 SphereGeometry；原来的 IcosahedronGeometry 没有 UV，
+   * 贴图只会采样到 (0,0)。细分度按画质档给（低端 32×20 ≈ 1.2k 面，
+   * 默认 48×32 ≈ 3k 面），单颗比资源包的 5k 面更省。
+   */
+  private static _poolBallGeometry: SphereGeometry
+  private static getPoolBallGeometry() {
+    if (!this._poolBallGeometry) {
+      const lod = Session.getLod()
+      const ws = lod <= 1 ? 32 : 48
+      const hs = lod <= 1 ? 20 : 32
+      this._poolBallGeometry = new SphereGeometry(R, ws, hs)
+    }
+    return this._poolBallGeometry
   }
 
   /**
@@ -94,7 +115,14 @@ export class BallMesh {
 
   private static getShadowMaterial() {
     if (!this._shadowMaterial) {
-      this._shadowMaterial = new MeshBasicMaterial({ color: 0x111122 })
+      // v1.7.0：新台呢更亮，原来的不透明深蓝圆盘像一块硬色斑。
+      // 改成半透明中性黑（略偏冷），保留「接地」而不抢视觉。
+      this._shadowMaterial = new MeshBasicMaterial({
+        color: 0x0b100c,
+        transparent: true,
+        opacity: 0.55,
+        depthWrite: false,
+      })
     }
     return this._shadowMaterial
   }
@@ -195,11 +223,42 @@ export class BallMesh {
   }
 
   initialiseMesh(color: Color, label?: number, appearance?: BallAppearance) {
-    let geometry: IcosahedronGeometry
+    let geometry: IcosahedronGeometry | SphereGeometry
     let material:
       MeshPhongMaterial | MeshStandardMaterial | MeshPhysicalMaterial
     const effectiveAppearance =
       appearance ?? (label === undefined ? "dotted" : "projected")
+
+    /**
+     * v1.7.0：中式八球 / 九球的 1~15 号球改用外部资源包贴图。
+     *
+     * - 1..15：equirect 号码贴图 + 清漆（MeshPhysicalMaterial）——
+     *   比原来「投影贴图」清晰得多，且带真实条纹/号码排版；
+     * - 母球（纯白）：同一球体几何 + 纯白清漆，**不使用**资源包里的
+     *   ball_00（那是带红点的训练球，v1.3.85 玩家明确反馈过「母球长红斑」）；
+     * - 斯诺克/三库的无号彩球（label === undefined）保持原路径，
+     *   它们没有号码，靠球体本色区分。
+     */
+    const isPoolNumbered =
+      typeof label === "number" && label >= 1 && label <= 15
+    const isCue = color.getHex() === 0xffffff
+    if (isPoolNumbered || (isCue && Settings.get().scene !== undefined)) {
+      geometry = BallMesh.getPoolBallGeometry()
+      material = createPoolBallMaterial(isPoolNumbered ? label! : 0, color)
+      this.mesh = new Mesh(geometry, material)
+      this.mesh.name = "ball"
+      this.mesh.castShadow = true
+      this.updateRotation(new Vector3().random(), 100)
+      this.shadow = new Mesh(
+        BallMesh.getShadowGeometry(),
+        BallMesh.getShadowMaterial()
+      )
+      this.shadow.visible = Settings.get().scene !== "snow"
+      this.spinAxisArrow = new ArrowHelper(up, zero, 2, 0x000000, 0.01, 0.01)
+      this.spinAxisArrow.visible = false
+      this.trace = new Trace(500, color)
+      return
+    }
 
     if (effectiveAppearance === "dotted") {
       /**

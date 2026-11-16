@@ -42,6 +42,9 @@ export interface GameSettings {
   keepAllViews: boolean
   /** 界面语言：zh=中文，en=英文 */
   language: "zh" | "en"
+  /** 界面主题（item 6）：paper=赛事记分卡，felt=绿绒球台，arcade=午夜记分板。
+   *  同时驱动首页与游戏内弹窗，切换时写 <html data-ui-theme> 并持久化。 */
+  uiTheme: "paper" | "felt" | "arcade"
 }
 
 const STORAGE_KEY = "billiards_cn_settings_v1"
@@ -73,6 +76,8 @@ const DEFAULTS: GameSettings = {
   keepAllViews: true,
   // v1.3.19：界面语言默认中文
   language: "zh",
+  // v1.8.7：界面主题默认赛事记分卡（paper）
+  uiTheme: "paper",
 }
 
 /** 皮肤列表 */
@@ -274,46 +279,26 @@ export interface TableSkinDef {
 }
 
 /**
- * ⚠️ v1.3.86：`frameColor` 必须「够亮」，否则桌身是一块死黑。
+ * v1.8.6：**球桌外观下线，只保留「经典原木」**。
  *
- * 桌身（GLTF 里材质名含 `wood` 的网格）的着色链路是
- * `frameColor × 木纹贴图 × 光照`。木纹贴图（`tableskinfactory.buildFrame`）
- * 用的是**相对**明暗 —— 在底色上叠 5~14% 的黑白拉丝 + 两个柔和暗斑。
+ * 此前这里有 13 款皮肤（经典原木 / 翡翠绿 / 赤焰红 / 蓝宝石 / 金辉 / 黑曜石黑 /
+ * 熔岩裂纹 / 霓虹蓝紫 / 朱红鎏金 / 全息银 / 粉色糖果 / 翡翠鎏金 / 紫夜流光），
+ * 主菜单「外观定制 → 球桌外观」进入二级面板逐款切换。用户要求只保留原木，
+ * 因此选项、面板与其余 12 套配色一并移除。
  *
- * 问题在于：底色越暗，这些相对变化在屏幕上越不可见。
- * v1.3.84 及之前的几款皮肤把 frameColor 压到了**线性亮度 0.002~0.025**
- * （如 lava `0x140402` = 0.0024、neon `0x0c0722` = 0.0035）——
- * 那个亮度下整个桌身在显示器上几乎是纯黑，木纹的 ±10% 变化全部落在
- * 0~20 的 8bit 区间里，肉眼完全分辨不出。用户反馈的「糟糕的 2d 场景」，
- * 桌身这块死黑是最直观的来源（占全景画面 30% 以上）。
+ * 保留的 `classic` 即「原木框 + 墨绿台呢」：台呢/库边/木框三者成一套协调主题，
+ * 也是历史默认值 —— 旧存档里存的其它 id 会在 `getTableSkin()` 里回退到本款，
+ * 不会白屏或报错。
  *
- * **判据**：`frameColor` 的显示 8bit 最大通道应落在 **70 ~ 110** 之间
- * （即「中等偏深的木框」）。低于 70 就会开始丢失木纹细节。
- * 已按此判据把 10 款过暗皮肤的桌框色提亮，全部保持原有色相：
- *
- * | 皮肤 | 原值 | 新值 | 原线性亮度 | 新线性亮度 |
- * |---|---|---|---|---|
- * | emerald | `0x0d3316` | `0x3d6b48` | 0.0251 | 0.1198 |
- * | crimson | `0x3a0c0c` | `0x6b3630` | 0.0119 | 0.0598 |
- * | sapphire | `0x081028` | `0x2e3d6b` | 0.0058 | 0.0498 |
- * | golden | `0x3a2408` | `0x6b4c22` | 0.0218 | 0.0841 |
- * | obsidian | `0x18181c` | `0x4a4a52` | 0.0093 | 0.0696 |
- * | lava | `0x140402` | `0x4a2820` | 0.0024 | 0.0308 |
- * | neon | `0x0c0722` | `0x39306b` | 0.0035 | 0.0405 |
- * | crimsonGold | `0x4a2e08` | `0x6b4c22` | 0.0343 | 0.0841 |
- * | violet | `0x1a0c34` | `0x45356b` | 0.0073 | 0.0487 |
- *
- * 带 `frameGlow` 的特效主题（发光框）不受此约束 —— 它们走金属/烤漆质感，
- * 本来就跳过木纹，且由自身发光提亮。
+ * `TableSkinDef` 的 `kind` / `clothTexture` 联合类型保留全部字面量：贴图工厂
+ * （tableskinfactory.ts）的分支仍需通过类型检查，实际运行时只会走 `classic`。
  */
 export const TABLE_SKINS: TableSkinDef[] = [
-  // —— 经典原「台球桌颜色」5 款（仅台呢/库边配色，无特效，合入统一外观设置）——
+  // v1.8.6：唯一保留的款式（原木框 + 墨绿台呢）。
   {
     id: "classic",
     name: "经典原木",
     kind: "classic",
-    // 经典台球桌外观：原木框 + 墨绿台呢（台呢取自 emerald 的经典绿，框保留原木暖棕），
-    // 库边用台呢的更深绿作为过渡，使台呢/库边/木框三者成一套协调的「原木绿台」主题。
     clothColor: 0x1f6b34,
     clothColor2: 0x124a22,
     clothTexture: "worsted",
@@ -327,219 +312,9 @@ export const TABLE_SKINS: TableSkinDef[] = [
     markStyle: { color: 0xf2ead6, alpha: 0.72, width: 5, spot: "pearl", glow: 0, dotted: true },
     swatch: "linear-gradient(135deg,#1f6b34 0%,#6a4a1a 100%)",
   },
-  {
-    id: "emerald",
-    name: "翡翠绿",
-    kind: "emerald",
-    clothColor: 0x2a7a3a,
-    clothColor2: 0x1a3a1a,
-    clothTexture: "leafvein",
-    cushionColor: 0x15501f,
-    frameColor: 0x3d6b48,
-    frameGlow: 0,
-    edgeGlow: 0,
-    diamondColor: 0xb8c9a0,
-    diamondGlow: 0,
-    cushionMetal: 0.02,
-    markStyle: { color: 0xeae3c8, alpha: 0.68, width: 5, spot: "pearl", glow: 0 },
-    swatch: "linear-gradient(135deg,#2a7a3a 0%,#0d3316 100%)",
-  },
-  {
-    id: "crimson",
-    name: "赤焰红",
-    kind: "crimson",
-    clothColor: 0x8a2a2a,
-    clothColor2: 0x4a0a0a,
-    clothTexture: "flame",
-    cushionColor: 0x5a1414,
-    frameColor: 0x6b3630,
-    frameGlow: 0,
-    edgeGlow: 0,
-    diamondColor: 0xc98a5a,
-    diamondGlow: 0,
-    cushionMetal: 0.02,
-    markStyle: { color: 0xf0dcae, alpha: 0.66, width: 5, spot: "gem", glow: 0 },
-    swatch: "linear-gradient(135deg,#8a2a2a 0%,#3a0c0c 100%)",
-  },
-  {
-    id: "sapphire",
-    name: "蓝宝石",
-    kind: "sapphire",
-    clothColor: 0x1a3a8a,
-    clothColor2: 0x0a1a4a,
-    clothTexture: "icecrack",
-    cushionColor: 0x0a2458,
-    frameColor: 0x2e3d6b,
-    frameGlow: 0,
-    edgeGlow: 0,
-    diamondColor: 0xa8c0d8,
-    diamondGlow: 0,
-    cushionMetal: 0.02,
-    markStyle: { color: 0xe6f0ff, alpha: 0.7, width: 5, spot: "frost", glow: 0, dotted: true },
-    swatch: "linear-gradient(135deg,#1a3a8a 0%,#081028 100%)",
-  },
-  {
-    id: "golden",
-    name: "金辉",
-    kind: "golden",
-    // 金辉主题：台呢提亮为更纯的暖金（与深棕木框形成金棕对比），库边取台呢与框之间的过渡金。
-    clothColor: 0xb8902f,
-    clothColor2: 0x6a4a14,
-    clothTexture: "goldleaf",
-    cushionColor: 0x8a6620,
-    frameColor: 0x6b4c22,
-    frameGlow: 0,
-    edgeGlow: 0,
-    diamondColor: 0xe0b860,
-    diamondGlow: 0,
-    cushionMetal: 0.12,
-    markStyle: { color: 0xe8c878, alpha: 0.78, width: 6, spot: "gem", glow: 0.15 },
-    swatch: "linear-gradient(135deg,#b8902f 0%,#3a2408 100%)",
-  },
-  // —— 新增 6 款台球桌皮肤（含桌框发光/纹理/边缘特效）——
-  {
-    id: "obsidian",
-    name: "黑曜石黑",
-    kind: "obsidian",
-    clothColor: 0x0a0a0c,
-    clothColor2: 0x1a1a20,
-    clothTexture: "glass",
-    cushionColor: 0x141416,
-    frameColor: 0x4a4a52,
-    frameGlow: 0x5a0d12,
-    edgeGlow: 0x8a1018,
-    diamondColor: 0x8a8f98,
-    diamondGlow: 0,
-    cushionMetal: 0.25,
-    markStyle: { color: 0x9aa0aa, alpha: 0.68, width: 5, spot: "obsidian", glow: 0 },
-    swatch: "linear-gradient(135deg,#1a1a20 0%,#8a1018 100%)",
-  },
-  {
-    id: "lava",
-    name: "熔岩裂纹",
-    kind: "lava",
-    clothColor: 0x140303,
-    clothColor2: 0x3a0808,
-    clothTexture: "lava",
-    cushionColor: 0x2a0804,
-    frameColor: 0x4a2820,
-    frameGlow: 0xff5a14,
-    edgeGlow: 0xff7a1f,
-    diamondColor: 0xff6a20,
-    diamondGlow: 0.55,
-    cushionMetal: 0.10,
-    markStyle: { color: 0xff5a14, alpha: 0.95, width: 7, spot: "glow", glow: 0.9 },
-    swatch: "linear-gradient(135deg,#3a0808 0%,#ff7a1f 100%)",
-  },
-  {
-    id: "neon",
-    name: "霓虹蓝紫",
-    kind: "neon",
-    clothColor: 0x0b0a2a,
-    clothColor2: 0x241046,
-    clothTexture: "neonstrip",
-    cushionColor: 0x13082e,
-    frameColor: 0x39306b,
-    frameGlow: 0x6a3cff,
-    edgeGlow: 0x13e6ff,
-    diamondColor: 0x18e8ff,
-    diamondGlow: 0.85,
-    cushionMetal: 0.15,
-    markStyle: { color: 0x13e6ff, alpha: 1.0, width: 7, spot: "glow", glow: 1.0 },
-    swatch: "linear-gradient(135deg,#241046 0%,#13e6ff 100%)",
-  },
-  {
-    id: "crimsonGold",
-    name: "朱红鎏金",
-    kind: "crimsonGold",
-    clothColor: 0x2a0606,
-    clothColor2: 0x5a0a0a,
-    clothTexture: "cloud",
-    cushionColor: 0x3a1406,
-    frameColor: 0x6b4c22,
-    frameGlow: 0xd9a23a,
-    edgeGlow: 0xf0c860,
-    diamondColor: 0xe8b040,
-    diamondGlow: 0,
-    cushionMetal: 0.18,
-    markStyle: { color: 0xf0c860, alpha: 0.8, width: 6, spot: "gold", glow: 0.25 },
-    swatch: "linear-gradient(135deg,#5a0a0a 0%,#d9a23a 100%)",
-  },
-  {
-    id: "holo",
-    name: "全息银",
-    kind: "holo",
-    clothColor: 0x8a909a,
-    clothColor2: 0xc8d0da,
-    clothTexture: "holo",
-    cushionColor: 0xb9c2cc,
-    frameColor: 0x9aa2ac,
-    frameGlow: 0x9fd0ff,
-    edgeGlow: 0xd0e8ff,
-    diamondColor: 0xd8e8f0,
-    diamondGlow: 0.35,
-    cushionMetal: 0.30,
-    markStyle: { color: 0xd8e8f0, alpha: 0.75, width: 6, spot: "pearl", glow: 0.3 },
-    swatch: "linear-gradient(135deg,#c8d0da 0%,#9fd0ff 100%)",
-  },
-  {
-    id: "candy",
-    name: "粉色糖果",
-    kind: "candy",
-    clothColor: 0xffc6dd,
-    clothColor2: 0xffe6f0,
-    clothTexture: "candy",
-    cushionColor: 0xffa8cf,
-    frameColor: 0xff9ec4,
-    frameGlow: 0xff7ab0,
-    edgeGlow: 0xffd0e8,
-    diamondColor: 0xffd8e4,
-    diamondGlow: 0.30,
-    cushionMetal: 0.05,
-    markStyle: { color: 0xfff0f6, alpha: 0.85, width: 6, spot: "candy", glow: 0.5, dotted: true },
-    swatch: "linear-gradient(135deg,#ffe6f0 0%,#ff7ab0 100%)",
-  },
-  {
-    // v1.3.61 新增：翡翠鎏金 —— 墨绿呢面 + 金色菱格网纹 + 鎏金框与金边，
-    // 与 crimsonGold（朱红底金云纹）同属「金饰」系，但底色是经典绿台，
-    // 喜欢传统绿台又想要华丽感的用户选它。
-    id: "emeraldGold",
-    name: "翡翠鎏金",
-    kind: "emeraldGold",
-    clothColor: 0x0e5c30,
-    clothColor2: 0x063318,
-    clothTexture: "gild",
-    cushionColor: 0x0a4423,
-    frameColor: 0x6a4a10,
-    frameGlow: 0xd9a23a,
-    edgeGlow: 0xf0c060,
-    diamondColor: 0xd9a23a,
-    diamondGlow: 0,
-    cushionMetal: 0.18,
-    markStyle: { color: 0xd9a23a, alpha: 0.8, width: 6, spot: "gold", glow: 0.2 },
-    swatch: "linear-gradient(135deg,#0e5c30 0%,#d9a23a 100%)",
-  },
-  {
-    // v1.3.61 新增：紫夜流光 —— 深紫呢面 + 洋红/青霓虹灯带 + 紫金框，
-    // 与 neon（霓虹蓝紫）同系但更暗、更浓郁，灯光感更强。
-    id: "violet",
-    name: "紫夜流光",
-    kind: "violet",
-    clothColor: 0x1c0a3e,
-    clothColor2: 0x35146b,
-    clothTexture: "neonstrip",
-    cushionColor: 0x241046,
-    frameColor: 0x45356b,
-    frameGlow: 0xc44dff,
-    edgeGlow: 0xff5ad0,
-    diamondColor: 0xff5ad0,
-    diamondGlow: 0.85,
-    cushionMetal: 0.15,
-    markStyle: { color: 0xff5ad0, alpha: 1.0, width: 7, spot: "glow", glow: 1.0 },
-    swatch: "linear-gradient(135deg,#1c0a3e 0%,#c44dff 100%)",
-  },
 ]
 
+/** v1.8.6：只剩经典原木；传入任何历史 id（obsidian / lava …）都回退到它。 */
 export function getTableSkin(id: string): TableSkinDef {
   return TABLE_SKINS.find((s) => s.id === id) ?? TABLE_SKINS[0]
 }
@@ -798,9 +573,11 @@ export interface EnvSceneDef {
     | "room"
     | "beach"
     | "snow"
-    | "football"
-    | "basketball"
-    | "ufc"
+    // v1.8.3：football / basketball / ufc 三个场景已下线
+    // v1.8.0：外部资源包新增的三个写实/奇幻环境场景
+    | "tea"
+    | "cell"
+    | "seed"
   swatch: string
   /**
    * 实景照片背景（Request D）：命中该项时，游戏背景直接用该照片做全屏
@@ -813,15 +590,13 @@ export const ENV_SCENES: EnvSceneDef[] = [
   { id: "room", name: "室内", wallA: 0x3a3f4b, wallB: 0x2a2e38, amb: 0xbfcad6, ambI: 0.55, kind: "room", swatch: "linear-gradient(135deg,#3a3f4b,#2a2e38)" },
   { id: "beach", name: "沙滩", wallA: 0xf4d9a0, wallB: 0xe0a85e, amb: 0xfff0d0, ambI: 0.72, kind: "beach", swatch: "linear-gradient(135deg,#f4d9a0,#e0a85e)" },
   { id: "snow", name: "雪山", wallA: 0xdbe7f0, wallB: 0xa6bace, amb: 0xeaf2ff, ambI: 0.82, kind: "snow", swatch: "linear-gradient(135deg,#dbe7f0,#a6bace)", photo: "assets/scenes/snow.jpg" },
-  { id: "football", name: "足球场", wallA: 0x2f7d32, wallB: 0x183d1a, amb: 0xdff5e0, ambI: 0.7, kind: "football", swatch: "linear-gradient(135deg,#2f7d32,#183d1a)", photo: "assets/scenes/football.jpg" },
-  { id: "basketball", name: "篮球场", wallA: 0xcaa05a, wallB: 0x9a6a2a, amb: 0xfff0d8, ambI: 0.72, kind: "basketball", swatch: "linear-gradient(135deg,#caa05a,#9a6a2a)", photo: "assets/scenes/basketball.jpg" },
-  // v1.3.65：UFC 八角笼。暗场馆 + 笼内聚光帆布，ambI 收到 0.6（暗场氛围，
-  // 但不能低于 room 的 0.55 太多，否则球桌本身看着发闷）。
-  // v1.3.65b：wallA/wallB（几何场景下仍作为房间盒子背景墙的贴图渐变，
-  // 在画面顶部露一条窄带）不能选 0x2b3138 一类的"clearColor 近亲"——
-  // 渲染器 clearColor 是 0x292f36=(41,47,54)，envcheck 的无空洞判据是
-  // 逐通道 |px-clear|>3，墙渐变整条必须留在该色盒之外（R≥46/G≥54/B≥66）。
-  { id: "ufc", name: "UFC八角笼", wallA: 0x3a4350, wallB: 0x2e3642, amb: 0xdfe6f0, ambI: 0.6, kind: "ufc", swatch: "linear-gradient(135deg,#3a4350,#2e3642)" },
+  // v1.8.3：下线「足球场 / 篮球场 / UFC 八角笼」三个场景。
+  // 保留在存档里的旧 id 由 Settings.get() 的白名单校验回落到雪山。
+  // v1.8.0：外部资源包 v2 的三个新环境（不含球桌，叠加在常驻球桌上）。
+  // wallA 只作为几何壳外的兜底清屏色，这几个场景都是全封闭布景。
+  { id: "tea", name: "中式茶室", wallA: 0x6b5138, wallB: 0x3b2b1c, amb: 0xffe6bd, ambI: 0.55, kind: "tea", swatch: "linear-gradient(135deg,#8a6a3e,#3b2b1c)" },
+  { id: "cell", name: "细胞培养舱", wallA: 0x2a3e46, wallB: 0x14232a, amb: 0xbfeaf0, ambI: 0.6, kind: "cell", swatch: "linear-gradient(135deg,#3d6a74,#14232a)" },
+  { id: "seed", name: "种子胚囊", wallA: 0xa9c46a, wallB: 0x6f8f3f, amb: 0xeaf7c8, ambI: 0.62, kind: "seed", swatch: "linear-gradient(135deg,#c7e08a,#6f8f3f)" },
 ]
 
 export function getEnvScene(id: string): EnvSceneDef {
@@ -897,6 +672,28 @@ export class Settings {
       merged.lod = detectRecommendedLod()
     }
     merged.lod = clampLod(merged.lod)
+    /**
+     * v1.8.3：场景持久化的同时做白名单校验。
+     *
+     * 旧存档里可能存着已下线场景（football / basketball / ufc），
+     * 或被人为改坏的 id —— 这些 id 在 ENV_SPECS 里没有对应项，
+     * applyScene 会拿到 undefined 而抛错。统一回落到雪山。
+     */
+    if (!ENV_SCENES.some((s) => s.id === merged.scene)) merged.scene = "snow"
+    /**
+     * v1.8.6：球桌外观只剩「经典原木」，旧存档里存的 emerald / obsidian /
+     * lava 等 id 一律归一。渲染层本来就有 `getTableSkin()` 回退兜底，
+     * 这里再做一次是为了让存档值与 UI 一致，避免设置面板 / 3D 预览拿到
+     * 一个已经不存在、但又不为空字符串的 id。
+     */
+    merged.tableSkin = "classic"
+    /**
+     * v1.8.7：界面主题白名单校验。旧存档没有 uiTheme 字段（merge 后为默认值
+     * paper），脏数据统一回落到 paper，避免 <html data-ui-theme> 写入非法值。
+     */
+    if (merged.uiTheme !== "paper" && merged.uiTheme !== "felt" && merged.uiTheme !== "arcade") {
+      merged.uiTheme = "paper"
+    }
     // v1.2.11 #F10：横向瞄准滑动条不再可关闭，强制恒 true。
     // 旧存档可能存了 false，这里纠正；UI 开关已从 help.html 删除。
     merged.aimSlider = true
@@ -918,10 +715,32 @@ export class Settings {
 
   static save() {
     try {
-      globalThis.localStorage?.setItem(
-        STORAGE_KEY,
-        JSON.stringify(Settings.get())
-      )
+      const s = Settings.get()
+      /**
+       * v1.8.8：uiTheme 是**跨页面共享**的字段 —— play.html 里的「界面主题」
+       * 按钮由一段内联脚本直接写 localStorage，不走 Settings。
+       * 而 Settings 持有自己的内存 cache，若这里直接写 cache，
+       * 用户在局内切到 arcade 后再调一次音量，就会把 uiTheme 回退成页面
+       * 加载时的旧值（刷新后主题"自己变回去"）。
+       * 写盘前先从磁盘取一次最新值，保证外部写入不被覆盖。
+       */
+      try {
+        const raw = globalThis.localStorage?.getItem(STORAGE_KEY)
+        if (raw) {
+          const disk = JSON.parse(raw)
+          if (
+            disk &&
+            (disk.uiTheme === "paper" ||
+              disk.uiTheme === "felt" ||
+              disk.uiTheme === "arcade")
+          ) {
+            s.uiTheme = disk.uiTheme
+          }
+        }
+      } catch {
+        /* 磁盘内容损坏：按内存值写回即可 */
+      }
+      globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(s))
     } catch (e) {
       // v1.1.10：不再静默吞错。鸿蒙 WebView 在低内存/折叠恢复时可能抛
       // QuotaExceededError，静默会导致 seenGuide 等状态只活在内存 cache，

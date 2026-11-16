@@ -58,18 +58,52 @@
     </script>
     <link rel="icon" type="image/png" href="favicon.png" />
     <link rel="stylesheet" href="css/menu-cn.css" />
+    <!-- v1.8.8 首页美学重构（设计准则：frontend-design + ui-ux-pro-max）：
+         独立的表现层覆盖文件，不改动任何交互 id / class。 -->
+    <!-- v1.8.7 统一主题：三套主题（paper/felt/arcade）同时驱动首页与游戏内弹窗。
+         优先级：URL ?theme=（选稿用，不写回存档）> localStorage uiTheme > paper。
+         data-home-theme 供首页 --hr-art-* 等专属 token 使用，data-ui-theme 供共用 token 使用，
+         两者始终写同一个值，保证首页与弹窗同步。此脚本必须在样式表之前执行，避免闪默认色。 -->
+    <script>
+      (function () {
+        var OK = { paper: 1, felt: 1, arcade: 1 };
+        var t = new URLSearchParams(location.search).get('theme');
+        if (!OK[t]) {
+          try {
+            var raw = localStorage.getItem('billiards_cn_settings_v1');
+            var saved = raw ? JSON.parse(raw) : null;
+            if (saved && OK[saved.uiTheme]) t = saved.uiTheme;
+          } catch (e) {}
+        }
+        if (!OK[t]) t = 'paper';
+        var root = document.documentElement;
+        root.setAttribute('data-ui-theme', t);
+        root.setAttribute('data-home-theme', t);
+      })();
+    </script>
+    <link rel="stylesheet" href="css/home-redesign.css" />
+    <!-- 共用主题 token（在 home-redesign.css 之后引入以覆盖 --hr-* 别名） -->
+    <link rel="stylesheet" href="css/theme-tokens.css" />
+    <!-- v1.8.8：二级屏 / 局域网面板的主题落地（纯覆盖层，变量来自 theme-tokens.css） -->
+    <link rel="stylesheet" href="css/ui-theme-pages.css" />
   </head>
   <body>
     <div class="app">
-      <!-- 主体：玩法选择（v1.3.9：重新加上克制的顶部标题 + 底部版本行作视觉锚点，配合
-           #screen-home 的 justify-content:space-between 把剩余空间均摊到各区段之间，
-           消除 v1.3.8 在外观定制 ▸ 与开始游戏之间残留的 60% 视口单一巨缝） -->
+      <!-- 主体：玩法选择。v1.8.7 首页美学重构：按用户要求不设品牌标题、也不放软件名——
+           名称在启动图标与下载页已经标明，首页再报一次没有必要。页面从 01 分区直接开始，
+           由分区编号建立节奏，中段铭牌吸收留白，以金色主按钮收口。 -->
       <main id="screen-home" class="screen active">
         <!-- v1.3.12：外观定制双端均默认展开（APP 端不再折叠）。
              APP 端（html.in-app）仍回退 v1.3.4 baseline（content 顶紧凑 + actions 贴底）；
              网页端（html:not(.in-app)）由 <details open> + sec-mode flex:1 撑满中段。
              v1.3.10 的 .home-hero / .home-footer 视觉锚点删除（信息密度已满）。 -->
         <section class="section sec-mode">
+          <div class="section-head">
+            <span class="section-no">01</span>
+            <span class="section-label">选择玩法</span>
+            <span class="section-rule"></span>
+            <span class="section-meta">4 种规则</span>
+          </div>
           <div class="mode-grid" id="modeGrid">
             <!-- v1.2.11 #F4：外层改为 div（button 内不能嵌套 button），
                  每张卡内新增「规则」按钮，点击弹出对应玩法规则与犯规说明。 -->
@@ -101,6 +135,12 @@
         </section>
 
         <section class="section sec-opponent">
+          <div class="section-head">
+            <span class="section-no">02</span>
+            <span class="section-label">对手</span>
+            <span class="section-rule"></span>
+            <span class="section-meta">练习 / 电脑 / 联机</span>
+          </div>
           <div class="seg" id="opponentSeg" role="tablist">
             <button class="seg-btn active" data-opponent="solo">
               <span class="seg-icon">●</span>自己练习
@@ -120,7 +160,14 @@
               <span class="seg-icon">●</span>局域网对战
             </button>
           </div>
-          <div class="lan-panel" id="lanPanel" hidden>
+          <div class="lan-panel" id="lanPanel" hidden role="dialog" aria-modal="true" aria-label="局域网对战">
+            <!-- v1.8.8：面板改为居中模态（原来内联在「02 对手」下方）。
+                 原因：内容高约 324px，而横屏首页能分给它的高度只有 ~130px ——
+                 v1.8.7 首页重构给 .sec-opponent 设了 min-height:0，面板会直接
+                 溢出并压在「03 外观定制 / 开始游戏」上面，两段文字互相盖住。
+                 改成 fixed 居中 + 自带遮罩后，首页布局完全不受影响，
+                 面板内容也一屏可见（超高时面板内部滚动）。 -->
+            <button type="button" class="lan-close" id="lanClose" aria-label="关闭">×</button>
             <!-- v1.3.93：局域网面板交互重做。
                  原版是「建房 / 加入」两行平铺 + 一行静态说明，问题有：
                   ① 两个按钮视觉等同，看不出「创建房间」是更常用的主操作；
@@ -177,7 +224,12 @@
              现按用户诉求"折叠功能删除，默认都展开"，彻底改为普通 <section>，
              双端（APP + 网页）一律永久展开，不再有 caret。 -->
         <section class="section sec-custom" id="customSection">
-          <h2 class="section-title sec-custom-title">外观定制</h2>
+          <div class="section-head">
+            <span class="section-no">03</span>
+            <span class="section-label">外观定制</span>
+            <span class="section-rule"></span>
+            <span class="section-meta">场景 / 球杆</span>
+          </div>
           <div class="menu-rows menu-tiles" id="customRows">
             <button class="menu-row" data-target="scene">
               <span class="menu-thumb skin-swatch" id="thumbScene"></span>
@@ -193,15 +245,44 @@
                 <span class="menu-row-val" id="valCue">随台面</span>
               </span>
             </button>
-            <button class="menu-row" data-target="tableskin">
-              <span class="menu-thumb skin-swatch" id="thumbTableSkin"></span>
-              <span class="menu-row-text">
-                <span class="menu-row-title">球桌外观</span>
-                <span class="menu-row-val" id="valTableSkin">经典原木</span>
-              </span>
-            </button>
           </div>
         </section>
+
+        <!-- v1.8.8：中段主视觉。旧版是「圆环 + 一句 slogan」浮在约 300px 纯黑上，
+             信息量为零、像占位符。这里换成一张纯 SVG 绘制的球台俯视示意图：
+             不依赖任何图片资源，颜色全部由主题变量驱动，三套皮肤自动换色。 -->
+        <div class="home-signature" aria-hidden="true">
+          <div class="home-art">
+            <svg viewBox="0 0 320 184" preserveAspectRatio="xMidYMid meet" role="presentation">
+              <rect class="art-frame" x="6" y="6" width="308" height="152" rx="12" />
+              <rect class="art-felt" x="20" y="20" width="280" height="124" rx="7" />
+              <g class="art-pockets">
+                <circle cx="10" cy="10" r="7" />
+                <circle cx="160" cy="10" r="7" />
+                <circle cx="310" cy="10" r="7" />
+                <circle cx="10" cy="154" r="7" />
+                <circle cx="160" cy="154" r="7" />
+                <circle cx="310" cy="154" r="7" />
+              </g>
+              <path class="art-line" d="M96 20 V144 M96 56 A26 26 0 0 0 96 108" />
+              <g class="art-balls">
+                <circle cx="196" cy="82" r="6.5" />
+                <circle cx="209" cy="74" r="6.5" />
+                <circle cx="209" cy="90" r="6.5" />
+                <circle cx="222" cy="66" r="6.5" />
+                <circle cx="222" cy="82" r="6.5" />
+                <circle cx="222" cy="98" r="6.5" />
+                <circle cx="235" cy="58" r="6.5" />
+                <circle cx="235" cy="90" r="6.5" />
+              </g>
+              <circle class="art-cueball" cx="62" cy="82" r="6.5" />
+              <path class="art-cue" d="M16 138 L56 88" />
+              <text class="art-note" x="8" y="178">HEAD STRING</text>
+              <text class="art-note" x="312" y="178" text-anchor="end">RACK / BREAK</text>
+            </svg>
+          </div>
+          <span class="signature-text">摆好球，开一局</span>
+        </div>
 
         <div class="actions">
           <button class="btn btn-primary btn-start" id="btnStart">
@@ -231,14 +312,14 @@
             <button class="skin-card" data-scene="snow" data-pattern="snow" data-c1="#dbe7f0" data-c2="#a6bace" data-photo="assets/scenes/snow.jpg">
               <span class="skin-swatch"></span><span class="skin-name">雪山</span>
             </button>
-            <button class="skin-card" data-scene="football" data-pattern="football" data-c1="#2f7d32" data-c2="#183d1a" data-photo="assets/scenes/football.jpg">
-              <span class="skin-swatch"></span><span class="skin-name">足球场</span>
+            <button class="skin-card" data-scene="tea" data-pattern="room" data-c1="#8a6a3e" data-c2="#3b2b1c">
+              <span class="skin-swatch"></span><span class="skin-name">中式茶室</span>
             </button>
-            <button class="skin-card" data-scene="basketball" data-pattern="basketball" data-c1="#caa05a" data-c2="#9a6a2a" data-photo="assets/scenes/basketball.jpg">
-              <span class="skin-swatch"></span><span class="skin-name">篮球场</span>
+            <button class="skin-card" data-scene="cell" data-pattern="room" data-c1="#3d6a74" data-c2="#14232a">
+              <span class="skin-swatch"></span><span class="skin-name">细胞培养舱</span>
             </button>
-            <button class="skin-card" data-scene="ufc" data-pattern="ufc" data-c1="#3a4350" data-c2="#2e3642">
-              <span class="skin-swatch"></span><span class="skin-name">UFC八角笼</span>
+            <button class="skin-card" data-scene="seed" data-pattern="room" data-c1="#c7e08a" data-c2="#6f8f3f">
+              <span class="skin-swatch"></span><span class="skin-name">种子胚囊</span>
             </button>
           </div>
         </div>
@@ -313,55 +394,6 @@
         <button class="btn btn-primary back-btn" data-back>返回</button>
       </section>
 
-      <!-- 台球桌外观二级菜单（原「台球桌颜色」5 款 + 「台球桌皮肤」6 款，已合二为一） -->
-      <section id="screen-tableskin" class="screen">
-        <h2 class="screen-title">球桌外观</h2>
-        <div class="scroll">
-          <p class="seg-hint">点击色块即可实时更换台呢、桌框、纹理与边缘发光特效（球杆随台面自动协调）</p>
-          <div class="skin-cards" id="tableSkinCards">
-            <button class="skin-card" data-tableskin="classic" data-c1="#dac39e" data-c2="#6a4a1a">
-              <span class="skin-swatch"></span><span class="skin-name">经典原木</span>
-            </button>
-            <button class="skin-card" data-tableskin="emerald" data-c1="#2a7a3a" data-c2="#11401f">
-              <span class="skin-swatch"></span><span class="skin-name">翡翠绿</span>
-            </button>
-            <button class="skin-card" data-tableskin="crimson" data-c1="#8a2a2a" data-c2="#5a1414">
-              <span class="skin-swatch"></span><span class="skin-name">赤焰红</span>
-            </button>
-            <button class="skin-card" data-tableskin="sapphire" data-c1="#1a3a8a" data-c2="#0a1840">
-              <span class="skin-swatch"></span><span class="skin-name">蓝宝石</span>
-            </button>
-            <button class="skin-card" data-tableskin="golden" data-c1="#8a6a2a" data-c2="#4a2a0a">
-              <span class="skin-swatch"></span><span class="skin-name">金辉</span>
-            </button>
-            <button class="skin-card" data-tableskin="obsidian" data-c1="#1a1a20" data-c2="#5a0d12">
-              <span class="skin-swatch"></span><span class="skin-name">黑曜石黑</span>
-            </button>
-            <button class="skin-card" data-tableskin="lava" data-c1="#3a0808" data-c2="#ff7a1f">
-              <span class="skin-swatch"></span><span class="skin-name">熔岩裂纹</span>
-            </button>
-            <button class="skin-card" data-tableskin="neon" data-c1="#241046" data-c2="#13e6ff">
-              <span class="skin-swatch"></span><span class="skin-name">霓虹蓝紫</span>
-            </button>
-            <button class="skin-card" data-tableskin="crimsonGold" data-c1="#5a0a0a" data-c2="#d9a23a">
-              <span class="skin-swatch"></span><span class="skin-name">朱红鎏金</span>
-            </button>
-            <button class="skin-card" data-tableskin="holo" data-c1="#c8d0da" data-c2="#9fd0ff">
-              <span class="skin-swatch"></span><span class="skin-name">全息银</span>
-            </button>
-            <button class="skin-card" data-tableskin="candy" data-c1="#ffe6f0" data-c2="#ff7ab0">
-              <span class="skin-swatch"></span><span class="skin-name">粉色糖果</span>
-            </button>
-            <button class="skin-card" data-tableskin="emeraldGold" data-c1="#0e5c30" data-c2="#d9a23a">
-              <span class="skin-swatch"></span><span class="skin-name">翡翠鎏金</span>
-            </button>
-            <button class="skin-card" data-tableskin="violet" data-c1="#1c0a3e" data-c2="#c44dff">
-              <span class="skin-swatch"></span><span class="skin-name">紫夜流光</span>
-            </button>
-          </div>
-        </div>
-        <button class="btn btn-primary back-btn" data-back>返回</button>
-      </section>
 
       <!-- 操作介绍 -->
       <section id="screen-guide" class="screen">
@@ -371,9 +403,9 @@
             <h3>基本操作</h3>
             <ul class="guide-list">
               <li><b>旋转视角</b>：在球桌上单指左右拖动</li>
-              <li><b>调整俯仰</b>：单指上下拖动</li>
-              <li><b>缩放画面</b>：双指捏合放大 / 缩小</li>
-              <li><b>击球</b>：点击右下角的「击球」按钮</li>
+              <li><b>调整镜头</b>：单指上下拖动，抬高 / 降低机位</li>
+              <li><b>缩放画面</b>：切到「远台」视角后双指捏合缩放</li>
+              <li><b>击球</b>：点击底部操作栏最左侧的「击球」按钮</li>
               <li><b>力度</b>：拖动底部栏的力度条设定击球力量，百分比实时显示；击球后力度条维持设定值，下一杆可直接沿用</li>
             </ul>
           </div>
@@ -382,12 +414,12 @@
             <h3>加塞与杆法</h3>
             <ul class="guide-list">
               <li>
-                <b>击球点</b>：点开底部栏「击球点」展开母球圆盘，在盘上点选落点——偏上为高杆（跟进）、偏下为低杆（缩杆）、左右为左右塞（加塞走位）
+                <b>击球点</b>：点底部操作栏的「击球点」按钮展开母球面板，在盘上点选或拖出落点——偏上为高杆（跟进）、偏下为低杆（缩杆）、左右为左右塞（加塞走位）
               </li>
               <li>
-                <b>抬杆角度</b>：点击母球圆盘旁的「+」，可抬高球杆角度，用于跳球或打出弧线
+                <b>抬杆角度</b>：在面板右侧「抬杆高度」区拖动球杆，抬高杆尾角度，用于跳球或打出弧线
               </li>
-              <li><b>复位</b>：双击母球圆盘中心，击球点恢复正中心</li>
+              <li><b>复位</b>：点击面板左上角的 ⟲ 按钮，击球点立刻回到正中心</li>
             </ul>
             <div class="guide-fig" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-top:8px">
               <svg viewBox="0 0 130 130" width="118" height="118" aria-hidden="true" style="flex:0 0 auto">
@@ -409,7 +441,7 @@
                   <stop offset="0" stop-color="#f0a23a"/><stop offset="1" stop-color="#e23b2e"/>
                 </linearGradient></defs>
                 <circle cx="122" cy="35" r="13" fill="#111" stroke="#fff" stroke-width="2"/>
-                <text x="122" y="62" text-anchor="middle" font-size="11" fill="#f3d79a">力度 ≈ 60%</text>
+                <text x="122" y="62" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.7">力度 ≈ 60%</text>
               </svg>
             </div>
           </div>
@@ -417,8 +449,8 @@
           <div class="guide-block">
             <h3>摆球（自由球）</h3>
             <ul class="guide-list">
-              <li>对手犯规后你将获得自由球，可拖动母球到任意合法位置</li>
-              <li>确定位置后点击「击球」进入瞄准</li>
+              <li>对手犯规或开局摆球时，用单指在台面上点击 / 拖动，把母球放到任意合法位置</li>
+              <li>位置确定后点击「击球」按钮，进入瞄准</li>
             </ul>
           </div>
 
@@ -426,15 +458,16 @@
             <h3>视角切换</h3>
             <ul class="guide-list">
               <li>
-                点击右下角
+                点击底部操作栏的
                 <svg viewBox="0 0 36 28" style="width:1.05em;height:1.05em;vertical-align:-0.2em;color:inherit" aria-hidden="true">
                   <rect x="2" y="6" width="32" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/>
                   <path d="M12 6 L14 2 H22 L24 6 Z" fill="currentColor" stroke="none"/>
                   <circle cx="18" cy="15" r="6" fill="none" stroke="currentColor" stroke-width="2.5"/>
                 </svg>
-                按钮循环切换：跟随视角 → 俯视全局 → 母球视角
+                按钮循环切换：瞄准视角 → 俯视全局 → 远台
               </li>
               <li>俯视视角便于观察整体球型和走位路线</li>
+              <li>远台视角可单指旋转、双指捏合缩放，看清整张球台与房间</li>
             </ul>
           </div>
 
@@ -466,6 +499,17 @@
                「外观与场景」已在 v1.3.59 删除；语言切换/画质档位与电脑端首页
                「设置」面板重复，且会在这里抛 null（只删 DOM 不删 JS 启动即
                抛白屏），故一并清理。 -->
+
+          <!-- v1.8.7：界面主题三选一，同时切换首页与游戏内弹窗配色 -->
+          <div class="setting-group">
+            <h3>界面主题</h3>
+            <div class="seg" id="uiThemeSeg" role="tablist" aria-label="界面主题">
+              <button type="button" class="seg-btn" data-theme-value="paper" role="tab">米白</button>
+              <button type="button" class="seg-btn" data-theme-value="felt" role="tab">绿绒</button>
+              <button type="button" class="seg-btn" data-theme-value="arcade" role="tab">午夜</button>
+            </div>
+            <p class="setting-hint">切换首页与游戏内弹窗的整体配色，选择会自动保存。</p>
+          </div>
 
           <div class="setting-group">
             <h3>声音</h3>
@@ -533,7 +577,7 @@
                 <path d="M12 6 L14 2 H22 L24 6 Z" fill="currentColor" stroke="none"/>
                 <circle cx="18" cy="15" r="6" fill="none" stroke="currentColor" stroke-width="2.5"/>
               </svg>
-              仅在「跟随 / 俯视」两视角间切换，不再拉远到母球视角。</p>
+              只在「瞄准 / 俯视 / 远台」三档之间直接切换，不再自动拉远查看全台。</p>
           </div>
 
 <!-- v1.3.59：「外观与场景」整组从游戏设置移除 —— 台球桌外观（v1.3.58 已删）、
@@ -566,7 +610,7 @@
               </select>
             </div>
             <p class="about-text dim" style="margin-top:6px">
-              仅在「电脑 / 电脑·激进」模式下生效。超时未击球则本回合判负。
+              仅电脑对战（稳健 / 激进 / 专业）生效。倒计时结束时若还没出杆，会自动按当前力度与瞄准方向出杆。
             </p>
           </div>
 
@@ -807,7 +851,7 @@
     </div>
 
     <script>
-      window.__BILLIARDS_VERSION__ = "1.6.1-26101620";
+      window.__BILLIARDS_VERSION__ = "1.8.11-26111618";
     </script>
     <script src="menu-cn.js"></script>
     <script>

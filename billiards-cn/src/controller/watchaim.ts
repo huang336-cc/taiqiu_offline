@@ -1,7 +1,9 @@
 import { AimEvent } from "../events/aimevent"
 import { HitEvent } from "../events/hitevent"
 import { BreakEvent } from "../events/breakevent"
+import { StartAimEvent } from "../events/startaimevent"
 import { WatchShot } from "./watchshot"
+import { Aim } from "./aim"
 import { ControllerBase } from "./controllerbase"
 
 export class WatchAim extends ControllerBase {
@@ -32,6 +34,19 @@ export class WatchAim extends ControllerBase {
     this.container.table.cueball.offTable = false
     this.container.table.cue.updateAimInput()
     return this
+  }
+
+  /**
+   * v1.8.4：收到「轮到你」的 StartAimEvent 却还停在观战瞄准时，切回自己的
+   * 瞄准态。
+   *
+   * 正常换手是由 WatchShot 接住这条事件的；但重连快照恢复时，客机会先被
+   * WatchEvent 带进 WatchAim（为了拿到球位），如果当前其实是客机的回合，
+   * 就必须能从这里切回 Aim，否则重连后一直看着"自己不能打"。
+   */
+  override handleStartAim(_: StartAimEvent) {
+    this.container.rules.startTurn()
+    return new Aim(this.container)
   }
 
   override handleBreak(event: BreakEvent) {

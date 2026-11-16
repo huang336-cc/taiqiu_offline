@@ -192,8 +192,9 @@ label {
   transform: translate(-50%, -50%);
   width: min(90%, 380px);
   height: min(90%, 620px);
-  background: rgb(0 0 0 / 100%);
-  border: 1px solid rgb(255 255 255 / 25%);
+  /* v1.8.7：兜底保留原纯黑；ingame-cn.css 的覆盖与主题 token 生效 */
+  background: var(--ui-panel-bottom, rgb(0 0 0 / 100%));
+  border: 1px solid var(--ui-panel-border, rgb(255 255 255 / 25%));
   border-radius: 12px;
   display: flex;
   flex-direction: column;
@@ -229,9 +230,10 @@ label {
 .lobby-btn,
 #helpClose {
   padding: 6px 6px;
-  background: rgb(255 255 255 / 10%);
-  color: white;
-  border: 1px solid rgb(255 255 255 / 20%);
+  /* v1.8.7：帮助浮层按钮主题化（兜底保留原白字半透明） */
+  background: var(--ui-btn-bg, rgb(255 255 255 / 10%));
+  color: var(--ui-btn-ink, white);
+  border: 1px solid var(--ui-btn-border, rgb(255 255 255 / 20%));
   border-radius: 6px;
   cursor: pointer;
   font-size: 13px;
@@ -240,8 +242,8 @@ label {
 
 .lobby-btn:hover,
 #helpClose:hover {
-  background: rgb(255 255 255 / 20%);
-  border-color: rgb(255 255 255 / 40%);
+  filter: brightness(1.12);
+  border-color: var(--ui-accent, rgb(255 255 255 / 40%));
 }
 
 #botDebugLog::-webkit-scrollbar-thumb:hover {

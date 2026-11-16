@@ -48,9 +48,17 @@ if [ -n "$VERSION" ]; then
     VERSION_CODE="$FORCE_VERSION_CODE"
     echo "[版本] 使用显式 versionCode：$VERSION_CODE"
   else
-    PATCH="${VERSION##*.}"                       # 1.3.22 -> 22
-    VC_DATE="$(date +%y%m%d)"                    # 2026-08-25 -> 260825
-    VERSION_CODE="${VC_DATE}${PATCH}"            # -> 26082522
+    # v1.8.5：默认算法重写。原「日期 + 修订末位」把 1.8.4 算成 2611154（7 位），
+    # 而历史包都是 9 位（v1.8.3 = 261113803），数值小了近百倍 → 安卓判为降级、
+    # 直接拒绝安装。现按历史实际值反推为 YYMMDD + (次版本×100 + 修订)：
+    #   v1.8.3 -> 261113 + 803 = 261113803
+    #   v1.8.5 -> 261115 + 805 = 261115805
+    # 恒为 9 位且单调递增（日期增长天然大于同日后缀增长），不再需要手工 FORCE。
+    VC_DATE="$(date +%y%m%d)"                    # 2026-11-15 -> 261115
+    VC_MINOR="$(echo "$VERSION" | cut -d. -f2)"
+    VC_PATCH="$(echo "$VERSION" | cut -d. -f3)"
+    VC_SERIAL=$(( 10#$VC_MINOR * 100 + 10#$VC_PATCH ))
+    VERSION_CODE="${VC_DATE}$(printf '%03d' "$VC_SERIAL")"
   fi
   echo "[版本] 将 AndroidManifest 的 versionName/versionCode 同步为 $VERSION / $VERSION_CODE"
   sed -i -E "s/android:versionName=\"[^\"]*\"/android:versionName=\"$VERSION\"/" AndroidManifest.xml

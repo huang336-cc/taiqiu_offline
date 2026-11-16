@@ -6,11 +6,14 @@ import { R } from "../model/physics/constants"
 import { Settings } from "../utils/settings"
 
 export class Camera {
-  // v1.1.42：第一人称（aimView）视野再次回调 —— v1.1.41 的 R*20/R*8 仍偏紧，
-  // 在很多球位下看不到前方袋口和被击球；拉到 R*24/R*9，注视点从 +1.5R 抬到 +2R，
-  // FOV 内能稳定框到「球杆前段 + 完整白球 + 被击球 + 前方袋口」四件套。
-  static defaultHeight = R * 9
-  static defaultDistance = R * 24
+  // v1.8.1：瞄准机位再拉远一档。用户反馈「画面几乎全是台呢、看不到球桌与房间」。
+  // 距离 R*24→R*32、高度 R*9→R*12、注视抬升 R*6→R*8 —— 三者按比例放大，
+  // 俯角 atan((h−lift)/d) 保持 ≈7.1° 不变，所以台呢占比不会上升（注释里
+  // 实测过的「抬高就变俯视图」那个坑不会重现），但视锥在远处覆盖的面积
+  // 变大，房间与球桌侧裙自然多进来。球在画面里的直径从 62px 降到 47px
+  // （1280×720），仍在可瞄范围。
+  static defaultHeight = R * 12
+  static defaultDistance = R * 32
   static defaultFovOffset = 0
 
   // 横屏横向 FOV 上限（度）。超过该宽高比时收窄纵向 FOV，使横向 FOV 回到此值，
@@ -36,6 +39,19 @@ export class Camera {
   private mainMode = this.aimView
   private height = Camera.defaultHeight
   isZoomedOut = false
+  /**
+   * v1.8.4：用户是否手动选过视角。
+   *
+   * 病根（局域网「对手回合无法切换视角」）：每次进入 WatchAim / Aim 都会
+   * `suggestMode(...)`。用户把视角切到「瞄准」后 mainMode 变成 aimView，
+   * 下一杆 WatchAim 构造里的 suggestMode(topView) 恰好命中
+   * `mainMode === aimView` 分支，于是又被打回俯视 —— 用户点一下被夺走一次，
+   * 表现为「对手回合切不了视角」（其实切了，只是下一帧就被改回去）。
+   *
+   * 现在手动切换会置位，suggestMode 不再覆盖；系统强制场景（回放 / 结算 /
+   * 观战）走 forceMode，会清掉这个标记。
+   */
+  private userPinned = false
 
   private readonly target = new Vector3()
   private readonly lookTarget = new Vector3()
@@ -49,9 +65,18 @@ export class Camera {
   elapsed: number
   private t = 0
 
+  /** v1.8.2：记录上一帧的机位，用于检测「刚切进全桌机位」这一瞬间。 */
+  private prevMode: any = this.mode
+  /** v1.8.2：刚切进全桌机位时直接跳位，不做插值（防过渡帧穿天花板）。 */
+  private farSnap = false
+
   update(elapsed, aim: AimEvent) {
     this.elapsed = elapsed
     this.t += elapsed
+    if (this.mode === this.farView && this.prevMode !== this.farView) {
+      this.farSnap = true
+    }
+    this.prevMode = this.mode
     this.mode(aim)
   }
 
@@ -106,46 +131,236 @@ export class Camera {
   }
 
   /**
-   * v1.3.100：远台跟随视角（farView）——「拉远版的瞄准视角」。
+   * v1.8.1：远台视角改成**全桌机位**（原来的「拉远版瞄准」作废）。
    *
-   * 需求变更：v1.3.99 的 farView 是**固定在球台 +Y 端线外**的静态机位，
-   * 用户要求改成**跟随球杆**：相机站在母球后方、沿当前出杆方向看向前方，
-   * 与 aimView 同源，只是**距离更远、高度更高**，因此一屏能看见更完整的
-   * 台面与房间，适合观察全局球势。
+   * 用户反馈「希望看到球桌腿和场景背景」。这件事在「跟随母球 + 沿击球方向」
+   * 的机位上是**几何上做不到**的：相机永远在台面上方沿台面纵深看，画面下缘
+   * 必然先落在台呢上，桌子侧裙与桌腿被台面自己挡住。实测 d=R*44、h=R*30
+   * 仍只能看到近端库边的一角。唯一能看到桌腿的构图是离开球台纵轴、站到
+   * 桌子斜上方外侧。
    *
-   * 与 aimView 的差异（都在同一套「母球后方 + 出杆方向」几何上）：
-   *   - 距离：aimView 用 `this.distance`（默认 R*24 ≈ 0.79m，贴台）；
-   *     farView 用 `FAR_DISTANCE = R*73 ≈ 2.39m`，明显退远。
-   *   - 高度：aimView 用 `this.height`（默认 R*9 ≈ 0.295m，近台面平视）；
-   *     farView 用 `FAR_HEIGHT = 1.10m`，略高于瞄准、略带俯瞰。
-   *   - 注视抬升：aimView 用 `AIM_LOOK_LIFT = R*6`；farView 用
-   *     `FAR_LOOK_LIFT = R*10`（≈0.33m），因相机更高，需同步抬高注视点
-   *     才能让视线不过分下压、把房间带进画面。
+   * v1.8.2：用户要求「不要固定机位，让用户自行旋转移动」。改为绕**固定注视
+   * 点**做球面运动（yaw / pitch / dist），手势见 `src/view/far-gestures.ts`。
+   * 注视点恒为 FAR_TARGET，因此无论怎么转都对着球桌，不会「转丢」；pitch 与
+   * dist 有夹限，既不会钻到台面以下，也不会远到看不见球。
    *
-   * 坐标系：世界 Z-up，球台居中于原点，台面在 z≈0。房间天花板 z=2.85，
-   * 相机高度 1.10m 远低于天花板，不会穿顶。
+   * 初值由 v1.8.1 那组固定机位反解，保证**切换后的首屏构图逐像素不变**：
+   *   delta = FAR_POS − FAR_TARGET = (2.35, −2.80, 2.07)
+   *   dist  = |delta| ≈ 4.201
+   *   pitch = asin(2.07 / dist) ≈ 0.5152 rad (29.5°)
+   *   yaw   = atan2(−2.80, 2.35) ≈ −0.8735 rad (−50°)
    *
-   * 横屏专用：本版**只做横屏**（竖屏不做），因此不做竖屏 FOV 收窄分支，
-   * 统一走 `adaptiveFov`（横屏受 60° 横向上限约束）。
+   * ⚠️ 与回放自由视角 `freeCam` **完全隔离**：`orbitFreeBy` / `zoomFreeBy` /
+   * `replayFreeView` 一行不改，两套参数互不污染。
    */
-  private static readonly FAR_DISTANCE = R * 73
-  private static readonly FAR_HEIGHT = 1.10
-  private static readonly FAR_FOV = 42
-  private static readonly FAR_LOOK_LIFT = R * 10
+  private static readonly FAR_TARGET = new Vector3(0, -0.05, -0.15)
+  private static readonly FAR_FOV = 44
+  private static readonly FAR_DELTA = new Vector3(2.35, -2.8, 2.07)
+  private static readonly FAR_DIST = Camera.FAR_DELTA.length()
+  private static readonly FAR_YAW = Math.atan2(
+    Camera.FAR_DELTA.y,
+    Camera.FAR_DELTA.x
+  )
+  private static readonly FAR_PITCH = Math.asin(
+    Camera.FAR_DELTA.z / Camera.FAR_DIST
+  )
+  private static readonly FAR_PITCH_MIN = 0.18
+  private static readonly FAR_PITCH_MAX = 1.45
+  private static readonly FAR_DIST_MIN = R * 14
+  /**
+   * v1.8.2：上限必须大于初始 dist≈4.201。沿用回放自由视角的 R*95(=3.11)
+   * 会让「第一次滚轮拉远」直接被夹回 3.11，画面反而突然拉近 —— 实机探针
+   * S3 抓到。取 R*200≈6.55，比默认远 56%，够看清整个房间。
+   */
+  private static readonly FAR_DIST_MAX = R * 200
 
-  farView(aim: AimEvent) {
-    // 横屏专用：与 aimView 同款自适应 FOV（横屏横向上限 60°）
+  /**
+   * v1.8.2 修复：自由机位必须留在房间内，否则会看到墙的背面。
+   *
+   * pool_room.glb 房间外壳 bbox 约 x∈[−3.8,3.8]、y∈[−2.9,2.93]、天花板 z≈2.6。
+   * 默认机位 (2.35,−2.85,1.92) 已经贴着 −y 墙内侧；一旦用户把 yaw 转向 −y
+   * 或滚轮拉远，球面位置就会穿出墙面（实机六角度验收抓到 y=−3.71/−4.04
+   * 的三个机位），相机从墙外朝球桌看，整片米色、球桌完全消失。
+   *
+   * 做法：沿「注视点 → 相机」方向对安全盒求交，把 dist 夹到交点内侧。
+   * yaw/pitch 方向完全保留（旋转自由度不受影响），只是拉远时相机停在墙内侧。
+   * −y 下界取 −2.85 与默认机位一致，保证首屏构图与 v1.8.1 逐像素相同。
+   */
+  private static readonly FAR_ROOM_MIN = new Vector3(-3.4, -2.85, 0.45)
+  private static readonly FAR_ROOM_MAX = new Vector3(3.4, 2.55, 2.45)
+
+  /**
+   * v1.8.9：相机允许的最高 z —— 必须低于当前场景真实天花板，否则会穿顶白屏。
+   *
+   * 病史：上面 FAR_ROOM_MAX.z=2.45 是按**旧** `pool_room.glb` 天花板(z≈2.6)
+   * 定的。v1.8.8 合入的新场景 `pool_scene_room.glb` / `pool_scene_tea.glb`
+   * 天花板底只有 z≈2.30~2.32（Crown 装饰更低到 2.16），于是拖动全桌机位
+   * 抬高 pitch(>0.75) 时相机 z 被夹到 2.45 —— 已经钻进/穿过天花板板层，
+   * 从上方俯拍，米白色天花板挡在相机与球桌之间 = 整片白屏（用户报「挪动
+   * 视角遮挡摄像机白屏」）。回放自由视角更严重：原本无任何净空约束，z 可
+   * 达 3.09，必然穿顶。
+   *
+   * 修法：顶棚高度由 View.applyScene 按当前场景注入（室内=天花板底−余量，
+   * 户外=保持原 FAR_ROOM_MAX.z 的宽限值）。farPosition 与 replayFreeView
+   * 都把相机 z 夹到 `min(净空上界, ceilingZ − 余量)` 之内。
+   * 默认取 FAR_ROOM_MAX.z（户外/未注入场景仍按老行为），不改变雪山首屏。
+   */
+  /**
+   * null = 户外 / 无天花板场景，保持原有 z 行为（雪山回放机位不受影响）；
+   * 数字 = 当前室内场景天花板底高度，相机必须待在其下方。
+   */
+  private ceilingZ: number | null = null
+  /** 相机中心到天花板必须保留的余量（球桌上方吊灯/装饰的安全间隙）。 */
+  private static readonly CEIL_CLEARANCE = 0.18
+
+  /** 由 View.applyScene 注入当前场景的顶棚高度；传 null 表示不限制。 */
+  setCeilingZ(z: number | null) {
+    this.ceilingZ = z
+  }
+
+  /** 当前场景下相机 z 的实际上界（far 视角求交用）。 */
+  private cameraCeilZ(): number {
+    return this.ceilingZ === null
+      ? Camera.FAR_ROOM_MAX.z
+      : Math.min(Camera.FAR_ROOM_MAX.z, this.ceilingZ - Camera.CEIL_CLEARANCE)
+  }
+
+  /**
+   * v1.8.11：瞄准视角（aimView）专用净空余量。
+   *
+   * 回放/far 视角用 CEIL_CLEARANCE=0.18 即可（它们在房间中部、注视点也在台面），
+   * 但瞄准视角的相机是**贴着击球方向、随用户上下拖动自由升高**的：茶室的横梁
+   * 底 z≈1.93、天花板板层 z[2.30,2.40]，而顶棚隐藏阈值是 INDOOR_CEIL_Z−0.05
+   * =2.80。旧逻辑把相机 z 直接设成 height（上限 R*120≈3.93），于是拖动经过
+   * z∈[1.90,2.80] 这段时相机钻到横梁/天花板板层里、顶棚却仍渲染 → 米色白屏
+   * （用户报「挪动视角白屏」，v1.8.9/v1.8.10 只修了 far/replay，漏了这个主视角）。
+   * 取 0.5 → 室内相机 z 上限 = 天花板底−0.5（room 1.82 / tea 1.80），
+   * 稳稳落在横梁 1.93 下方；默认机位 z=0.393 远低于上限，构图零改动。
+   */
+  private static readonly AIM_CEIL_CLEARANCE = 0.5
+
+  /** 把任意 z 夹到当前场景天花板下方。clearance 默认用于 far/回放视角；瞄准视角传更大值。 */
+  private clampCameraZ(z: number, clearance = Camera.CEIL_CLEARANCE): number {
+    return this.ceilingZ === null
+      ? z
+      : Math.min(z, this.ceilingZ - clearance)
+  }
+
+  /**
+   * v1.8.10：视线注视点抬升（look-at lift）——「自由视角看不到茶室牌匾」修复。
+   *
+   * 病史：v1.8.9 修白屏时把相机 z 夹在天花板下（室内 ≤2.12），这是对的，
+   * 但两个可拖动视角的注视点仍死死锁在台面中心（farView lookAt(FAR_TARGET)、
+   * replayFreeView lookAt(zero)），视线俯角过大。茶室牌匾挂在北墙 z≈1.4，
+   * 于是永远落在画面上缘之外 —— 用户越往上拖（想抬头看）相机越贴近台面
+   * 正上方、视线越俯，反而更看不到，主观感受就是「视角太矮、看不到牌匾」。
+   *
+   * 数学验证（透视投影，16:9 / fov36）：牌匾在 z=1.4 的远墙，球台在 z=0。
+   * 两者能否同框取决于相机的**水平离台距离 horiz**：
+   *   - 近机位（horiz≈1.0）垂直视场窄，看球为主 —— 不能抬注视点，否则球台出画；
+   *   - 拉远（horiz≥2.4~2.6）垂直视场变宽，抬高注视点即可把墙上装饰纳入画面。
+   * 故按 horiz 做 smoothstep 自适应抬升：近机位 0（看球构图完全不变），
+   * 拉远时平滑抬到上限。户外场景（ceilingZ=null）恒为 0，雪山构图不受影响。
+   *
+   * ⚠️ 只动 lookAt 目标点，**相机位置一个像素都不改** —— v1.8.9 的防穿顶
+   * 安全盒 / clampCameraZ 完全保留，不会重新引入白屏。
+   */
+  private static readonly FAR_LOOK_LIFT_MAX = 1.0
+  private static readonly FAR_LOOK_LIFT_H0 = 1.2
+  private static readonly FAR_LOOK_LIFT_H1 = 2.6
+  private static readonly FREE_LOOK_LIFT_MAX = 0.6
+  private static readonly FREE_LOOK_LIFT_H0 = 1.0
+  private static readonly FREE_LOOK_LIFT_H1 = 2.4
+
+  private lookLift(horiz: number, max: number, h0: number, h1: number): number {
+    if (this.ceilingZ === null) return 0
+    const t = Math.max(0, Math.min(1, (horiz - h0) / (h1 - h0)))
+    return t * t * (3 - 2 * t) * max // smoothstep
+  }
+
+  farCam = {
+    yaw: Camera.FAR_YAW,
+    pitch: Camera.FAR_PITCH,
+    dist: Camera.FAR_DIST,
+    target: Camera.FAR_TARGET.clone(),
+  }
+  private readonly farPos = new Vector3()
+
+  /** 全桌机位：绕固定注视点的球面相机。 */
+  private farPosition(out: Vector3): Vector3 {
+    const cp = Math.cos(this.farCam.pitch)
+    const sp = Math.sin(this.farCam.pitch)
+    const dx = cp * Math.cos(this.farCam.yaw)
+    const dy = cp * Math.sin(this.farCam.yaw)
+    const dz = sp
+    const t = this.farCam.target
+    const MIN = Camera.FAR_ROOM_MIN
+    const MAX = Camera.FAR_ROOM_MAX
+    // 沿方向向量求到安全盒六个面的正距离，取最近的那个作为 dist 上限。
+    // 方向分量为 0 时该轴不约束（返回 Infinity）。
+    const limit = (d: number, origin: number, lo: number, hi: number) => {
+      if (Math.abs(d) < 1e-6) return Infinity
+      return ((d > 0 ? hi : lo) - origin) / d
+    }
+    const dist = Math.min(
+      this.farCam.dist,
+      limit(dx, t.x, MIN.x, MAX.x),
+      limit(dy, t.y, MIN.y, MAX.y),
+      // v1.8.9：z 上界改用当前场景顶棚高度，不再用固定 MAX.z(2.45)。
+      // 新房间天花板 2.32 / dice 2.30，夹到 2.32−0.18=2.14 以内，杜绝穿顶白屏。
+      limit(dz, t.z, MIN.z, this.cameraCeilZ())
+    )
+    return out.set(t.x + dist * dx, t.y + dist * dy, t.z + dist * dz)
+  }
+
+  /** 单指 / 鼠标拖动：向右拖场景右转、向下拖压低机位（与主流轨道相机一致）。 */
+  orbitFarBy(dx: number, dy: number) {
+    this.farCam.yaw -= dx * 0.005
+    this.farCam.pitch = Math.max(
+      Camera.FAR_PITCH_MIN,
+      Math.min(Camera.FAR_PITCH_MAX, this.farCam.pitch - dy * 0.005)
+    )
+  }
+
+  /** 双指捏合 / 滚轮：factor > 1 拉远、< 1 拉近。 */
+  zoomFarBy(factor: number) {
+    this.farCam.dist = Math.max(
+      Camera.FAR_DIST_MIN,
+      Math.min(Camera.FAR_DIST_MAX, this.farCam.dist * factor)
+    )
+  }
+
+  farView(_: AimEvent) {
+    // 自适应 FOV 在 16:9 上把 44° 收窄到约 32.7°（横向上限 60°）。
     this.camera.fov = this.adaptiveFov(Camera.FAR_FOV)
-    // 相机站在母球后方，沿出杆反方向退 FAR_DISTANCE —— 与 aimView 完全同源，
-    // 因此会随球杆方向实时跟随（每杆出杆方向变化，机位随之旋转）。
-    this.target
-      .copy(aim.pos)
-      .addScaledVector(unitAtAngle(aim.angle, this.tempVec), -Camera.FAR_DISTANCE)
-    this.camera.position.lerp(this.target, 0.12)
-    this.camera.position.z = Camera.FAR_HEIGHT
+    this.farPosition(this.farPos)
+    /**
+     * 从别的视角切进来时**直接跳位**：topView 在 z=5.36（房顶上方）、
+     * aimView 在 z=0.39，大跨度插值在低帧率设备（软件渲染）上要好几秒收敛，
+     * 中途相机会穿过天花板 —— 实测截到过整片白的过渡帧。
+     * 手势改动 farCam 时走 lerp(0.45)，既有跟手感又不会留下插值残影。
+     */
+    if (this.farSnap) {
+      this.camera.position.copy(this.farPos)
+      this.farSnap = false
+    } else {
+      this.camera.position.lerp(this.farPos, 0.45)
+    }
     this.camera.up = up
-    // 注视母球前方、抬高 FAR_LOOK_LIFT，使视线不过分下压
-    this.lookTarget.copy(aim.pos).addScaledVector(up, Camera.FAR_LOOK_LIFT)
+    // v1.8.10：拉远看房间时抬高注视点，把墙上牌匾/吊灯纳入画面；
+    // 近机位抬升量为 0，看球构图与 v1.8.9 完全一致。用 farPos 算水平离台距离。
+    const farHoriz = Math.hypot(this.farPos.x, this.farPos.y)
+    const farLift = this.lookLift(
+      farHoriz,
+      Camera.FAR_LOOK_LIFT_MAX,
+      Camera.FAR_LOOK_LIFT_H0,
+      Camera.FAR_LOOK_LIFT_H1
+    )
+    this.lookTarget.set(
+      this.farCam.target.x,
+      this.farCam.target.y,
+      this.farCam.target.z + farLift
+    )
     this.camera.lookAt(this.lookTarget)
   }
 
@@ -211,7 +426,7 @@ export class Camera {
    * 一张桌子，失去台球游戏的主体感；R*6 是「room 可读 / 桌子仍是桌子」的
    * 平衡点。
    */
-  private static readonly AIM_LOOK_LIFT = R * 6
+  private static readonly AIM_LOOK_LIFT = R * 8
 
   aimView(aim: AimEvent, fraction = 0.08) {
     const h = this.height
@@ -229,7 +444,11 @@ export class Camera {
       .copy(aim.pos)
       .addScaledVector(unitAtAngle(aim.angle, this.tempVec), -this.distance)
     this.camera.position.lerp(this.target, fraction)
-    this.camera.position.z = h
+    // v1.8.11：主视角防穿顶白屏（「挪动视角遮挡摄像机白屏」的真正根因）。
+    // 旧代码直接 z=h，用户上下拖把相机升到 z∈[1.90,2.80] 时会钻进茶室横梁
+    // (1.93)/天花板板层(2.30)，而顶棚隐藏阈值是 2.80、此时仍渲染 → 米色白屏。
+    // 夹到天花板下方 0.5（room 1.82 / tea 1.80，均在横梁下方）；户外不约束。
+    this.camera.position.z = this.clampCameraZ(h, Camera.AIM_CEIL_CLEARANCE)
     this.camera.up = up
     /**
      * v1.3.86：注视点抬升从 `R*2` 提到 `AIM_LOOK_LIFT`（= R*6）。
@@ -387,6 +606,10 @@ export class Camera {
   }
 
   suggestMode(mode) {
+    // v1.8.4：用户手动选过视角就不再自动改写，否则「切了又被拉回」。
+    if (this.userPinned) {
+      return
+    }
     if (mode !== this.aimView) {
       this.restoreSavedDistance()
     }
@@ -406,6 +629,9 @@ export class Camera {
   }
 
   forceMode(mode) {
+    // v1.8.4：系统强制场景（回放 / 结算 / 观战全景）重置用户选择，
+    // 否则回到对局后玩家的旧选择会一直压住自动机位。
+    this.userPinned = false
     if (mode !== this.aimView) {
       this.restoreSavedDistance()
     }
@@ -486,13 +712,28 @@ this.aimView(aim, 1)
       this.freeCam.dist * cp * Math.sin(this.freeCam.yaw),
       this.freeCam.dist * sp
     )
-    // 位置平滑逼近手势目标，注视点恒为台面中心 —— 永远对着球台
+    // v1.8.9：回放自由视角原本无任何房间净空约束，室内场景 pitch 拉高时
+    // z 可达 3.09，必然穿出天花板白屏。目标位与平滑后的实际位都夹一次。
+    this.target.z = this.clampCameraZ(this.target.z)
+    // 位置平滑逼近手势目标
     this.camera.position.lerp(this.target, 0.3)
+    this.camera.position.z = this.clampCameraZ(this.camera.position.z)
     this.camera.up = up
-    this.camera.lookAt(zero)
+    // v1.8.10：拉远看房间时抬高注视点，把墙上牌匾纳入画面；
+    // 近机位抬升量为 0，仍对着球台 —— 看球构图与 v1.8.9 完全一致。
+    const freeHoriz = Math.hypot(this.camera.position.x, this.camera.position.y)
+    const freeLift = this.lookLift(
+      freeHoriz,
+      Camera.FREE_LOOK_LIFT_MAX,
+      Camera.FREE_LOOK_LIFT_H0,
+      Camera.FREE_LOOK_LIFT_H1
+    )
+    this.lookTarget.set(0, 0, freeLift)
+    this.camera.lookAt(this.lookTarget)
   }
 
   cycleModeToAimz(balls: any[], aim: AimEvent) {
+    this.userPinned = true
     this.mode = this.aimView
     this.mainMode = this.aimView
     this.stepBackToFitAllBalls(balls, aim)
@@ -506,8 +747,14 @@ this.aimView(aim, 1)
   }
 
   cycleMode(balls: any[], aim: AimEvent) {
+    // v1.8.4：这是「用户主动点视角按钮」的唯一入口 —— 置位后不再被
+    // suggestMode 自动改写（局域网对手回合切不了视角的根因）。
+    this.userPinned = true
     // v1.1.8：关闭「保留三个视角」时，只在第一/二人称（跟随 / 俯视）间切换，
     // 跳过母球视角（aimz 拉远），避免不想要的拉远操作。
+    // v1.8.1：把「全桌视角」（far）加进这条精简循环 —— 用户明确要求
+    // 「能看到球桌腿与场景背景」，far 是唯一能看到桌腿的机位，若仍只在
+    // keepAllViews 时可达，默认设置下就永远点不到。
     const keepAll = Settings.get().keepAllViews
     if (!keepAll) {
       if (this.mode === this.topView) {
@@ -516,12 +763,20 @@ this.aimView(aim, 1)
         this.mainMode = this.aimView
         this.isZoomedOut = false
         this.updateCameraButtonClass("aim")
-      } else {
+      } else if (this.mode === this.farView) {
+        // 全桌 → 俯视（俯视是看球势的常用档，放在最后一跳）
         this.restoreSavedDistance()
         this.mode = this.topView
         this.mainMode = this.topView
         this.isZoomedOut = false
         this.updateCameraButtonClass("topview")
+      } else {
+        // 瞄准 → 全桌（用户「想看到桌腿与房间」时点一下就到）
+        this.restoreSavedDistance()
+        this.mode = this.farView
+        this.mainMode = this.farView
+        this.isZoomedOut = false
+        this.updateCameraButtonClass("far")
       }
       return
     }
@@ -578,6 +833,7 @@ this.aimView(aim, 1)
   }
 
   toggleMode() {
+    this.userPinned = true
     this.restoreSavedDistance()
     this.isZoomedOut = false
     if (this.mode === this.topView) {

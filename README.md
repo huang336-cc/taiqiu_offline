@@ -1,170 +1,152 @@
-<p align="center">
-  <img src="billiards-cn/dist/assets/icon-512.png" alt="奥特曼的台球" width="140" />
-</p>
+# 台球大师 · 中文离线版
 
-# 奥特曼的台球 · 中文离线版
+基于 [tailuge/billiards](https://github.com/tailuge/billiards) 二次开发的**中文 3D 台球游戏**。
+一套代码同时产出网页版与安卓离线 APK，内置练习、电脑对战与局域网联机三种玩法，支持三套界面主题。
 
-<p align="center"><b>中文</b> | <a href="README.en.md"><b>English</b></a></p>
-
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Platform](https://img.shields.io/badge/platform-Android%205.0%2B-brightgreen.svg)](#下载)
-[![Permissions](https://img.shields.io/badge/权限-仅INTERNET（局域网对战）-brightgreen.svg)](#隐私)
-
-一个全中文、无广告的安卓台球游戏。基于 three.js 的真实物理引擎，内置本地 AI 对手，单机完全离线可玩；v1.3.65 起可选**局域网对战**（同 WiFi/局域网直连），仅申请一个 `INTERNET` 权限且不发任何外部网络请求。
-
-<p align="center">
-  <img src="docs/screenshots/menu-home.jpg" alt="主菜单" width="48%" />
-</p>
-<p align="center"><em>主菜单：模式选择、对手难度、外观定制</em></p>
-
-<p align="center">
-  <img src="docs/screenshots/android-topview.jpg" alt="安卓端游戏界面 · 俯视视角" width="48%" />
-  <img src="docs/screenshots/android-cueview.jpg" alt="安卓端游戏界面 · 击球视角" width="48%" />
-</p>
-<p align="center"><em>安卓端游戏界面：俯视视角（左）与击球视角（右）</em></p>
-
-> **修改声明**
-> 本作品是开源项目 [tailuge/billiards](https://github.com/tailuge/billiards) 的**衍生作品**，
-> 由该项目修改而来，修改日期 **2026 年 8 月 3 日**。
-> 原项目版权归 tailuge 及其贡献者所有，依 GNU GPL v3.0 授权。
-> 本衍生作品同样依 **GPL-3.0** 发布。
+- 当前版本：**v1.8.8**（2026-11-16）
+- 技术栈：TypeScript + Three.js（WebGL）+ webpack（swc）
+- 运行环境：网页版任意现代浏览器；APK 需 Android 8.0+，约 14 MB，仅申请 INTERNET 权限（局域网对战用）
 
 ---
 
-## 下载
+## 一、快速开始
 
-**在线发布页**：<https://a7b9dc0cd0da80587.app.workbuddy.link>
+### 网页版
 
-无需安装即可在浏览器中**在线试玩**，也可以直接在该页面下载最新版 APK。
+直接用浏览器打开 `menu.html`（本地文件即可，无需服务器）。
 
-前往 [Releases](../../releases/latest) 也可下载最新版 APK。
-
-安装说明与常见问题见 [`docs/安装与使用说明.md`](docs/安装与使用说明.md)。
-
----
-
-## 特性
-
-| | |
-|---|---|
-| **纯单机 / 局域网对战** | 默认单机离线，可选局域网对战；全程无外网请求、无账号、无广告、无内购、无统计上报 |
-| **极简权限** | `AndroidManifest.xml` 仅声明一个 `INTERNET`（局域网对战专用，纯本机 TCP，不发外部请求），无存储/位置/电话/相机等任何权限，可用 `aapt2 dump badging` 自行验证 |
-| **全中文** | 菜单、玩法、设置、犯规提示、结算文案全部汉化 |
-| **真实物理** | 继承原项目的球体碰撞、旋转（塞）、库边反弹与摩擦模型 |
-| **本地 AI** | 两档难度对手（稳健 / 激进），全程本地计算 |
-| **画质可调** | 六档 LOD 画质系统，自动检测设备性能，低端机也能跑顺 |
-| **玩法** | 九球、斯诺克、开伦、练习模式 |
-
----
-
-## 引用与致谢
-
-| 项目 | [tailuge/billiards](https://github.com/tailuge/billiards) |
-|---|---|
-| 作者 | tailuge |
-| 协议 | GNU General Public License v3.0 |
-| 基线版本 | 0.3.1 |
-
-本项目的**物理引擎、渲染管线、规则判定、本地 AI 对手**等核心实现全部来自上述原始项目。
-真实的球体碰撞、旋转、库边反弹与摩擦模型均为原作者的成果。在此向 tailuge 及所有贡献者致谢。
-
-完整的开源声明、修改清单与第三方组件列表见 [`开源声明.md`](开源声明.md)。
-
----
-
-## 主要改动
-
-**中文本地化** — 菜单、玩法说明、设置、操作介绍、击球按钮、得分板、犯规原因、
-胜负结算及斯诺克彩球名称全部汉化；新增集中式文案模块 `src/utils/i18n.ts`。
-
-**移除联网功能** — 移除 WebSocket 多人大厅与消息中继（含 `@tailuge/messaging` 依赖）、
-分数上传、遥测统计、崩溃上报、Google Fonts 外链、分享外链、局面图导出、在线分析面板。
-v1.3.65 起重新加入**局域网对战**（见下「安卓封装」），但仅限同一局域网/直连，不发任何外部请求。
-
-**移动端适配** — 新增六档 LOD 画质系统（渲染分辨率 / 抗锯齿 / 球体几何精度）、
-设备性能自动检测、刘海屏安全区域适配、横屏布局优化、进球与碰撞震动反馈。
-
-**新增功能** — 中文主菜单、内置操作介绍页、内置游戏设置面板（菜单与游戏内实时同步）、
-应用内开源许可与致谢页、局域网对战。
-
-**安卓封装** — Android WebView 原生外壳，仅声明一个 `INTERNET` 权限（局域网对战专用：
-进程内监听 TCP 端口并连接对方手机，纯本机直连，不向任何外部服务器发起请求；在线功能保持下线）。
-
----
-
-## 隐私
-
-这个应用不向任何外部服务器发送数据，也不会收集任何信息：
-
-- `INTERNET` 权限仅用于**局域网对战**：进程内监听 TCP 端口并连接对方手机，纯本机直连、不发任何外网请求；不开启局域对战时不建立任何连接
-- 无存储、位置、电话、相机等任何权限
-- 所有资源（three.js、模型、音效）均打包在 APK 内，运行时零外链
-- 无账号、无统计上报、无广告 SDK
-
-单机游玩全程无网络请求，即便开启飞行模式也完全可玩（局域网对战需双方连在同一 WiFi/局域网）。
-
----
-
-## 目录结构
-
-```
-billiards-cn/          游戏本体
-  src/                 TypeScript 源码
-  dist/                构建产物（可直接用浏览器打开 menu.html 试玩）
-  webpack.config.js    打包配置
-  LICENSE              GPL-3.0 协议全文
-
-billiards-apk/         安卓封装
-  AndroidManifest.xml  应用清单（仅 INTERNET：局域网对战）
-  src/                 MainActivity.java
-  res/                 图标与字符串资源
-  build-apk.sh         一键构建脚本
-
-docs/                  安装说明与发布说明
-开源声明.md             GPL-3.0 衍生声明与第三方组件清单
-```
-
----
-
-## 构建
-
-### 前端
+局域网对战需要 `ws://` 连接，建议用本地静态服务器打开，例如：
 
 ```bash
-cd billiards-cn
-yarn install
-node_modules/.bin/tsc --noEmit      # 类型检查
-node_modules/.bin/webpack           # 打包到 dist/
+cd publish-online
+python3 -m http.server 8765
+# 浏览器访问 http://127.0.0.1:8765/menu.html
 ```
-
-产物为 `dist/` 下的 `index.js`、`three_core.js`、`three_module.js`、`three_examples.js`。
-直接用浏览器打开 `dist/menu.html` 即可试玩，不需要起服务器。
 
 ### 安卓 APK
 
-不依赖 Gradle，使用 Android SDK 底层工具链。需要 `platforms/android-34`、`build-tools/34.0.0` 和 JDK：
-
-```bash
-export ANDROID_SDK=/path/to/android-sdk
-cd billiards-apk
-./build-apk.sh
-```
-
-脚本依次执行 `aapt2 compile` → `aapt2 link` → `javac` → `d8` → `zipalign` → `apksigner`，
-最后自动校验签名并打印权限清单（应仅为 `INTERNET` 或空）。若目录下没有 `release.keystore`，脚本会自动生成一个自签名调试密钥。
-
-> **构建陷阱**：`aapt2 link` 必须显式传 `--min-sdk-version 21 --target-sdk-version 34`。
-> 否则 aapt2 会按旧版兼容规则**隐式追加** `WRITE_EXTERNAL_STORAGE`、`READ_PHONE_STATE`、
-> `READ_EXTERNAL_STORAGE` 三个权限，极简权限的承诺就破功了。
+安装 `billiards-cn-v1.8.8.apk` 即可，无需联网、无需登录、无广告。
 
 ---
 
-## 协议
+## 二、操作说明
 
-本作品依据 **GNU General Public License v3.0** 发布，与原始项目保持一致。
-协议全文见 [`LICENSE`](LICENSE)，或访问 <https://www.gnu.org/licenses/gpl-3.0.html>。
+> 以下与游戏内「帮助」页、主菜单「操作介绍」、新手引导逐字一致。
 
-你有权自由运行、研究、修改和再分发本作品，但再分发时须遵循同样的 GPL-3.0 条款，
-并须提供对应的完整源代码。
+### 基本操作
 
-本程序不提供任何担保，使用风险由你自行承担。
+| 操作 | 方式 |
+|---|---|
+| **旋转视角** | 在球桌上单指左右拖动 |
+| **调整俯仰** | 单指上下拖动（抬高 / 降低镜头） |
+| **缩放画面** | 切到「远台」视角后，双指捏合缩放 |
+| **击球** | 点击**底部操作栏最左侧**的「击球」按钮 |
+| **力度** | 拖动底部栏的力度条设定力量，百分比实时显示；击球后维持设定值，下一杆可直接沿用 |
+| **瞄准** | 拖动球桌转动瞄准方向；底部「瞄准」滑条可做细微调整 |
+
+### 击球点与杆法
+
+点底部操作栏的「击球点」按钮展开母球面板：
+
+- **在圆盘上点选或拖出落点** —— 偏上为高杆（跟进）、偏下为低杆（缩杆）、左右为左右塞（加塞走位）
+- **抬杆角度**：在面板右侧「抬杆高度」区**拖动球杆**，抬高杆尾角度，用于跳球或打出弧线
+- **复位**：点击面板**左上角的 ⟲ 按钮**，击球点立刻回到正中心
+
+### 摆球（自由球）
+
+对手犯规或开局摆球时，用**单指在台面上点击 / 拖动**，把母球放到任意合法位置；位置确定后点击同一按钮（此时显示为「摆球」），进入瞄准。
+
+### 视角切换
+
+点击底部操作栏的相机按钮循环切换：**瞄准视角 → 俯视全局 → 远台**。
+
+- 俯视视角便于观察整体球型和走位路线
+- 远台视角可单指旋转、双指捏合缩放，看清整张球台与房间
+
+### 小技巧
+
+- 击球前先切到俯视，规划好下一颗球的走位
+- 加塞会影响母球走位，但也会降低准度，别滥用
+- 力度并非越大越好，很多球轻推反而更准
+
+---
+
+## 三、设置项说明
+
+| 分组 | 项 | 说明 |
+|---|---|---|
+| 界面主题 | 米白 / 绿绒 / 午夜 | 三套配色，仅在「设置」页切换，切换后立即全局生效并保存 |
+| 操作 | 球杆延长线 | 显示球杆指向的延长线 |
+| 操作 | 进球预测线 | 显示目标球被撞后的行进方向 |
+| 操作 | 辅助线长度 | 没有正对袋口时辅助线的延伸长度，拖到最左可关闭 |
+| 操作 | 保留三个视角 | 关闭后只在「瞄准 / 俯视 / 远台」三档之间直接切换，不再自动拉远查看全台 |
+| 训练 | 重新打开新手引导 | 首次进入对局会自动显示一次分步引导，走完后不再自动弹出 |
+| 电脑对战 | 每回合时间限制 | 无限制 / 10 / 20 / 30 秒。仅电脑对战（稳健 / 激进 / 专业）生效；倒计时结束若还没出杆，会**自动按当前力度与瞄准方向出杆** |
+
+---
+
+## 四、三套界面主题
+
+| 主题 | 风格 | 主色 |
+|---|---|---|
+| `paper` | 米白 | 米白纸面 + 墨字 + 朱红 |
+| `felt` | 绿绒 | 深绿呢 + 木框 + 黄铜 |
+| `arcade` | 午夜 | 近黑 + 电光青 + 柠檬黄 |
+
+覆盖范围包括首页、全部二级屏（设置 / 局域网 / 规则 / 许可 / 变更履历 / 场景 / 球杆主题 / 回放列表）与游戏内操作区（底部操作栏、比分卡、击球点面板、回放进度条、帮助浮层）。
+
+实现上是一层**纯变量层**：`html[data-ui-theme="…"]` 覆盖 `:root` 的 `--ui-*` / `--hud-*`，不改任何选择器与布局。选稿参数 `?theme=paper|felt|arcade` 优先级最高且不写回存档。
+
+
+### 场景模型（v1.8.8）
+
+场景资源来自「台球房 · 场景资源包 v1.0」（GLB / Z-up / PBR）：
+
+| 场景 | 文件 | 本版变化 |
+|---|---|---|
+| 现代 `room` | `pool_scene_room.glb`（8.3 MB） | **新增**写实 PBR 场景：中古休闲椅、玻璃吊灯、自绘装饰画、浅灰地毯；自带的 16 球与球杆由加载器剔除，球桌仍用游戏常驻桌 |
+| 茶室 `tea` | `pool_scene_tea.glb`（10.9 MB） | 由旧 404 KB 低模换为写实 PBR：明清家具、程序化茶具、匾额挂轴、HDRI |
+| `cell` / `seed` | `pool_env_cell.glb` / `pool_env_seed.glb` | 已是新版，未改动 |
+
+球桌模型与位置、16 球坐标、球杆均未改动；新场景加载失败会自动回退旧房间，再失败回退程序化房间。
+
+---
+
+## 五、构建与发布
+
+详见 `BUILDING.md`（构建步骤）、`ARCHITECTURE.md`（架构说明）、`PUBLISH_RULES.md`（发布纪律）。
+
+```bash
+# 1. 前端
+cd dev/source/billiards-cn
+node_modules/.bin/webpack --config webpack.config.js    # → dist/index.js
+
+# 2. APK
+cd ../billiards-apk
+ANDROID_SDK=/path/to/android-sdk bash build-apk.sh      # → billiards-cn-vX.Y.Z.apk
+```
+
+版本号从 `dist/menu.html` 的 `__BILLIARDS_VERSION__` 反推，构建脚本会自动改写 `AndroidManifest.xml` 的 `versionName` / `versionCode`。
+
+---
+
+## 六、目录结构
+
+```
+├── publish-online/          网页版产物（在线发布用，内容与 APK 内 assets 一致）
+├── publish-site/            发布站点副本
+├── dev/source/
+│   ├── billiards-cn/        前端游戏（src 源码 + dist 产物 + docs 发布说明）
+│   └── billiards-apk/       APK 构建工程（build-apk.sh + Manifest + keystore）
+├── ARCHITECTURE.md          架构说明
+├── BUILDING.md              构建 / 发布步骤
+├── PUBLISH_RULES.md         发布纪律
+└── RELEASE_NOTES.md         各版本发布说明
+```
+
+---
+
+## 七、许可
+
+游戏本体沿用上游 [tailuge/billiards](https://github.com/tailuge/billiards) 的 **GPL-3.0** 许可。
+3D 模型与贴图资源版权归原作者所有，仅供个人学习与娱乐使用。

@@ -24,11 +24,28 @@ export class TimeoutButton {
     })
   }
 
+  /**
+   * v1.8.8：倒计时环默认颜色改读当前主题强调色。
+   * 原来写死 #10b981（绿）—— 在 paper（米白纸面）/ arcade（近黑）主题上，
+   * 底部击球键会平白多出一圈绿，和整套配色打架。最后 10 秒的红色警示保留
+   * （跨主题都成立的危险语义）。
+   */
+  private themeAccent(): string {
+    try {
+      const v = getComputedStyle(this.el)
+        .getPropertyValue("--hud-accent")
+        .trim()
+      return v || "#10b981"
+    } catch {
+      return "#10b981"
+    }
+  }
+
   startTimer() {
     this.cancel()
     this.isRunning = true
     this.start = null
-    this.el.style.setProperty("--timer-color", "#10b981")
+    this.el.style.setProperty("--timer-color", this.themeAccent())
     this.animationId = requestAnimationFrame(this.tick)
   }
 

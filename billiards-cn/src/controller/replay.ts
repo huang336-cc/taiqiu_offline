@@ -177,6 +177,14 @@ export class Replay extends ControllerBase {
   private static readonly REPLAY_SPEEDS = [0.5, 1, 2, 4]
   private replaySpeedIndex = 1 // 默认 1x
 
+  /**
+   * v1.8.4：回放里球杆的横向放大倍数。
+   *
+   * 全桌斜视下每米约 150px，真实杆径 4~13mm 只有 0.6~2px，等于没有。
+   * 2.6 倍后 1.5~5px，能看清是一根杆又不至于胖成棍子（实拍对比 1x/3x/4x 后取值）。
+   */
+  private static readonly CUE_THICK = 2.6
+
   // ---- v1.2.9 #F3 / #F5 状态 ----
   /** 每杆起始快照 + 预演结果（triggerT / duration / pots） */
   private shotMeta: ShotMeta[] = []
@@ -260,7 +268,12 @@ export class Replay extends ControllerBase {
    */
   private topBtn: HTMLButtonElement | null = null
   private onTopBtnClick = () => {
-    this.container.view.camera.forceMode(this.container.view.camera.topView)
+    const cam = this.container.view.camera
+    // v1.8.4：从「一键回俯视」改成 far ⇄ top 两态切换 —— 默认已经是斜视，
+    // 按钮要能把用户送回纯俯视，再点一次回到能看到球杆的斜视。
+    const toTop = cam.mode !== cam.topView
+    cam.forceMode(toTop ? cam.topView : cam.farView)
+    if (this.topBtn) this.topBtn.textContent = toTop ? "全桌" : "俯视"
   }
   /**
    * v1.5.4（#70）：回放**自由视角**。
@@ -385,12 +398,20 @@ export class Replay extends ControllerBase {
     this.container.table.time = 0
     console.log(`shots: ${this.shots.length}`)
     console.log(`shots: ${JSON.stringify(this.shots)}`)
-    // v1.5.5（#76）：回放**默认使用原有俯视视角**（用户要求保留俯视）。
-    // 自由视角手势照常绑定 —— 用户在画面上拖动 / 捏合 / 滚轮的瞬间会自动
-    // 切到自由视角（见 onFreePointerDown 的 forceFreeView）；
-    // 控制栏新增「俯视」按钮可随时一键切回俯视（见 setupReplaySeek）。
-    // 图解 / 开伦仍固定俯视且不绑手势（战术示意不需要自由视角）。
-    this.container.view.camera.forceMode(this.container.view.camera.topView)
+    // v1.8.4：**默认改用全桌斜视（farView）**。
+    //
+    // 旧版按 v1.5.5 的要求默认俯视。但俯视是「正上方垂直看」，球杆是水平
+    // 躺在桌面上的细圆柱（直径约 4mm）—— 393px 宽的竖屏下换算只有 1px 左右，
+    // 而且杆身伸出画面边缘，用户看到的就是「回放没有球杆」。
+    // 斜视能看到杆身、球桌腿与场景，也更像在看比赛；需要纯战术俯视时点
+    // 「俯视」按钮即可切换（onTopBtnClick 现在是 far ⇄ top 两态循环）。
+    // 图解 / 开伦仍固定俯视（战术示意不需要球杆与场景）。
+    const keepTop = this.diagram || this.container.rules.rulename === "threecushion"
+    this.container.view.camera.forceMode(
+      keepTop
+        ? this.container.view.camera.topView
+        : this.container.view.camera.farView
+    )
     if (!this.diagram && this.container.rules.rulename != "threecushion") {
       this.setupReplayFreeCam()
     }
@@ -415,6 +436,13 @@ export class Replay extends ControllerBase {
   override onFirst() {
     console.log("[replay] onFirst fired")
     this.container.table.cue.aimInputs.setDisabled(true)
+    // v1.8.4：回放是远景观赏视角，球杆按真实直径只有不到 1px —— 视觉加粗，
+    // 否则用户看到的就是「回放没有球杆」（见 Cue.setVisualBoost 注释）。
+    try {
+      this.container.table.cue.setVisualBoost(0.006, Replay.CUE_THICK)
+    } catch (e) {
+      /* 纯视觉补偿，失败忽略 */
+    }
     const shareButton = this.container.menu.share
     if (shareButton) {
       shareButton.onclick = () => {
@@ -767,10 +795,18 @@ export class Replay extends ControllerBase {
         this.simTable.cueball.pos.copy(aim.pos)
         this.simTable.cue.aim = aim
         const meta: ShotMeta = {
+          // v1.8.4：只有「真的在袋里（落袋中 / 已入袋）」才记录袋口。
+          // Ball.pocket 是个一旦写入就不再清除的引用 —— 白球被摆回来继续打时
+          // 它仍指着上一个袋，若照搬进 layout，回放里一颗台中央 Rolling 的球
+          // 会被 restoreShotStart 标成「已落袋」（探针实测 18 杆里有 11 杆如此），
+          // 任何按 pocket 判断可见性的代码都会误判。
           layout: this.simTable.balls.map((b) => ({
             pos: [b.pos.x, b.pos.y, b.pos.z] as [number, number, number],
             state: b.state,
-            pocket: b.pocket ? PocketGeometry.pocketCenters.indexOf(b.pocket) : -1,
+            pocket:
+              (b.state === State.InPocket || b.state === State.Falling) && b.pocket
+                ? PocketGeometry.pocketCenters.indexOf(b.pocket)
+                : -1,
           })),
           cueballIdx: this.simTable.balls.indexOf(this.simTable.cueball),
           aim: aim.copy(),
@@ -806,6 +842,11 @@ export class Replay extends ControllerBase {
       b.rvel.set(0, 0, 0)
       b.state = s.state
       b.pocket = s.pocket >= 0 ? PocketGeometry.pocketCenters[s.pocket] : undefined
+      // v1.8.4：这两个标记不在 layout 里，但直接影响渲染 —— 上一段拖动停在
+      // 一颗球出界的时刻后，offTable=true 会让球在后续画面里一直隐身；
+      // wasAirborne 残留会让球被当成腾空球处理。归零保证恢复干净。
+      b.offTable = false
+      b.wasAirborne = false
     })
     // v1.3.59：同 precomputeShot，改为按 balls 下标取母球。
     t.cueball = t.balls[meta.cueballIdx]
@@ -917,11 +958,20 @@ export class Replay extends ControllerBase {
     }
     const target = Math.max(0, Math.min(1, frac)) * total
     // 找到 target 落在哪一杆
-    let idx = this.currentShotIndex
+    /**
+     * v1.8.4：改为「取最后一个起点不晚于 target 的杆」。
+     *
+     * 旧写法是 `target <= cum[i] + duration[i]` —— 当 target 与某杆起点
+     * 只差零点几毫秒（拖动/取整的常态）时，会命中**上一杆**的末尾分支，
+     * 于是画面停在上一杆打完的位置，而其中往往夹着摆球 / 重摆事件，
+     * 球位和「该杆起点」相差一米以上。用户看到的就是「拖到这一段，
+     * 结果是另一局的画面」。现在把杆首边界归给后一杆，并留 0.5ms 容差。
+     */
+    let idx = 0
     for (let i = 0; i < this.shotMeta.length; i++) {
-      const segEnd = cum[i] + Math.max(this.shotMeta[i].duration, 1e-3)
-      if (target <= segEnd || i === this.shotMeta.length - 1) {
+      if (target + 0.5 >= cum[i]) {
         idx = i
+      } else {
         break
       }
     }
@@ -935,7 +985,13 @@ export class Replay extends ControllerBase {
     if (idx !== this.currentShotIndex) {
       this.rebuildQueueFrom(idx)
     }
-    const localTarget = Math.max(0, target - cum[idx])
+    // v1.8.4：把杆内目标时刻夹在本杆名义时长内。进度条取整会让 target 略微
+    // 越过杆尾（落在下一杆的开头），不夹的话这一杆会被多推几十毫秒，画面与
+    // 进度条对不上。
+    const localTarget = Math.min(
+      Math.max(0, target - cum[idx]),
+      Math.max(meta.duration, 1e-3)
+    )
     this.currentShotIndex = idx
     this.restoreShotStart(meta)
     this.container.table.hit()
@@ -977,6 +1033,20 @@ export class Replay extends ControllerBase {
       this.container.table.time = localTarget
     }
     this.container.table.updateBallMesh(0)
+    /**
+     * v1.8.4：seek 后把球杆复位成「静置瞄准」。
+     *
+     * `table.hit()` 会启动送杆动画（hittingAnimation=true），随后每帧累积
+     * t，到 STROKE_END_T 就自动收杆 —— 用户拖完进度条停在那里看局面时，
+     * 球杆会在 1.5 秒后消失。这里交给 syncReplayCue() 统一处理（它同时负责
+     * 「贴住母球」与「播放中收杆」），并顺手清掉不属于当前时刻的近距离提示。
+     */
+    this.syncReplayCue()
+    try {
+      this.container.table.proximityIndicator.hide()
+    } catch (e) {
+      /* 容错：提示清理失败不应阻塞 seek */
+    }
     // v1.5.4（#70）：自由视角下 seek 不再重定位相机 —— 镜头完全由用户控制，
     // 拖动进度条只重跑球局物理，视角保持用户当前角度不变。
     this.container.view.update(0, this.container.table.cue.aim)
@@ -1118,16 +1188,11 @@ export class Replay extends ControllerBase {
   /**
    * v1.5.6（#80）：把进度条值吸附到最近的进球时刻。
    *
-   * ⚠️ 这段原先在 onSeekInput 里**每帧**执行，由此产生「磁滞」：拖动途中
-   * value 被吸附改写，下一步 move 又从被改写后的值继续，于是最终停在哪个
-   * 时刻取决于「从哪个方向拖过来」—— 同一个位置，第一次拖到落在 24.9s、
-   * 第二次却落在 22.6s（实测球局差 1.149 米）。用户报的「滑回原位置，实际
-   * 时间点对不上」就是这个。
-   *
-   * 吸附只在**松手时**做一次，判据是松手瞬间的 value，与拖动路径无关，
-   * 同一个落点无论从哪个方向拖来都停在同一个时刻。
+   * ⚠️ v1.8.4 起**不再被调用** —— 松手吸附会让画面跳到「另一杆的进球点」，
+   * 用户看到的就是「我拖到这里，结果是另一局的画面」。拖动现在严格线性。
+   * 保留实现备查（要恢复吸附只需在 onSeekEnd 里改回一行）。
    */
-  private snapFraction(frac: number): number {
+  protected snapFraction(frac: number): number {
     const { cum, total } = this.gameTotals()
     if (total <= 0) return frac
     const SNAP = Replay.SEEK_SNAP_FRAC // 吸附阈值（与末端豁免同源，见常量处注释）
@@ -1156,23 +1221,17 @@ export class Replay extends ControllerBase {
   private onSeekEnd = () => {
     if (this.seekEl) {
       const raw = Number(this.seekEl.value) / 1000
-      // v1.5.6（#81 补）：末端吸附豁免。
-      // 把进度条拖到头是想要「对局终局」，不该被最后一个进球点拽回去 ——
-      // 实测一局最后进球点落在 0.9893，落在吸附阈值 0.025 之内，于是拖到
-      // 100% 却被改写成 987/1000，画面停在「最后一颗球刚落袋」而 balls 还没
-      // 停稳，正是用户报的「拉到底不是对局结束时刻」。落点已进入最后一个
-      // 吸附窗口时一律不吸附。
+      // v1.8.4：**取消「进球点吸附」**。
       //
-      // v1.5.7（#88）：豁免之后还要**一路顶到 1**，不能停在松手位置。
+      // 旧行为：松手时若落点距离某个进球时刻在 2.5% 以内，就把落点改写成
+      // 那个进球点。用户的实际感受是「我拖到这里，松手后画面跳到别处」——
+      // 而且被吸到的往往是**另一杆**的进球点，球局与进度条对不上，看起来
+      // 就像「放的是另一局的素材」（用户报的核心现象之一）。
+      // 现在拖动严格线性：拖到哪就是哪。需要快速定位进球时刻，进度条下方
+      // 本来就有可点的吸附点标记（snaps），点它比拖动更精确。
       //
-      // 真机上「拖到尽头」根本拖不到 1000：滑块 thumb 有宽度，指针压到轨道
-      // 最右端时 input 的 value 通常只能到 97x~99x。停在 0.99 就过不了
-      // seekToFraction 里的 `toEnd = frac >= 0.999` 判据 —— 于是既不把这一杆
-      // 推进到静止、也不做时钟对齐，画面停在「差一点点」的中途，用户看到的
-      // 依旧是「拉到底不是对局结束」。既然已经判定用户意图是「看终局」，
-      // 就直接把落点顶到 1，让 toEnd 分支真正生效。
-      const frac =
-        raw >= 1 - Replay.SEEK_SNAP_FRAC ? 1 : this.snapFraction(raw)
+      // 末端仍按原逻辑顶到 1：真机拖把压不到 1000，需要它进终局分支。
+      const frac = raw >= 1 - Replay.SEEK_SNAP_FRAC ? 1 : raw
       this.seekEl.value = String(Math.round(frac * 1000))
       this.seekToFraction(frac)
     }
@@ -1214,6 +1273,64 @@ export class Replay extends ControllerBase {
     this.container.eventQueue.push(new StationaryEvent())
   }
 
+  /**
+   * v1.8.4：回放里的球杆同步（每帧调用）。
+   *
+   * 病灶与取舍：
+   *   · 回放的 `cue.aim.pos` 是**本杆起始位置**（restoreShotStart 从 layout 还原），
+   *     球一开始滚它就与母球脱钩。实测拖到中段时杆钉在 (0.98, −0.19)、母球滚到
+   *     (−1.18, 0.32)，两者相距 2.2 米，杆身整根甩到桌外 —— 画面上就是「桌边
+   *     一根不知从哪来的棍子」，用户读作「没有球杆」。
+   *   · 播放中球在跑时也不该有杆：真实对局击完立刻收杆（retractAfterStroke），
+   *     一根杵在原地的杆只会挡球路。
+   *
+   * 于是：
+   *   1. **冻结时**（暂停 / 拖进度条 / 播完）—— 杆贴着当前母球，用本杆录制的
+   *      角度/加塞/抬杆摆成瞄准姿态。这是「这一杆是怎么打的」的可读快照。
+   *   2. **播放中且球在滚** —— 收杆。
+   *   3. **积分板间的静止间隙**（下一杆还没开球）—— 用下一杆的角度预先把杆亮出来，
+   *      让「瞄准 → 出杆」有连贯感，而不是每杆都凭空出现。
+   */
+  private syncReplayCue() {
+    try {
+      const table = this.container.table
+      const cue = table.cue
+      const ball = table.cueball
+      const frozen = this.userPaused || this.userScrubbing || this.container.replayPaused
+      let meta = this.shotMeta[this.currentShotIndex]
+      if (!frozen) {
+        const next = this.shotMeta[this.currentShotIndex + 1]
+        // 球还在滚，或者已经没有下一杆（整局播完）—— 都收杆。
+        if (!table.allStationary() || !next) {
+          cue.hideCue()
+          return
+        }
+        meta = next
+      }
+      // 母球不在台面上（刚进袋 / 正在落袋 / 出界）时没有「杆贴着球」可画。
+      // 判据必须用 state —— Ball.pocket 是「上一次落袋」的残留引用，实测
+      // 一颗在台中央 Rolling 的球也带着 pocket（见下方 layout 采集处的注释），
+      // 用它判断会把 11/18 杆的杆误收起来。
+      if (!ball || ball.offTable || ball.state === State.InPocket || ball.state === State.Falling) {
+        cue.hideCue()
+        return
+      }
+      if (meta) {
+        cue.aim.angle = meta.aim.angle
+        cue.aim.elevation = meta.aim.elevation
+        cue.aim.power = meta.aim.power
+        cue.aim.offset.copy(meta.aim.offset)
+      }
+      cue.aim.pos.copy(ball.pos)
+      cue.aimMode()
+      // t=0 → 送杆曲线取驻留位（strokeX=0），杆头正好贴住球面。
+      cue.t = 0
+      cue.moveTo(cue.aim.pos)
+    } catch (e) {
+      /* 纯表现层同步，任何异常都不该影响回放推进 */
+    }
+  }
+
   /** v1.2.9 #F5：挂载回放进度条 DOM 与每帧/交互回调 */
   private setupReplaySeek() {
     const bar = document.getElementById("replaySeekBar")
@@ -1244,11 +1361,13 @@ export class Replay extends ControllerBase {
       pause.addEventListener("click", this.onPauseClick)
     }
     this.container.replayTimeScaleHook = () => this.replayTimeScale()
-this.container.replayFrameHook = () => {
-this.tickSeekUI()
-// v1.5.4（#70）：自由视角 —— 镜头由用户在 canvas 上拖动/缩放控制，
-// 每帧回调不再干预相机（详见 setupReplayFreeCam / Camera.replayFreeView）。
-}
+    this.container.replayFrameHook = () => {
+      this.tickSeekUI()
+      // v1.8.4：球杆跟随白球 + 播放中收起，见 syncReplayCue()。
+      this.syncReplayCue()
+      // v1.5.4（#70）：自由视角 —— 镜头由用户在 canvas 上拖动/缩放控制，
+      // 每帧回调不再干预相机（详见 setupReplayFreeCam / Camera.replayFreeView）。
+    }
     // 显示「退出回放」按钮并绑定（回放全程常驻，结束后供用户离开）
     const exit = document.getElementById("replayExitBtn") as HTMLButtonElement | null
     this.exitBtn = exit
@@ -1268,6 +1387,12 @@ this.tickSeekUI()
     const topBtn = document.getElementById("replayTopBtn") as HTMLButtonElement | null
     this.topBtn = topBtn
     if (topBtn) {
+      // v1.8.4：按钮文案跟着当前机位走 —— 默认斜视时提示「俯视」，
+      // 图解/开伦默认俯视时提示「全桌」。
+      topBtn.textContent =
+        this.container.view.camera.mode === this.container.view.camera.topView
+          ? "全桌"
+          : "俯视"
       topBtn.addEventListener("click", this.onTopBtnClick)
     }
     // v1.5.4（#70）：原「视角切换按钮（跟随/俯视）」已随跟随视角一并移除，
@@ -1299,6 +1424,14 @@ this.tickSeekUI()
 
   /** v1.2.9 #F5：退出回放时隐藏进度条、解绑事件、清空每帧回调 */
   private hideReplaySeek() {
+    // v1.8.4：撤掉回放的球杆视觉补偿，恢复正常比例与高度；
+    // 顺带把杆亮回来 —— 回放里播放中是被 hideCue() 收起来的。
+    try {
+      this.container.table.cue.setVisualBoost(0, 1)
+      this.container.table.cue.aimMode()
+    } catch (e) {
+      /* 忽略 */
+    }
     const bar = document.getElementById("replaySeekBar")
     if (bar) bar.setAttribute("hidden", "")
     if (this.seekEl) {

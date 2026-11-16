@@ -166,31 +166,33 @@
     "基本操作": "Basics",
     "旋转视角：在球桌上单指左右拖动":
       "Rotate view: drag one finger left/right on the table.",
-    "调整俯仰：单指上下拖动": "Tilt view: drag one finger up/down.",
-    "缩放画面：双指捏合放大 / 缩小":
-      "Zoom: pinch with two fingers to zoom in / out.",
-    "击球：点击右下角的「击球」按钮":
-      'Shoot: tap the "Shoot" button at the bottom-right.',
+    "调整镜头：单指上下拖动，抬高 / 降低机位": "Adjust camera: drag one finger up/down to raise or lower the viewpoint.",
+    "缩放画面：切到「远台」视角后双指捏合缩放":
+      "Zoom: switch to Far view, then pinch to zoom.",
+    "击球：点击底部操作栏最左侧的「击球」按钮":
+      'Shoot: tap the "Shoot" button at the far left of the bottom bar.',
     "力度：拖动底部栏的力度条设定击球力量，百分比实时显示；击球后力度条维持设定值，下一杆可直接沿用":
       "Power: drag the power bar to set strength; the percentage shows live. After shooting, the bar keeps its value for the next shot.",
     "加塞与杆法": "Spin & Stroke",
-    "击球点：点开底部栏「击球点」展开母球圆盘，在盘上点选落点——偏上为高杆（跟进）、偏下为低杆（缩杆）、左右为左右塞（加塞走位）":
-      "Contact point: open Contact on the bottom bar to reveal the cue-ball disc, then tap a spot — top is follow, bottom is draw, left/right is side spin.",
-    "抬杆角度：点击母球圆盘旁的「+」，可抬高球杆角度，用于跳球或打出弧线":
-      "Elevate cue: tap + next to the disc to raise the cue angle for jump or curve shots.",
-    "复位：双击母球圆盘中心，击球点恢复正中心":
-      "Reset: double-tap the centre of the disc to recentre the contact point.",
+    "击球点：点底部操作栏的「击球点」按钮展开母球面板，在盘上点选或拖出落点——偏上为高杆（跟进）、偏下为低杆（缩杆）、左右为左右塞（加塞走位）":
+      "Contact point: tap Contact on the bottom bar to open the cue-ball panel, then tap or drag a spot — top is follow, bottom is draw, left/right is side spin.",
+    "抬杆角度：在面板右侧「抬杆高度」区拖动球杆，抬高杆尾角度，用于跳球或打出弧线":
+      "Cue elevation: drag the cue in the Elevation area on the right of the panel to raise the butt angle for jump or curve shots.",
+    "复位：点击面板左上角的 ⟲ 按钮，击球点立刻回到正中心":
+      "Reset: tap the ⟲ button at the top-left of the panel to recentre the contact point.",
     "摆球（自由球）": "Ball-in-hand",
-    "对手犯规后你将获得自由球，可拖动母球到任意合法位置":
-      "After an opponent foul you get ball-in-hand; drag the cue ball anywhere legal.",
-    "确定位置后点击「击球」进入瞄准":
+    "对手犯规或开局摆球时，用单指在台面上点击 / 拖动，把母球放到任意合法位置":
+      "After a foul or when breaking, tap or drag on the table with one finger to place the cue ball anywhere legal.",
+    "位置确定后点击「击球」按钮，进入瞄准":
       'Once placed, tap "Shoot" to aim.',
     "视角切换": "Camera",
-    "点击右下角": "Tap the bottom-right",
-    "按钮循环切换：跟随视角 → 俯视全局 → 母球视角":
-      "button to cycle: Follow → Top-down → Cue-ball view.",
+    "点击底部操作栏的": "Tap the",
+    "按钮循环切换：瞄准视角 → 俯视全局 → 远台":
+      "button on the bottom bar to cycle: Aim → Top-down → Far.",
     "俯视视角便于观察整体球型和走位路线":
       "Top-down helps you read the whole table and plan position.",
+    "远台视角可单指旋转、双指捏合缩放，看清整张球台与房间":
+      "In Far view, drag to orbit and pinch to zoom to see the whole table and room.",
     "小技巧": "Tips",
     "击球前先切到俯视，规划好下一颗球的走位":
       "Before shooting, switch to top-down and plan the next ball position.",
@@ -215,8 +217,8 @@
       "How far the line extends when no pocket is directly aimed at; drag fully left to turn it off.",
     "保留三个视角": "Keep three views",
     "关闭后，": "When off, ",
-    "仅在「跟随 / 俯视」两视角间切换，不再拉远到母球视角。":
-      "only the Follow / Top-down views are kept; it no longer zooms out to the cue-ball view.",
+    "只在「瞄准 / 俯视 / 远台」三档之间直接切换，不再自动拉远查看全台。":
+      "the camera cycles directly between Aim / Top-down / Far without auto zooming out to show the whole table.",
     "训练": "Tutorial",
     "安装后首次进入对局（训练或对战）会自动显示一次分步引导，引导你实做「摆白球→瞄准→击球」。 引导走完后不再自动弹出，可随时点击下方按钮重新观看。":
       "The first time you enter a match (practice or versus) after install, a one-time step guide shows how to place the cue ball, aim and shoot. It will not reappear afterwards; tap the button below to watch it again.",
@@ -224,8 +226,8 @@
     "重新打开新手引导": "Reopen tutorial",
     "电脑对战": "Versus CPU",
     "每回合时间限制": "Turn time limit",
-    "仅在「电脑 / 电脑·激进」模式下生效。超时未击球则本回合判负。":
-      "Only applies in CPU / CPU·Aggressive modes. Running out of time loses the turn.",
+    "仅电脑对战（稳健 / 激进 / 专业）生效。倒计时结束时若还没出杆，会自动按当前力度与瞄准方向出杆。":
+      "Applies to all CPU modes (Steady / Aggressive / Pro). If time runs out before you shoot, the shot is taken automatically at the current power and aim.",
     "关于": "About",
     "本游戏为完全离线的单机版本，不需要联网、无任何广告、不收集任何个人信息。":
       "This game is a fully offline single-player version: no internet needed, no ads, and no personal data collected.",
@@ -320,16 +322,16 @@
     "：在球桌上单指左右拖动": ": drag one finger left/right on the table.",
     "：单指上下拖动": ": drag one finger up/down.",
     "：双指捏合放大 / 缩小": ": pinch with two fingers to zoom in / out.",
-    "：点击右下角的「击球」按钮":
-      ': tap the "Shoot" button at the bottom-right.',
+    "：点击底部操作栏最左侧的「击球」按钮":
+      ': tap the leftmost "Shoot" button on the bottom bar.',
     "：拖动底部栏的力度条设定击球力量，百分比实时显示；击球后力度条维持设定值，下一杆可直接沿用":
       ": drag the power bar to set strength; the percentage shows live. After shooting, the bar keeps its value for the next shot.",
     "：点开底部栏「击球点」展开母球圆盘，在盘上点选落点——偏上为高杆（跟进）、偏下为低杆（缩杆）、左右为左右塞（加塞走位）":
       ": open Contact on the bottom bar to reveal the cue-ball disc, then tap a spot — top is follow, bottom is draw, left/right is side spin.",
-    "：点击母球圆盘旁的「+」，可抬高球杆角度，用于跳球或打出弧线":
-      ": tap + next to the disc to raise the cue angle for jump or curve shots.",
-    "：双击母球圆盘中心，击球点恢复正中心":
-      ": double-tap the centre of the disc to recentre the contact point.",
+    "：在面板右侧「抬杆高度」区拖动球杆，抬高杆尾角度，用于跳球或打出弧线":
+      ': drag the cue in the "Cue height" area on the right of the panel to raise the butt angle, for jump or curve shots.',
+    "：点击面板左上角的 ⟲ 按钮，击球点立刻回到正中心":
+      ": tap the ⟲ button at the top-left of the panel to recentre the contact point.",
     "（高杆": " (follow",
     "（跟进）": ")",
     "（低杆": " (draw",
@@ -358,8 +360,6 @@
       " — no network, storage or location — so it cannot auto-check for updates. To get the latest version, download it yourself from the GitHub Releases page:",
       "奥特曼的台球 · 离线版": "Ultraman Billiards · Offline Edition",
       "电脑 · 专业": "CPU · Pro",
-      "台球桌外观": "Table Appearance",
-      "球桌外观": "Table Appearance",
       "点击色块即可实时更换台呢、桌框、纹理与边缘发光特效（球杆随台面自动协调）": "Tap a swatch to change the cloth, frame, texture and edge glow in real time (the cue follows the table automatically).",
       "最长": "Longest",
       "选择后会立即在主菜单高亮，进入对局即生效；对局中经本页或设置页更换也会实时刷新。": "Your selection is highlighted on the home screen immediately and takes effect when you enter a match; changes made here or in Settings also refresh live during a match.",
@@ -481,6 +481,9 @@
   var QUALITY_HINTS = I18N.zh.qualityHint
   var TLINE_LABELS = I18N.zh.tline
 
+  /* v1.8.3：受支持的环境场景（足球场 / 篮球场 / UFC八角笼已下线） */
+  var SCENE_IDS = ["room", "beach", "snow", "tea", "cell", "seed"]
+
   var DEFAULTS = {
     lod: 3,
     sound: true,
@@ -503,13 +506,16 @@
     keepAllViews: true,
     skin: "classic",
     cueTheme: "auto",
-    // v1.3.20：台球桌皮肤默认黑曜石黑
-    tableSkin: "obsidian",
+    // v1.8.6：球桌外观只剩经典原木，默认值同步（旧存档由 settings.ts 归一）
+    tableSkin: "classic",
     // v1.1.6：默认且仅启用「雪山」场景
     scene: "snow",
     // v1.3.19：界面语言默认中文
     language: "zh",
+    // v1.8.7：界面主题（paper/felt/arcade），同时驱动首页与游戏内弹窗
+    uiTheme: "paper",
   }
+  var UI_THEMES = { paper: 1, felt: 1, arcade: 1 }
 
   /* ---------------- 设置存取 ---------------- */
 
@@ -527,9 +533,12 @@
     for (var k2 in s) merged[k2] = s[k2]
     if (isFirst) merged.lod = detectLod()
     merged.lod = Math.min(5, Math.max(0, Math.round(merged.lod)))
-    // v1.1.6：仅启用「雪山」场景，其余 UI 已禁用；若旧存档选了别的场景，
-    // 强制回落到雪山，避免进入游戏后黑屏。
-    if (merged.scene !== "snow") merged.scene = "snow"
+    // v1.8.3：场景选择改为真正持久化。此前这里把任何非雪山场景强制改回
+    // 雪山，导致「退出游戏再进又变回默认雪山」。现改为白名单校验：
+    // 只拦已下线（football / basketball / ufc）或脏数据的旧存档，回落到雪山。
+    if (SCENE_IDS.indexOf(merged.scene) < 0) merged.scene = "snow"
+    // v1.8.7：界面主题白名单校验，脏数据回落 paper
+    if (!UI_THEMES[merged.uiTheme]) merged.uiTheme = "paper"
     // v1.1.10：seenGuide 独立 key 兜底。主 key 写入失败时，独立 key 仍可读到。
     // v1.5.1：补齐第三通道 globalThis.__billiardsSeenGuide，与 Settings.hasSeenGuide()
     // 的三通道判定完全对齐 —— 游戏内引导完成时先写内存标记，主 key 落盘有可能
@@ -559,6 +568,65 @@
         }
       } catch (e2) { /* 彻底不可用时无能为力 */ }
     }
+  }
+
+  /**
+   * v1.8.7：把界面主题应用到 <html>，首页与游戏内弹窗共用。
+   * 同时写 data-ui-theme（共用 token）与 data-home-theme（首页专属 token）。
+   * 注意：URL ?theme= 选稿参数优先级最高，若存在则不覆盖（选稿期间切设置不应被锁死，
+   * 但刷新后 URL 参数仍会赢——这是选稿模式的设计意图）。
+   */
+  function applyUiTheme(t) {
+    if (!UI_THEMES[t]) t = "paper"
+    var root = document.documentElement
+    root.setAttribute("data-ui-theme", t)
+    root.setAttribute("data-home-theme", t)
+  }
+
+  /**
+   * 主题按钮高亮。切换入口已收敛到「设置」页（唯一入口），
+   * 这里仍按 data-theme-value 统一扫描，便于日后扩展其他入口。
+   */
+  function syncThemeButtons() {
+    var btns = document.querySelectorAll("[data-theme-value]")
+    // 高亮以「当前实际生效的主题」为准（head 脚本可能用 URL ?theme= 选稿，
+    // 这时存档还是旧值，按钮必须跟着画面走，否则出现"画面是午夜、按钮亮米白"）
+    var cur = ""
+    try {
+      cur = document.documentElement.getAttribute("data-ui-theme") || ""
+    } catch (e) {}
+    if (!UI_THEMES[cur]) cur = settings.uiTheme
+    for (var i = 0; i < btns.length; i++) {
+      var on = btns[i].getAttribute("data-theme-value") === cur
+      if (on) {
+        btns[i].classList.add("active")
+        btns[i].setAttribute("aria-selected", "true")
+      } else {
+        btns[i].classList.remove("active")
+        btns[i].setAttribute("aria-selected", "false")
+      }
+    }
+  }
+
+  /** 主题按钮绑定 —— 写存档 + 立即换肤 + 同步按钮高亮 */
+  function initThemeButtons() {
+    if (__themeBtnsBound) return
+    __themeBtnsBound = true
+    Array.prototype.forEach.call(
+      document.querySelectorAll("[data-theme-value]"),
+      function (btn) {
+        btn.addEventListener("click", function () {
+          var v = btn.getAttribute("data-theme-value")
+          if (!UI_THEMES[v]) return
+          settings.uiTheme = v
+          saveSettings(settings)
+          applyUiTheme(v)
+          syncThemeButtons()
+          buzz(12)
+        })
+      }
+    )
+    syncThemeButtons()
   }
 
   /** 依据设备内存/核心数/GPU 推荐画质 */
@@ -604,11 +672,15 @@
   }
 
   var settings = loadSettings()
+  /** 主题按钮只绑定一次（设置页唯一入口） */
+  var __themeBtnsBound = false
 
   /* ---------------- 界面状态 ---------------- */
 
   var selectedRule = settings.lastRule || "nineball"
   var selectedOpponent = settings.lastOpponent || "solo"
+  // v1.8.8：打开局域网模态前选的是哪种对手，关闭时原样退回
+  var lanPrevOpponent = selectedOpponent === "lan" ? "solo" : selectedOpponent
 
   function $(id) {
     return document.getElementById(id)
@@ -709,6 +781,7 @@
   }
 
   function selectOpponent(op) {
+    if (op === "lan" && selectedOpponent !== "lan") lanPrevOpponent = selectedOpponent
     selectedOpponent = op
     var btns = document.querySelectorAll("#opponentSeg .seg-btn")
     Array.prototype.forEach.call(btns, function (b) {
@@ -728,6 +801,12 @@
     var p = $("lanPanel")
     if (!p) return
     p.hidden = selectedOpponent !== "lan"
+    // v1.8.8：面板是 fixed 居中模态，而 .sec-opponent 的入场动画
+    // （hrRise + fill-mode:both）会留下 transform，从而把 fixed 的包含块
+    // 变成这个 section 本身 —— 必须同时清掉它，否则面板只按 section
+    // 的高度（约 50px）定位，被压成一条窄边。
+    var sec = p.closest ? p.closest(".sec-opponent") : null
+    if (sec) sec.classList.toggle("lan-open", !p.hidden)
     if (!p.hidden) {
       var inp = $("lanPeerInput")
       if (inp && !inp.value && settings.lastLanHost) {
@@ -873,6 +952,16 @@
         }
       })
     }
+    // v1.8.8：面板改为居中模态后必须有显式关闭入口 —— 否则遮罩盖住
+    // 「自己练习 / 电脑对战」等选项，用户想取消都没地方点。
+    // 关闭 = 退回上一次真正选中的对手（默认自己练习）。
+    var cb = $("lanClose")
+    if (cb) {
+      cb.addEventListener("click", function () {
+        selectOpponent(lanPrevOpponent || "solo")
+        buzz(6)
+      })
+    }
     updateLanPeerHint()
     updateLanPanel()
   }
@@ -942,6 +1031,12 @@
    * 子屏（表现为「关掉预览后设置页也跟着退回主页」）。
    */
   var screenSuppressPop = false
+  /**
+   * v1.8.8：抑制**下一次** popstate —— 这是「返回」按钮自己为了对齐历史而
+   * 触发的 history.back()，UI 早已切好，绝不能让它再退一级。
+   */
+  var popQuiet = false
+  var popQuietTimer = null
 
   // 初始屏由 HTML 里的 class="screen active" 决定（脚本不负责首屏渲染），
   // 这里必须同步进来：否则首次 showScreen 会把空串压进栈，返回时 pop 出空串
@@ -973,32 +1068,71 @@
     }
     try {
       history.pushState({ menuScreen: name }, "", location.href)
-      screenStack.push(currentScreen)
     } catch (e) {
-      // 极端 WebView 不支持 pushState：退化为「无返回键兜底」，至少 UI 正常
+      // 极端 WebView 不支持 pushState：只是没有系统返回键兜底，UI 照常
     }
+    // v1.8.8：UI 栈无条件记录 —— 旧实现把 push 放在 pushState 的同一 try 里，
+    // pushState 一抛异常（file:// 或受限 WebView）栈就是空的，直接导致
+    // 「返回按钮落回 fallback 也退不出去」。
+    screenStack.push(currentScreen)
     applyScreen(name)
   }
 
   /**
    * 返回按钮 / 系统返回键共用的回退入口。
-   * 有子屏历史就走 history.back()（让 history 与 UI 同步），
-   * 否则直接落到 fallback（通常是 home）。
+   *
+   * v1.8.8 重写：**先同步切 UI，再尽力对齐 history**。
+   * 旧实现是「有栈就 history.back() 然后 return」—— 把返回这件事完全押在
+   * 浏览器历史与 popstate 上。真机 WebView 里 pushState 可能被拒、popstate 可能
+   * 被别的 SPA 逻辑消费，任何一环不成立，用户看到的就是「点了返回没反应」。
+   * 现在 UI 切换是同步且无条件的，返回 100% 有效；历史只用于让系统返回键与
+   * 按钮保持同一层级。
    */
   function goBackScreen(fallback) {
-    if (screenStack.length > 0) {
-      try {
-        history.back()
-        return
-      } catch (e) { /* 忽略，走下面的直接切换 */ }
+    var target = screenStack.length > 0 ? screenStack.pop() : (fallback || "home")
+    if (!target || target === currentScreen) target = fallback || "home"
+    if (!target || target === currentScreen) return false
+    applyScreen(target)
+    alignHistoryBack()
+    return true
+  }
+
+  /** 点返回后把浏览器历史指针也退一格（仅在当前条目确实是本页压的子屏条目时） */
+  function alignHistoryBack() {
+    var pushed = false
+    try {
+      pushed = !!(history.state && history.state.menuScreen)
+    } catch (e) {}
+    if (!pushed) return
+    popQuiet = true
+    if (popQuietTimer) clearTimeout(popQuietTimer)
+    // 700ms 后强制复位：某些 WebView 的历史栈为空时不会派发 popstate，
+    // 标记若一直留着，下一次系统返回键会被错误地忽略一次。
+    popQuietTimer = setTimeout(function () {
+      popQuiet = false
+      popQuietTimer = null
+    }, 700)
+    try {
+      history.back()
+    } catch (e) {
+      popQuiet = false
     }
-    showScreen(fallback || "home")
   }
 
   window.addEventListener("popstate", function () {
     // 预览关闭时自行触发的那次 back：只消费掉，不做子屏回退
     if (screenSuppressPop) {
       screenSuppressPop = false
+      return
+    }
+    // 点「返回」按钮时 alignHistoryBack() 自己触发的那次 back：UI 已经切好了，
+    // 这里只把标记吃掉，绝不能再退一级。
+    if (popQuiet) {
+      popQuiet = false
+      if (popQuietTimer) {
+        clearTimeout(popQuietTimer)
+        popQuietTimer = null
+      }
       return
     }
     // 球杆全屏预览自己也压过一条历史，且它比子屏更"上层"，优先交给它处理，
@@ -1015,6 +1149,26 @@
     if (prev == null || prev === "") prev = "home"
     if (prev !== currentScreen) applyScreen(prev)
   })
+
+  /**
+   * v1.8.8：供 Android 端 onBackPressed() 调用的菜单返回入口。
+   *
+   * 返回 true 表示「页面自己处理了这次返回」（预览已关 / 子屏已回退），
+   * Java 侧必须据此**只在这时**吞掉返回键；返回 false 才允许走
+   * canGoBack()/退出应用。旧实现 Java 无条件吞键，一旦 JS 没接住，
+   * 系统返回键在整个应用里就彻底失灵。
+   */
+  window.__onMenuBack = function () {
+    try {
+      if (typeof cueOverlay !== "undefined" && cueOverlay &&
+          cueOverlay.classList.contains("active")) {
+        closeCuePreviewOverlay()
+        return true
+      }
+    } catch (e) { /* 预览未初始化 */ }
+    if (screenStack.length > 0) return goBackScreen("home")
+    return false
+  }
 
   /* ---------------- 设置面板 ---------------- */
 
@@ -1033,6 +1187,8 @@
   function initSettingsPanel() {
     renderQualityOptions()
 
+    // v1.8.7：主题由 head 内联脚本在页面加载时写入 <html>（URL ?theme= 优先），
+    // 此处只同步按钮高亮，绝不调用 applyUiTheme —— 否则会用存档值覆盖选稿参数。
     syncSettingsUI()
 
     // v1.3.60：画质档位 / 语言两组设置已从设置面板移除（见 menu.html），
@@ -1099,12 +1255,16 @@
       saveSettings(settings)
     })
 
+    // 主题按钮绑定（见 initThemeButtons）
+
     $("btnReset").addEventListener("click", function () {
       var d = {}
       for (var k in DEFAULTS) d[k] = DEFAULTS[k]
       d.lod = detectLod()
       settings = d
       saveSettings(settings)
+      // v1.8.7：重置也要把主题应用回默认 paper
+      applyUiTheme(settings.uiTheme)
       syncSettingsUI()
       buzz(20)
     })
@@ -1126,6 +1286,8 @@ $("setKeepViews").checked = settings.keepAllViews !== false
 // v1.3.59：$("setCueTheme") / $("setScene") 已随「外观与场景」整组从游戏设置移除，
 // 此处同步删除赋值。这两行原本没有 null 保护，只删 HTML 不删 JS 会启动即抛错白屏。
     $("setTurnTimer").value = String(settings.turnTimer || 0)
+    // v1.8.8：同步全部主题入口的选中态（设置 / 局域网 / 游戏内）
+    syncThemeButtons()
   }
 
   function buzz(ms) {
@@ -1564,39 +1726,11 @@ $("setKeepViews").checked = settings.keepAllViews !== false
     ctx.restore()
   }
 
-  /** 台球桌皮肤缩略图（item 5）：台呢渐变(c1→c2) + 发光桌框边 */
-  function drawTableSkinPreview(cv, c1, c2) {
-    var ctx = cv.getContext("2d")
-    var W = cv.width,
-      H = cv.height
-    // 桌框（外圈）
-    ctx.fillStyle = "#1a1a1f"
-    roundRect(ctx, 4, 4, W - 8, H - 8, 10)
-    ctx.fill()
-    // 台呢渐变
-    var m = 12
-    var g = ctx.createLinearGradient(0, m, 0, H - m)
-    g.addColorStop(0, c1)
-    g.addColorStop(1, c2)
-    ctx.fillStyle = g
-    roundRect(ctx, m, m, W - 2 * m, H - 2 * m, 6)
-    ctx.fill()
-    // 发光桌框边（c2 作发光色）
-    ctx.save()
-    ctx.shadowColor = c2
-    ctx.shadowBlur = 10
-    ctx.strokeStyle = c2
-    ctx.lineWidth = 3
-    roundRect(ctx, m + 1, m + 1, W - 2 * m - 2, H - 2 * m - 2, 5)
-    ctx.stroke()
-    ctx.restore()
-  }
-
   /**
    * v1.3.103：给卡片挂两类预览。
    *
    * 1）**2D 占位图**（立即、同步、零成本）—— 由 drawScenePreview /
-   *    drawCuePreview / drawTableSkinPreview 手绘。它是"先顶上"的兜底，
+   *    drawCuePreview 手绘。它是"先顶上"的兜底，
    *    保证首屏立刻有图、且 WebGL 不可用时菜单依然可用。
    * 2）**3D 真图**（懒加载、逐张替换）—— 由 skin-preview-3d.js 用游戏内
    *    真实贴图离屏渲染。只有当卡片滚动进视口时才排队渲染，渲染成功就
@@ -1639,18 +1773,6 @@ $("setKeepViews").checked = settings.keepAllViews !== false
         if (sw && !sw.dataset.pv) {
           var cv = makeCanvas(150, 150)
           drawCuePreview(cv, card.dataset.pattern, card.dataset.c1, card.dataset.c2)
-          sw.style.backgroundImage = "url(" + cv.toDataURL() + ")"
-          sw.dataset.pv = "1"
-        }
-      }
-    )
-    Array.prototype.forEach.call(
-      document.querySelectorAll("#tableSkinCards .skin-card"),
-      function (card) {
-        var sw = card.querySelector(".skin-swatch")
-        if (sw && !sw.dataset.pv) {
-          var cv = makeCanvas(150, 150)
-          drawTableSkinPreview(cv, card.dataset.c1, card.dataset.c2)
           sw.style.backgroundImage = "url(" + cv.toDataURL() + ")"
           sw.dataset.pv = "1"
         }
@@ -1816,7 +1938,6 @@ $("setKeepViews").checked = settings.keepAllViews !== false
     }
     each("#sceneCards .skin-card", "data-scene", "scene")
     each("#cueThemeCards .skin-card", "data-cuetheme", "cue")
-    each("#tableSkinCards .skin-card", "data-tableskin", "table")
   }
 
   /** 按卡片元素反查它的渲染任务 */
@@ -1830,8 +1951,6 @@ $("setKeepViews").checked = settings.keepAllViews !== false
       kind = "scene"; id = card.getAttribute("data-scene")
     } else if (card.hasAttribute("data-cuetheme")) {
       kind = "cue"; id = card.getAttribute("data-cuetheme")
-    } else if (card.hasAttribute("data-tableskin")) {
-      kind = "table"; id = card.getAttribute("data-tableskin")
     }
     if (!kind || !id) return null
     return { card: card, sw: sw, kind: kind, id: id }
@@ -1846,10 +1965,6 @@ $("setKeepViews").checked = settings.keepAllViews !== false
       var c = document.querySelector('#cueThemeCards .skin-card[data-cuetheme="' + id + '"]')
       return c ? c.querySelector(".skin-name").textContent : "随台面"
     },
-    tableskin: function (id) {
-      var c = document.querySelector('#tableSkinCards .skin-card[data-tableskin="' + id + '"]')
-      return c ? c.querySelector(".skin-name").textContent : "经典原木"
-    },
   }
 
   /* ============================================================================
@@ -1857,7 +1972,7 @@ $("setKeepViews").checked = settings.keepAllViews !== false
    *
    * 【问题 1｜首页缩略图非实物】
    *   refreshCustomRows() 原本用 drawScenePreview / drawCuePreview /
-   *   drawTableSkinPreview 三个 canvas 2D 手绘函数画示意图 —— 与游戏内
+   *   drawScenePreview / drawCuePreview 两个 canvas 2D 手绘函数画示意图 —— 与游戏内
    *   真实贴图毫无关系，和二级面板里的 3D 实物缩略图也对不上。
    *
    * 【问题 2｜点开「球杆主题」面板会卡顿一下】
@@ -2002,9 +2117,7 @@ $("setKeepViews").checked = settings.keepAllViews !== false
           jobs.push({ kind: "cue", id: c.getAttribute("data-cuetheme") })
         }
       )
-      var curTable = settings.tableSkin || "classic"
       var curScene = settings.scene || "room"
-      jobs.push({ kind: "table", id: curTable })
       var sceneCard = document.querySelector('#sceneCards .skin-card[data-scene="' + curScene + '"]')
       // 有实拍照片的场景首页缩略图也用照片，不必预热 3D
       if (!(sceneCard && sceneCard.getAttribute("data-photo"))) {
@@ -2070,18 +2183,6 @@ $("setKeepViews").checked = settings.keepAllViews !== false
         }
       }
     }
-    var tsk = $("thumbTableSkin")
-    if (tsk) {
-      var tid = settings.tableSkin || "classic"
-      if (!applyHomeThumb(tsk, "table", tid)) {
-        var ttc = document.querySelector('#tableSkinCards .skin-card[data-tableskin="' + tid + '"]')
-        if (ttc) {
-          var cv4 = makeCanvas(92, 92)
-          drawTableSkinPreview(cv4, ttc.dataset.c1, ttc.dataset.c2)
-          tsk.style.backgroundImage = "url(" + cv4.toDataURL() + ")"
-        }
-      }
-    }
   }
 
   /** 刷新首页「外观定制」三行的缩略图与当前值（item 4） */
@@ -2089,7 +2190,6 @@ $("setKeepViews").checked = settings.keepAllViews !== false
     // 文案先更新（同步、无副作用）
     if ($("valScene")) $("valScene").textContent = NAME_OF.scene(settings.scene)
     if ($("valCue")) $("valCue").textContent = NAME_OF.cuetheme(settings.cueTheme)
-    if ($("valTableSkin")) $("valTableSkin").textContent = NAME_OF.tableskin(settings.tableSkin)
     // 缩略图：优先取预热缓存出「实物」图，未命中则回退 2D 占位
     refreshHomeThumbs()
   }
@@ -2269,6 +2369,8 @@ $("setKeepViews").checked = settings.keepAllViews !== false
   function init() {
     // v1.4.5：核心按钮最先绑定 —— 之后任何初始化失败都不影响「开始游戏」
     bindCoreButtons()
+    // 主题按钮（设置页）尽早绑定，不等二级屏延后初始化
+    safeInit("initThemeButtons", initThemeButtons)
     // v1.3.12：外观定制双端均默认展开。
     // HTML 里 <details id="customDetails" open> 已默认展开；不再对 APP 端（html.in-app）
     // 强制收回，用户要求"app 端外观定制不要折叠"。
@@ -2289,7 +2391,6 @@ $("setKeepViews").checked = settings.keepAllViews !== false
     deferAfterFirstPaint(function () {
       safeInit("initLanPanel", initLanPanel)
       safeInit("initSettingsPanel", initSettingsPanel)
-      safeInit("initTableAppearances", initTableAppearances)
       safeInit("initCueThemes", initCueThemes)
       safeInit("initScenes", initScenes)
       // v1.2.12：恢复首页「查看回放」按钮绑定（v1.2.11 #3 误删 initMyReplays 时一并丢失）
@@ -2455,31 +2556,6 @@ $("setKeepViews").checked = settings.keepAllViews !== false
       if (main) versionCell.textContent = main
       versionCell.title = raw
     }
-  }
-
-  /* ---------------- 台球桌外观卡片（v1.3.21 合并：原「台球桌颜色」+「台球桌皮肤」） ---------------- */
-
-  function initTableAppearances() {
-    var cards = document.querySelectorAll("#tableSkinCards .skin-card")
-    if (!cards.length) return
-    function syncActive() {
-      Array.prototype.forEach.call(cards, function (c) {
-        c.classList.toggle(
-          "active",
-          c.getAttribute("data-tableskin") === (settings.tableSkin || "classic")
-        )
-      })
-      refreshCustomRows()
-    }
-    Array.prototype.forEach.call(cards, function (c) {
-      c.addEventListener("click", function () {
-        settings.tableSkin = c.getAttribute("data-tableskin")
-        saveSettings(settings)
-        syncActive()
-        buzz(10)
-      })
-    })
-    syncActive()
   }
 
   /* ---------------- 球杆主题卡片（item 2） ---------------- */
@@ -2711,7 +2787,7 @@ $("setKeepViews").checked = settings.keepAllViews !== false
           // v1.3.54：先按游戏内 ID 建真实球杆（几何 + 分区贴图），再补倒影压暗色。
           // setTheme 只记颜色、不重建；重建由 setCueTheme 触发，一次打开只建一遍。
           cueViewer3D.setTheme(wood, dark, deriveMetal(wood), deriveTip(dark), kind)
-          cueViewer3D.setCueTheme(themeId, settings.skin, settings.tableSkin)
+          cueViewer3D.setCueTheme(themeId, settings.skin, "classic")
           // 每次打开都重置到统一的展示角度，便于横向对比不同主题
           if (cueViewer3D.resetView) cueViewer3D.resetView()
           // v1.3.52：取消自动旋转，改为按需渲染一帧（视角完全由手指控制）

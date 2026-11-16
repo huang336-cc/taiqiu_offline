@@ -383,13 +383,15 @@
   display: inline-block;
   padding: var(--notification-space-1) var(--notification-space-2); /* 4px 8px */
   cursor: pointer;
-  color: var(--notification-white);
+  /* v1.8.7：按钮字/底/边主题化。兜底保留原半透明白（深棕底上使用）。
+     paper 亮色主题下 --notification-btn-ink/bg/border 会给出墨字实底按钮。 */
+  color: var(--notification-btn-ink, var(--notification-white));
   text-decoration: none;
   font-family: inherit;
   font-size: var(--notification-size-m);
   font-weight: var(--notification-weight-bold);
-  background: var(--notification-white-15);
-  border: 1px solid var(--notification-white-30);
+  background: var(--notification-btn-bg, var(--notification-white-15));
+  border: 1px solid var(--notification-btn-border, var(--notification-white-30));
   border-radius: var(--notification-radius-s);
   box-shadow: var(--notification-shadow-sm);
   transition:
@@ -429,8 +431,9 @@
   margin-top: var(--notification-space-2, 8px);
   padding: 10px 14px;
   border-radius: 12px;
-  border: 2px solid #c89534;
-  background: linear-gradient(180deg, #6b4a22 0%, #4a3014 100%);
+  /* v1.8.7：面板底/边框主题化（兜底保留原木金棕） */
+  border: 2px solid var(--ui-panel-border, #c89534);
+  background: var(--notification-bg-gradient, linear-gradient(180deg, #6b4a22 0%, #4a3014 100%));
   box-shadow:
     inset 0 1px 2px rgba(255, 255, 255, 0.18),
     0 2px 6px rgba(0, 0, 0, 0.4);
@@ -440,7 +443,7 @@
 .notification-detail-label {
   font-size: 12px;
   font-weight: 700;
-  color: #ffd87a;
+  color: var(--notification-score-label-clr, #ffd87a);
   letter-spacing: 1px;
   margin-bottom: 6px;
   opacity: 0.92;
@@ -554,7 +557,7 @@
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 17px;
   font-weight: 700;
-  color: #fff5d8;
+  color: var(--notification-text-clr-main, #fff5d8);
   letter-spacing: 0.5px;
   word-break: break-all;
   flex: 1 1 auto;
@@ -565,14 +568,14 @@
 .notification-detail-mono {
   font-size: 20px;
   letter-spacing: 1.2px;
-  color: #fffbe8;
+  color: var(--notification-text-clr-main, #fffbe8);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
 /* 等待态：正文压暗一档，避免把「正在连接 192.168.1.8」读成「已连上」 */
 .notification-detail-state-spin .notification-detail-value,
 .notification-detail-state-spin .notification-detail-mono {
-  color: #ecd9a8;
+  color: var(--notification-text-clr-sub, #ecd9a8);
   opacity: 0.9;
 }
 
@@ -581,9 +584,9 @@
   padding: 6px 14px;
   font-size: 13px;
   font-weight: 700;
-  color: #3a2a08;
-  background: linear-gradient(180deg, #ffe680, #ffc233);
-  border: 1px solid #b8860b;
+  color: var(--ui-btn-ink, #3a2a08);
+  background: var(--ui-btn-bg, linear-gradient(180deg, #ffe680, #ffc233));
+  border: 1px solid var(--ui-btn-border, #b8860b);
   border-radius: 14px;
   cursor: pointer;
   user-select: none;

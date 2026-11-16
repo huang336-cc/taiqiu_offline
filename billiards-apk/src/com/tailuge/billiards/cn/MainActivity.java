@@ -22,6 +22,8 @@ public class MainActivity extends Activity {
     private WebView webView;
     /** v1.3.65：局域网对战 JSBridge（页面侧 window.__lan） */
     private LanBridge lanBridge;
+    /** v1.8.8：返回键连按节流（evaluateJavascript 回执是异步的，避免叠加后退） */
+    private long lastBackAt = 0L;
 
     /**
      * 虚拟域名。
@@ -179,6 +181,17 @@ public class MainActivity extends Activity {
              */
             @Override
             public void onPageFinished(WebView view, String url) {
+                // v1.8.4：回到主菜单就清空 WebView 历史。
+                //
+                // 病根（用户报「退出主菜单后，系统返回键又回到游戏」）：
+                // play.html 为了拦返回键自己 pushState 过一条记录，退出时用
+                // location.replace 只替换了「当前」条目，play.html 那条仍留在
+                // 历史里 → 在 menu.html 按返回，canGoBack() 为真，直接回游戏。
+                // 主菜单是应用根页面，正确语义是「返回 = 退出应用」，因此这里
+                // 一旦落到 menu.html 就清空历史，返回键便不再回游戏。
+                if (url != null && url.contains("menu.html")) {
+                    try { view.clearHistory(); } catch (Throwable ignored) {}
+                }
                 softEvaluate(
                     "(function(){try{window.__fitViewport&&window.__fitViewport()}catch(e){}})()"
                 );
@@ -333,20 +346,103 @@ public class MainActivity extends Activity {
             super.onBackPressed();
             return;
         }
-        // 游戏内页面（play.html）由 JS 自己弹"继续游戏 / 返回主菜单"二次确认；
-        // 不再走 goBack，避免直接丢掉本局进度。
+        // v1.8.8：返回键**绝不再无条件吞掉**。
+        //
+        // 旧实现（≤ v1.8.7）只要当前 URL 是 play.html 就调用 __onAndroidBack()
+        // 然后直接 return —— 只要 JS 一侧没接住（脚本没加载成功 / 被别的脚本
+        // 覆盖 / 执行报错），这一次返回就被完全丢弃：界面没有任何反应，而且
+        // 游戏内所有界面（对局、回放、结算）都是同一个 URL，表现就是
+        // 「所有界面都无法返回」的严重 bug。
+        //
+        // 现在改成带回执：只有页面明确返回 true（= 我已弹窗 / 已关闭预览 /
+        // 已回退子屏）才认为处理完毕；返回 false 或没有回执，一律退回原生行为
+        // （有历史就后退，没有就退出应用），保证返回键永远有结果。
+        long now = System.currentTimeMillis();
+        if (now - lastBackAt < 260) return; // 连按节流：避免异步回执叠加
+        lastBackAt = now;
+
         String url = webView.getUrl();
         if (url != null && url.contains("/play.html")) {
-            softEvaluate(
-                "(function(){try{return !!window.__onAndroidBack&&(window.__onAndroidBack(),true)}catch(e){return false}})()"
+            evaluateJs(
+                "(function(){try{if(typeof window.__onAndroidBack==='function'){window.__onAndroidBack();return true}}catch(e){}return false})()",
+                new JsCallback() {
+                    @Override
+                    public void onResult(String value) {
+                        if (!"true".equals(value)) backFallback();
+                    }
+                }
             );
             return;
         }
-        if (webView.canGoBack()) {
-            webView.goBack();
+        // 主菜单是多屏 SPA：先问页面「是否还在子屏」。返回 true 表示它已经
+        // 自己回退了一层；否则才交给系统（有历史后退，主屏直接退出应用）。
+        if (url != null && url.contains("/menu.html")) {
+            evaluateJs(
+                "(function(){try{if(typeof window.__onMenuBack==='function'){return window.__onMenuBack()===true}}catch(e){}return false})()",
+                new JsCallback() {
+                    @Override
+                    public void onResult(String value) {
+                        if (!"true".equals(value)) backFallback();
+                    }
+                }
+            );
             return;
         }
-        super.onBackPressed();
+        backFallback();
+    }
+
+    /** v1.8.8：原生兜底 —— 能后退就后退，不能就退出（等同系统默认返回） */
+    private void backFallback() {
+        try {
+            if (webView != null && webView.canGoBack()) {
+                webView.goBack();
+                return;
+            }
+        } catch (Throwable ignored) {}
+        try {
+            finish();
+        } catch (Throwable ignored) {}
+    }
+
+    /** v1.8.8：JS 执行结果回调（主线程） */
+    public interface JsCallback {
+        void onResult(String value);
+    }
+
+    /**
+     * v1.8.8：带回执地执行 JS。
+     *
+     * 回调 value 为 null 表示「拿不到回执」（旧内核没有 evaluateJavascript），
+     * 调用方必须按「页面未处理」来兜底，绝不能静默吞掉用户的返回操作。
+     */
+    public void evaluateJs(String script, final JsCallback callback) {
+        if (webView == null) {
+            if (callback != null) callback.onResult(null);
+            return;
+        }
+        try {
+            java.lang.reflect.Method m = webView.getClass().getMethod(
+                "evaluateJavascript", String.class, android.webkit.ValueCallback.class
+            );
+            android.webkit.ValueCallback<String> vc = null;
+            if (callback != null) {
+                vc = new android.webkit.ValueCallback<String>() {
+                    @Override
+                    public void onReceiveValue(final String value) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                try { callback.onResult(value); } catch (Throwable ignored) {}
+                            }
+                        });
+                    }
+                };
+            }
+            m.invoke(webView, script, vc);
+        } catch (Throwable t) {
+            try { webView.loadUrl("javascript:void(" + script + ")"); } catch (Throwable ignored) {}
+            if (callback != null) callback.onResult(null);
+        }
     }
 
     /** 反射调用 WebView.evaluateJavascript(String, ValueCallback)，调不到就忽略 */

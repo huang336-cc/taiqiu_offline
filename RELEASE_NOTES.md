@@ -1,695 +1,1064 @@
-# 奥特曼的台球 · 离线版 v1.0.0
+# v1.8.11 发布说明
 
-基于开源项目 [tailuge/billiards](https://github.com/tailuge/billiards) 改造的中文离线安卓版本。
+**发布时间**：2026-11-16 18:05（北京时间）
+**版本**：v1.8.11 / versionCode **261116811**（对 v1.8.10 的 261116810 递增；构建戳 26111618）
+**主题**：修复「主界面挪动视角白屏」（严重）—— 击球主视角，非全桌/回放视角
+**性质**：相机净空修复；**物理层、碰撞、规则、挥杆、回放时间轴、网络协议、场景模型均未改动**
+
+## 用户反馈
+
+> 该视角下仍存在白屏（附截图：击球主界面，画面整片米色，看不到球桌）
+
+## 根因：前两版修错了视角
+
+v1.8.9 / v1.8.10 修的是 **farView（全桌视角）** 与 **replayFreeView（回放自由视角）**，但截图是**主界面击球视角 `aimView`**（底部"击球"高亮、无视角上标）。这条路径从未被约束：
+
+- 主界面上下拖动 → `movementYUp` → `camera.adjustHeight(delta*8)` → `height` 可达 `R*120 ≈ 3.93`。
+- `aimView()` 里 `this.camera.position.z = this.height`，**无任何天花板约束**。
+- 茶室横梁底 z≈1.93、天花板板层 z[2.30,2.40]，而顶棚隐藏阈值 `INDOOR_CEIL_Z−0.05 = 2.80`。
+- 相机 z 升到 **[1.90, 2.80]** 区间时钻进横梁/天花板板层，顶棚却仍渲染 → 米色整片白屏。数学模拟（height 扫描）精确复现该区间。
+
+## 修法
+
+| 文件 | 改动 |
+|---|---|
+| `camera.ts` | 新增 `AIM_CEIL_CLEARANCE=0.5`；`clampCameraZ(z, clearance=0.18)` 增加可选余量参数（far/回放用默认 0.18，不变）；`aimView` 的 `camera.position.z` 改用 `clampCameraZ(h, 0.5)`。 |
+
+室内主视角相机 z 上限 = 天花板底−0.5：room=1.82 / tea=1.80，**均落在横梁 1.93 下方**，从根源避开白屏区。户外（`ceilingZ=null`）不约束，雪山机位不变。
+
+## 验证（数学模拟，height 0.39→3.93 全区间扫描）
+
+| 场景 | 旧逻辑 | 修复后 |
+|---|---|---|
+| 茶室 (ceilingZ=2.30) | z∈[1.90,2.80] **白屏** | z≤1.80，恒在横梁下方 ✓ |
+| 台球厅 (ceilingZ=2.32) | 同类白屏 | z≤1.82 ✓ |
+| 默认机位 z=0.393 | 正常 | 0.393 逐像素不变 ✓ |
+| 户外 (ceilingZ=null) | 正常 | 不约束，机位不变 ✓ |
+
+v1.8.9（far/回放防穿顶）、v1.8.10（拉远看牌匾自适应注视点）均保留；tsc 22 条基线零新增；webpack 构建成功；版本号已全量同步 v1.8.11。
+
+---
+
+# v1.8.10 发布说明
+
+**发布时间**：2026-11-16 17:30（北京时间）
+**版本**：v1.8.10 / versionCode **261116810**（对 v1.8.9 的 261116809 递增；构建戳 26111617）
+**主题**：修复「自由视角太矮、看不到茶室牌匾」
+**性质**：视线注视点修复；**相机位置、物理层、碰撞、规则、挥杆、回放时间轴、网络协议、场景模型均未改动**
+
+## 用户反馈（原文）
+
+> 自由视角太矮，无法看见茶室的牌匾
+
+## 根因
+
+不是相机高度问题，而是**注视点锁死在台面中心**。
+
+- 茶室牌匾 `Wall_Plaque_*` 挂在北墙（y≈3.35），世界高度 z≈1.17~1.63（中心 1.40），法线朝室内。
+- v1.8.9 修白屏时把相机 z 夹到天花板下（室内 ≤2.12），这本身正确；但两个可拖动视角的注视点仍死锁在台面中心：`farView` 看向 `FAR_TARGET`(z=−0.15)、`replayFreeView` 看向 `zero`。
+- 视线俯角过大 → 牌匾永远落在画面上缘之外。用户越往上拖想抬头看，相机越贴近台面正上方、视线越俯，反而更看不到 —— 主观感受就是「视角太矮」。
+
+透视投影验证（16:9 / fov≈36°）：现状下**任意 yaw/pitch/dist 组合牌匾都不可见**。
+
+## 修法：自适应注视点抬升（look-at lift）
+
+关键：只改 `lookAt` 目标点，**相机位置一个像素都不动** —— v1.8.9 的防穿顶安全盒 `farPosition` / `clampCameraZ` 完整保留。
+
+牌匾（z=1.4 远墙）与球台（z=0）能否同框，取决于相机**水平离台距离 horiz**：近机位垂直视场窄、看球为主（不能抬，否则球台出画）；拉远后视场变宽，抬高注视点即可纳入墙面装饰。故按 horiz 做 smoothstep 抬升：
+
+| 视角 | 抬升上限 | 起止 horiz | 效果 |
+|---|---|---|---|
+| 全桌 farView | 1.0 | 1.2→2.6 | 默认机位牌匾+球台同框；抬高 pitch 俯视时抬升自动归零 |
+| 回放 replayFreeView | 0.6 | 1.0→2.4 | 拉远看房间时牌匾+球台同框；默认近机位看球构图不变 |
+
+户外场景（`ceilingZ=null`）恒不抬升，雪山机位保持原样。
+
+## 验证
+
+数学模拟（透视投影 + 视锥判定）：
+
+| 机位 | 牌匾 | 球台 |
+|---|---|---|
+| far 默认 / 正对北墙 / 拉最远 | ✓ | ✓ |
+| far 抬高 pitch 俯视 / 拉近 | （俯视看球，正常） | ✓ |
+| free 拉远朝北 | ✓ | ✓ |
+| free 默认近机位 | （看球） | ✓ 构图不变 |
+
+tsc 22 条基线零新增；webpack 构建成功；游戏内变更履历 / 发布页 / 发版说明版本号已同步 v1.8.10。
+
+---
+
+# v1.8.9 发布说明
+
+**发布时间**：2026-11-16（北京时间）
+**版本**：v1.8.9 / versionCode **261116809**（对 v1.8.8 的 261116808 递增；构建戳 26111616）
+**主题**：修复挪动视角穿顶白屏（严重）—— 全桌视角 + 回放自由视角
+**性质**：相机净空修复；**物理层、碰撞、规则、挥杆动画、回放时间轴、网络协议、场景模型均未改动**
+
+## 用户反馈（原文）
+
+> 挪动视角经常会遮挡摄像机出现白屏，严重bug
+
+## 根因
+
+v1.8.8 合入的新场景 `pool_scene_room.glb` / `pool_scene_tea.glb` 天花板板层底只有 z≈2.30~2.32（旧 `pool_room.glb` 是 2.6）。但相机的房间净空盒上界仍是按旧房间定的 `FAR_ROOM_MAX.z = 2.45`，顶棚隐藏阈值 `INDOOR_CEIL_Z − 0.05 = 2.80`：
+
+- **全桌视角**：拖动抬高 pitch（>0.75）时，相机 z 被夹到 2.45，已钻进/穿过天花板板层（2.32~2.42），从上方俯拍，米白色天花板挡在相机与球桌之间 → 整片白屏。
+- **回放自由视角**：原本无任何房间净空约束，pitch 拉高时 z 可达 3.09，室内场景必然穿顶。
+
+水平方向新房间更大（墙内表面 x±4.3 / y±3.45），旧净空盒 x±3.4 / y[−2.85,2.55] 仍在墙内，故问题集中在**垂直上界**。数学模拟复现：旧逻辑下 pitch≥0.8 的任意 yaw，相机 z 恒为 2.45 > 天花板 2.32。
+
+## 修法
+
+| 文件 | 改动 |
+|---|---|
+| `sceneenvironment.ts` | 新增 `CAMERA_CEILING_Z` 表：`room=2.32` / `tea=2.30`（来自模型实测天花板底），其余场景 `null`（不约束）。 |
+| `view.ts` | `applyScene` 按当前场景把天花板高度注入相机 `setCeilingZ(...)`。 |
+| `camera.ts` | 新增 `cameraCeilZ()` / `clampCameraZ()`：室内场景相机 z 上界 = `min(2.45, 天花板底 − 0.18)`；`farPosition` 与 `replayFreeView` 都按此夹紧（回放对目标位与实际位各夹一次，防切场景残留高位）。户外/未列场景传 `null`，保持原行为。 |
+
+## 验证
+
+数学模拟（全 pitch×yaw 扫描）：
+
+| 场景 | 全桌视角最高 z | 回放自由 z | 天花板底 | 结果 |
+|---|---|---|---|---|
+| room | 2.14 | 2.14 | 2.32 | ✓ 不穿顶 |
+| tea | 2.12 | 2.12 | 2.30 | ✓ 不穿顶 |
+| snow（户外） | 2.45 | 3.09 | 无 | 保持原机位 |
+
+默认首屏机位 z=1.92（<净空 2.14）完全不变；tsc 22 条基线零新增；webpack 构建成功，游戏内变更履历 / 发布页 / 发版说明版本号已同步 v1.8.9。
+
+---
+
+# v1.8.8 发布说明
+
+**发布时间**：2026-11-16（北京时间）
+**版本**：v1.8.8 / versionCode **261116808**（对 v1.8.7 的 261116807 递增；构建戳 26111615）
+**主题**：修复返回键全部失灵（严重）+ 操作说明全面纠错 + 三套主题覆盖全部二级屏与游戏内操作区
+**性质**：交互修复 + 文案纠错 + 表现层覆盖；**物理层、碰撞、规则、挥杆动画、回放时间轴、网络协议均未改动**
+
+## 用户反馈（原文）
+
+> 游戏自带返回键全部失效了，严重bug，所有界面都无法返回
+> 游戏内的操作说明击球键描述错误，顺便检查所有操作说明的描述有没有错，包括设置的说明，readme
+> 游戏设置，局域网对战，游戏内操作区全部统一主题风格，不要漏，不同的主题提供按钮切换
+
+## 一、返回键全部失灵（严重）
+
+### 根因（两层，缺一不可）
+
+**A. 原生层无条件吞键。** ≤ v1.8.7 的 `onBackPressed()` 只要当前 URL 含 `/play.html`，就调一次 `__onAndroidBack()` 然后 `return` —— 把这次返回**完全丢弃**。JS 一侧没接住（脚本未加载 / 执行报错 / 被后续脚本覆盖）时，用户按下返回键界面毫无反应。而对局、回放、结算、帮助共用同一个页面 URL，于是表现为「所有界面都无法返回」。
+
+**B. 菜单侧 UI 栈可能为空。** `screenStack.push()` 原本和 `history.pushState()` 写在同一个 `try` 块里：受限 WebView 下 `pushState` 抛 `SecurityError`，异常直接跳过 push，栈是空的 → `goBackScreen()` 的 `history.back()` 分支永远走不到，页面内「返回」按钮同样失效。
+
+### 修法
+
+| 层 | 改动 |
+|---|---|
+| `MainActivity.onBackPressed()` | 改为**带回执**：`evaluateJavascript` + `ValueCallback`，只有 JS 返回 `"true"`（已弹窗 / 已关预览 / 已回退一层）才拦截；返回 `"false"` 或拿不到回执，一律走 `backFallback()`（`canGoBack → goBack()`，否则 `finish()`）。260ms 连按节流，避免异步回执叠加。 |
+| `MainActivity.evaluateJs()` | 新增。反射调 `evaluateJavascript`，`runOnUiThread` 回调；内核过旧无此 API 时回退 `loadUrl("javascript:void(...)")` 并回执 `null`（调用方按「未处理」兜底，绝不静默吞键）。 |
+| `menu-cn.js` | UI 栈与 history 解耦：`pushState` 单独 `try`，`screenStack.push` 无条件执行；`goBackScreen()` 改为**先同步切 UI** 再 `alignHistoryBack()`；新增 `popQuiet` 标记抑制自身触发的 `popstate`（700ms 强制复位）。 |
+| `menu-cn.js` | 新增 `window.__onMenuBack()`：预览已开 → 关闭并返回 `true`；栈非空 → 回退一层并返回 `true`；否则 `false`。 |
+| `play.html` | 内联兜底 `window.__onAndroidBack`：若外部脚本缺失，直接 `__onExitToMenu()` + `location.replace("menu.html")`，保证返回键永远有结果。 |
+
+### 验证
+
+`verify-back.js` 用 `evaluateOnNewDocument` 让 `window.history.pushState` 抛 `SecurityError`，模拟受限 WebView：
+
+| 场景 | 正常环境 | pushState 抛异常 |
+|---|---|---|
+| 设置页点「返回」回到首页 | ✅ | ✅ |
+| `__onMenuBack()` 在首页 | 返回 `false` | 返回 `false` |
+| `__onMenuBack()` 在子屏 | 返回 `true` | 返回 `true` |
+| pageerror | 0 | 0 |
+
+## 二、操作说明全面纠错
+
+### 击球键位置（用户点名）
+
+> 原文：`击球按钮：右下角圆形按钮，点击出杆`
+
+实际 UI：底部操作栏分 5 段（击球 / 击球点 / 相机 / 力度 / 瞄准），**击球在最左侧**（源码 `aiminputs.ts` 中 `.bb-seg-cuehit` 为栏内首段）。轮到你摆球时同一按钮文案变为「摆球」。
+
+### 逐条核对的其余错误
+
+| 项 | 原文（错） | 实际（源码依据） |
+|---|---|---|
+| 抬杆 | 点面板圆盘旁的 **＋** 号 | 在「击球点」面板右侧**「抬杆高度」区拖动球杆**（`aiminputs.ts` 的 `#cueTilt` 滑条） |
+| 复位 | **双击**圆心 | 点面板**左上角 ⟲ 按钮**（`resetSpin`）；双击手势已下线 |
+| 摆球 | 拖到台面任意位置（未说明交互） | **单指在台面点击 / 拖动**；确定后点同一按钮进入瞄准 |
+| 相机循环 | 瞄准 → 全桌 → 俯视 → 瞄准（四态） | 按钮只在**瞄准 / 俯视 / 远台**三档间直接切换 |
+| 缩放 | 双指捏合放大缩小（无限制说明） | **仅在「远台」视角生效**（`far-gestures.ts` 的 `farView` 判定） |
+| 电脑对战超时 | 超时未击球则**本回合判负** | 倒计时结束**自动按当前力度与瞄准方向出杆** |
+
+同步位置：`help.html`（游戏内帮助）、`help-cn.js`（英文译文）、`menu.html`（主菜单「操作介绍」）、`src/view/tutorial.ts`（新手引导第 3 步）、`menu.html` 设置项提示、`menu-cn.js` 词典（含被 `<b>` 拆开的单段键）。`node --check` 通过。
+
+## 三、主题全覆盖
+
+### 覆盖范围（此前 → 本版）
+
+| 区域 | v1.8.7 | v1.8.8 |
+|---|---|---|
+| 首页 + 四类弹窗（通知结算 / 帮助 / 白球设置 / 退出确认） | ✅ | ✅ |
+| 设置 / 规则 / 许可 / 变更履历 / 场景 / 球杆主题 / 回放列表 | ❌ 固定深绿金 | ✅ |
+| 局域网对战面板 | ❌ 木纹金边 | ✅ |
+| 游戏内底部操作栏 / 比分卡 / 齿轮 / 击球点面板 / 回放进度条 / 帮助 iframe | ❌ | ✅ |
+
+### 实现
+
+- **纯变量层**：全部走 `html[data-ui-theme="paper|felt|arcade"]` 高特异性覆盖 `:root`，只重定义变量、不改选择器；历史规则靠复用同名旧变量（`--bg-deep` / `--gold` / `--text` / `--border` / `--felt`）自动跟随主题。
+- **新增语义组**：`--hud-*`（游戏内操作区）、`--ui-*`（控件 / 卡片 / 滑轨 / 语义色）。
+- **三个覆盖层文件**：`css/ui-theme-pages.css`（二级屏 + 局域网 + 回放弹窗）、`css/ui-theme-play.css`（游戏内 HUD）、`css/ui-theme-help.css`（help.html 独立文档）。
+- **特异性策略**：用 `html body .app` 前缀提升优先级代替 `!important`；仅对 `bottombar-v2.css` 里被 `!important` 锁死的图标（`#camera .cam-icon svg`）反向用 `!important` 抢回。
+- **iframe 跨文档同步**：同源 `contentDocument` 直写 + `postMessage({type:'billiards-theme'})` 双通道。
+
+### 设置页唯一入口
+
+主题切换只在「游戏设置」页（`#uiThemeSeg`）提供三个按钮：**米白 / 绿绒 / 午夜**；游戏内菜单与操作说明、局域网面板不再常驻该选项。点选 → 写 `billiards_cn_settings_v1` + `applyUiTheme()` + 同步按钮高亮。高亮状态以 `document.documentElement` 上的 `data-ui-theme` 为准（`?theme=` 选稿时按钮跟着变，但不写回存档）。
+
+玩家自己切过主题后，`settings.ts` 的 `save()` 会在写盘前**回读磁盘 `uiTheme`**（白名单校验），避免游戏内设置面板用内存缓存覆盖掉外部写入。
+
+### 顺手修的对比度问题
+
+- paper 首页 `section-meta` / `signature-text`：`rgba(28,26,22,0.40)` 仅 **2.44:1** → 提到 `0.66`。
+- felt / arcade 半透明卡片上的正文：审计脚本改为「逐层收集背景 + 由远到近 alpha 混合」后确认原本就达标（此前 46/37 处为误报）。
+
+### 场景资源升级（v1.8.8 补丁）
+
+- **现代 `room`**：新增 `pool_scene_room.glb`（8.3 MB，写实 PBR）。场景自带的 `Ball_00..15` / `Cue_Placed` 由 `loadPoolEnvironment()` 的既有规则剔除，不出现两套球；加载失败依次回退 `pool_room.glb` 与程序化房间。
+- **茶室 `tea`**：`pool_scene_tea.glb` 由 404 KB 旧低模换为 10.9 MB 写实 PBR 版（明清家具 / 程序化茶具 / 匾额挂轴 / HDRI），文件名不变，代码零改动。
+- `cell` / `seed` 与球桌模型校验后与远端一致，未替换。
 
 ## 下载
 
-| 文件 | 说明 | 大小 |
-|---|---|---|
-| `台球大师-离线版-v1.0.0.apk` | 安卓安装包 | 590 KB |
-| `台球大师-源码-v1.0.0.tar.gz` | 完整修改后源码（GPL-3.0 要求） | 685 KB |
-| `billiards-cn-v1.6.1.apk` | 安卓安装包（v1.6.1，**1 号球颜色加深** —— `src/utils/rack.ts` 的 `BALL_COLORS[1]` 由 `#ffd900` 改为 **`#d9a800`**。v1.6.0 引入 ACES 色调映射 + 环境反射后球面中间调被抬亮、又叠了清漆高光，1 号球原满亮度亮黄在实机远距离下与白球几乎分不开；`#d9a800`（HSV 46°,100%,85%）色相仍在黄区、饱和度保持 100%，只压明度 → 既有「加深」的厚实感，又不与 5 号橙球（`#ff3300`）混淆。**量化验收**：页面内实读球 1 = `#d9a800`，球 2~9 保持 `0000ff / ff0000 / 800080 / ff3300 / 008000 / 600000 / 000000 / ffff00`（只动了 1 号）；逐球「标号→投影坐标→渲染像素」对照无错配；摆球流程（probe-placeball156）**5/5 全绿**；跳球回归（probe-jump157-real）**6/6 全绿**；`tsc` 22 条基线零新增。**未改动物理、规则、渲染管线与其它球色**。本轮为 v1.5.5 → v1.6.1 的累积交付，其中 **v1.6.0 为 3D 画面整体升级（美术重做）**：新增程序化台球厅环境贴图（`src/view/environmentmap.ts`，PMREMGenerator 烘焙，APK 体积零增长）、室内 ACES 色调映射、台呢绒面法线贴图、台球吊灯 + SpotLight 顶光接地阴影、球杆分段 9→28 与 MeshStandardMaterial、房间软包家具（圆角几何 + 贴脚线 + 挂画）、低端画质护栏（吊灯阴影档 2 以上开启）；**物理层、碰撞解算、规则判定、回放时间轴一行未改**；帧时软件渲染 +11%（含 +25 draw call / +42k 三角面）） | 2.7 MB |
-| `billiards-cn-v1.5.4.apk` | 安卓安装包（v1.5.4，**回放体验五项修复（#68~#72）· 回放自由视角 + 进度条进球点分色**。**① #68 击球点轨迹预告**：回退 v1.5.3 圆盘十字线方案，调整击球点时改为在 3D 视图直接显示白球行进路线与被击目标球行进路线（所见即所得）。**② #69「保存回放后急退、再进回放无反应」三重防御**（`src/controller/replay.ts`）：「已保存 ✓」提示改为 IndexedDB 真正落库后才显示；回放数据损坏（parse 异常 / init 缺失 / shots 为空）时明确提示并返回主菜单，绝不静默卡死；回放数据过大导致 sessionStorage 写入失败时就地提示，不再跳转白屏。**③ #70 回放自由视角 + 进度条分色**（`camera.ts`/`replay.ts`/`recorder.ts`/`container.ts`）：删除跟随视角（buildReplayAnchor / stepReplayNudge / replayFrameView 整链与 frameCameraForShot / topDownBounds / 视角按钮全部下线）；改为单指拖动绕台心球面旋转（yaw/pitch）+ 双指捏合与滚轮缩放，相机 lookAt 恒指台心（实测拖动/捏合/滚轮后视线与台心夹角 **0.00°**），pitch∈[0.18,1.45] / dist∈[R×14,R×95] 限幅不钻台下，位置 lerp 0.3 平滑，图解/开伦仍强制俯视；录制链路给每杆打归属标记 `ow`（local/remote 双路径天然区分玩家/AI，经 JSONCrush 无损压缩往返保留，旧回放无 ow 兼容为玩家色），进度条进球吸附点**蓝 = 玩家（#35a7ff）、红 = AI（#ff5a3c）**；附带容错：回放预演遇「Depth exceeded resolving collisions」异常时按已模拟结果优雅收尾，不再整杆作废。**④ #71 跳球出界白球残影**：白球飞出桌面后渲染层隐藏 offTable 球 mesh，结算后重新上场不再「库边凭空多一个白球」。**⑤ #72 回合白球未重置**：轮到本方回合时白球击球点状态未重置导致白球连袋的问题修复。**量化验收**：#70 专项探针（probe-replay70-freecam）**8/8 全绿**（自由视角生效 / 初始注视台心 / 拖动改变机位且夹角 0.00° / 滚轮与捏合缩放限幅 / 进度条吸附点 DOM 与预计算 meta 逐点一致，蓝 rgb(53,167,255) 红 rgb(255,90,60) 渲染正确 / 旧视角按钮无残留 / 零页面错误）；归属标记链路 JSONCrush 往返 ow 无损；#69 回归探针 **3/3 全绿**；主题 × 击球点组合冒烟 **19 主题全 PASS、FAIL 0**；`tsc` 22 条基线零新增；webpack 构建成功。**未改动物理引擎与碰撞参数**（回放预演「碰撞解算不收敛」容错仅为工程健壮性包裹）） | 2.7 MB |
-| `billiards-cn-v1.4.3.apk` | 安卓安装包（v1.4.3，**19 款球杆主题视觉全面增强——圆柱定向光照 · 接缝金属接环 · 遗留 6 款补齐独立杆尾 · 周向缝合修复**，回应「优化球杆主题元素设计、增强视觉效果」。**① 全主题统一圆柱定向光照**（`cuetexturefactory.ts` 新增 `cylinderRelief/axialDepth/jointCollar/enhance`，19 款 × 杆身/杆尾全部经过）：四层周向光照（背光暗面 multiply 乘性压暗保细节保饱和 → 宽受光面 + 窄镜面高光带 screen 提亮不过曝 → accent 色轮廓反光），全部周期 1 周向函数、左右缝合无痕；强度 = 主题 relief 系数 × 底图明度自适应。**② 接缝金属接环**：cueShaft/cueButt 两段贴图接缝侧各画半枚拼合成等宽接环，半透明透出 accent 色。**③ 遗留 dragon/azure/minions/peppa/qilin/ultraman 6 款补齐独立杆尾**（新增 `buildDragonButt` 等 6 函数 + 4 个端盖工具），19 款杆尾分区自此齐备。**④ 周向缝合修复**：新增 `drawWrapped` 三遍补画 + 越界裁剪，修复鳞片/屠龙斩/爱心/凤羽/云朵/霓虹/冰晶/尖刺等左右边缘接缝，36 张贴图逐一量化验证接缝连续（判据接缝列差/内部平均列差 <3.5）。**⑤ 19 张球杆缩略图重渲染**（`npm run build:previews`）。**实测（掩膜级）**：烬火焚风最亮 79→**140**、暗部 p10 2→**25**、有效像素 1.9%→2.8%；8 款深色主题全部同样提升，亮色 7 款面积持平、maxL −10%、p10 全部 ≥24。**回归**：`tsc --noEmit` 22 条基线零新增；专业档 botmatch 120 局清台 **100%**、卡死 0%、均杆 10.17；**未改动物理引擎与碰撞参数**） | 3.0 MB |
-| `billiards-cn-v1.3.90.apk` | 安卓安装包（v1.3.90，**按真实运动场地规范彻底重建篮球/足球两场景的比例与器材尺寸**，回应「球场比例都不对」的用户反馈。**篮球场 → FIBA 真实 28m×15m**：半长 14m / 半宽 7.5m，中圈、三分线、罚球线、禁区漆面、端线/边线全部按真实比例重画；篮筐高 3.05m、篮板 1.8m×1.05m、篮圈半径 0.225m、篮网 0.4m；体育馆墙体同步放大到 WALL_X=19m、WALL_Y=13m、WALL_H=6m；看台、记录台、记分牌、横幅、观众排重新落位。**足球场 → FIFA 真实 105m×68m**：半长 52.5m / 半宽 34m，中圈、大禁区、小禁区、球门区、罚球点、罚球弧、角球弧、中线全部按真实尺寸重画；球门真实 7.32m×2.44m，带门柱、横梁、顶网与后网。**总览相机重新适配**：篮球 free 机位馆内看台高处 (0,−10,8.5) 框住全场与远端篮筐；足球 free 机位略带倾角顶视 (0,0,60)，真实场地几乎撑满画面。**环境远裁剪面放大**：足球 far=160/skyRadius=110，篮球 far=100/skyRadius=110。验证：verify84j 29/29、verify_indoor 38/38、check_beach_pos 通过，TypeScript、webpack、APK 构建（2.9MB，签名/对齐/仅 INTERNET）均通过。仅改 `src/view/sceneenvironment.ts`、`tools/render/render.js` 与 `version.ts`，并按新尺度重出 dist） | ~2.9 MB |
-| `billiards-cn-v1.3.75.apk` | 安卓安装包（v1.3.75，**四项**：① 系列赛比分开局即显示 + 退出前弹确认并提示会清零；② 回放增加「暂停 / 继续」按钮；③ 根治专业档 AI「**未击打任何球**」（空杆）——用户实测反馈；④ 退出确认弹窗改金棕木纹主题 + 修复排版。**③ 空杆根因**：出杆方向 = `atan2(ghost − 母球)`；当母球几乎贴在目标球上且位于目标球的**袋口侧**时（开球后球堆密集、母球撞完停在球边，实战极常见），ghost 点就落在母球脚边，这条方向线长度趋近 0，方向完全由浮点残差决定 —— harness 实测偏离 **100°~340°**，母球朝一个一颗球都没有的方向飞出，被 `eightball.ts` 判「空杆，未击中任何球」直接送自由球，观感即「AI 在乱打」。贴球场景实测空杆率 1.7%~3.0%。**修复三层**：(a) `aimcalculator.ts` 新增 `MIN_AIM_DISTANCE = 1.2R`，`getAimPoint()` 在「母球→ghost」过近时退回**直瞄球心**（母球→球心恒 ≥2R，方向稳定），三档 AI 与所有玩法共用该入口；(b) `enumeratePlans()` 用新增的 `ghostBallFor()` 算原始 ghost 距离，**退化组合整个剔除**，让 AI 换球 / 换袋（顺带修正旧代码误用 `getAimPoint()` 拿兜底球心当 ghost 做遮挡检测）；(c) 新增 `rayMissDistance()`，出杆前沿**实际角度**做射线检测，垂距 >1.9R 立即改为直击球心。**④ 弹窗**：由深绿灰 #1f2a26 + 橙 #d84315 改为与比分栏 / 底部栏同款金棕木纹（渐变 #6b4a22→#4a3014、金边 #c89534、奶油金字 #f3d79a），面板定宽 `min(520px,86vw)` 三段层级，按钮 `flex:1 1 0 + min-width:0` 等宽、nowrap 不截断、两端留白不贴边（实测两按钮各 200px、间距 12px、左右留白 54px、无截断），并加矮屏媒体查询。**① 系列赛**：`hud.ts` 的 `isSeriesMode` 由构造时缓存字段改为**运行时 getter**（原写法一旦 Hud 早于 `Session.init()` 构造就永久锁死成 false，整局不显示）；`back-confirm-cn.js` 弹窗读出当前比分提示「返回后系列赛比分将清零」，确认时才 `removeItem`；设置浮层「返回主菜单」(`index.ts`) 与结算面板「返回主菜单」(`notification.ts`) 统一走该弹窗 —— 此前都静默跳走 + 静默清零。**② 回放暂停**：`play.html` 控制栏最左新增 `#replayPauseBtn`，`replay.ts` 新增 `userPaused` + `applyPauseState()`，手动暂停与「拖进度条临时冻结」分开记账（拖完不会悄悄取消暂停），播完自动禁用。**新增 `tools/harness/botcheck3.ts`**：专测「整杆无任何 Collision」的空杆率（botcheck / botcheck2 都以「母球碰到了球」为前提，测不到空杆），支持 `--touching` / `--rail` / `--cuerail`。**验证**：贴球 300~500 局空杆 1.7%~3.0% → **0.0%**、进球率 42.5%~49% → **56%~64%**；母球贴库 0% → 0%、进球率 76.0% → **80.7%**；常规回归无退化（真实八球 pot 83.4%、首撞错球 0.0%、无碰库 0.2%；随机布局 pot 85.0%）。**约束**：AI 只动瞄准点计算与候选过滤，未动 v1.3.68 / 74 的力度物理反解（`cueSpeedFor` / `POWER_MARGIN`）、选球评分、走位 / 防摔袋与规则判定；`MIN_AIM_DISTANCE=1.2R` 与 `1.9R` 垂距阈值为硬约束，调大即复现空杆） | ~2.3 MB |
-| `billiards-cn-v1.3.74.apk` | 安卓安装包（v1.3.74，修复专业档 AI「**全是轻推 + 力度不够没撞库犯规**」——用户实测反馈。根因是 v1.3.68/69 力度物理化只反解「物体球刚好够到袋口边界」的**最小力度**（margin 1.05 贴下界），harness 实测平均出杆仅 **27R（0.88 m/s）**、78% 的杆低于 30R，观感全是轻推；更糟的是八球规则「没进球时首撞后必须有球碰库，否则犯规」（`eightball.ts` foulReason 第 3 条），而最小力度一旦没进袋（呲框/薄切 throw 打偏，约 17%），物体球在袋口前**短停**、母球又被深低杆拉回原地，两球都够不到库 → 必犯规送自由球。**安全球兜底更极端**：v1.3.68 起 `safetyOrFallback()` 推「0.4×到袋距离」的极轻球，物体球根本没打算撞库，一打出去就是 100% 犯规（旧注释把「空杆」与「无碰库」混为一谈：轻碰碰到了球不算空杆，照样犯无碰库的规）。**修复三项**：① 主路径力度反解加**合法性保险** —— `choosePower()` 调 `cueSpeedFor()` 时把 `ballToPocketTrue` 延长 `2×pocketRadius`（物体球到袋口边界时保有 `sqrt(2·aObj·2r)` 余速、还能再滚 4R+），进了袋照样合法、没进也必然撞上袋口库边；② 余量 `POWER_MARGIN` 1.05 → 1.2（距离等效 +44%），观感从轻推变「有目的的中等力度」，进袋速度区间上界 4.8~5.0 m/s 远未触及，超供副作用由防摔袋收力（scratchRisk<1.6R → 56R 封顶）与深低杆继续压制；③ 安全球合法化 —— `powerOverride` 改为按**实际出杆方向**（`findBestPocket` 最小切角袋，不能按最近袋算，方向偏远时余速不够仍会短停）反解「物体球滚到袋口、没进也必撞库边」的力度，上限 42R → 60R。**新增 `tools/harness/botcheck2.ts`**：复刻 foulReason 第 3 条统计「无进球且首撞后无 Cushion」犯规并按主路径/兜底分桶 + 力度分桶（botcheck.ts 原口径测不到该犯规）。**验证（1200 局 × 2 模式）**：真实八球 noRailFoul 0.5% → **0.0%**（主路径+兜底全清零）、pot 77.8% → **82.3%**、avgPower 27.1R → **32.3R**、摔袋 0.8% → 1.4%（力度上浮的正常代价，仍在 1.5% 压制线内）；随机布局 noRailFoul 0.3% → **0.0%**、pot 82.3% → **86.8%**、摔袋 0.5% → 0.3%。**约束**：仅改 `professional.ts` 的力度决策与新增 harness 脚本，未动物理引擎、碰撞参数、规则判定、选球/走位/防摔袋评分，未动激进/稳健两档 AI（激进用满力档 90R、稳健用默认力度，均无此问题）；`ballToPocketTrue + 2×pocketRadius` 延长与 `POWER_MARGIN=1.2` 为硬约束，回退即复现犯规） | ~2.3 MB |
-| `billiards-cn-v1.3.73.apk` | 安卓安装包（v1.3.73，**根治局域网「输入正确 IP 进入游戏后毫无反应、且随意填 IP 表现完全一样」+ join 端连接状态全程可见与失败可操作引导**，两项。**① 无反应的真因是明文流量被系统拦掉** —— v1.3.72 已修好 `window.__lan`（建房能正常显示本机 IP，证明 Java 层 `LanServer` 的 `ServerSocket` bind 没问题），但两端仍然连不上：页面 origin 是 `https://billiards.local/`，对战走的是明文 `ws://127.0.0.1:24816`（host）与 `ws://<对方IP>:24816`（join），而 `targetSdkVersion=35` 时 `android:usesCleartextTraffic` **默认为 false**，WebView 对 target ≥ 26 的应用**遵循**该属性，于是所有 `ws://` 一律被拒（`net::ERR_CLEARTEXT_NOT_PERMITTED`）。这同时解释了「正确 IP 与随意 IP 表现相同」—— 两端压根都没把请求发出去，自然毫无差别。**注意 `setMixedContentMode(0)` 管不到这一层**：它只管 https 页面加载 http 子资源的混合内容策略，与 cleartext 网络策略是两套独立机制。*修复难点*：源码 `AndroidManifest.xml` 里**不能直接写**这个属性 —— 本机 `sdk/platforms/android-34/android.jar` 实为 2011 年的旧版（仅 3133 个类，连 `NetworkSecurityPolicy` 都没有），资源表里没有该属性，aapt2 link 会直接报 `attribute android:usesCleartextTraffic not found` 拒绝构建。改为新增 `patch_manifest.py`，在 **aapt2 link 之后、签名之前**直接给**二进制** `AndroidManifest.xml` 注入（真机读的就是二进制文件，与构建期 SDK 无关）：属性名字符串插在 string pool 中 **index = len(resourceMap)** 的位置（属性名区末尾，**不是** pool 末尾），ResourceMap 同一位置插 attr id `0x010104EB`，再把 chunk 内所有 ≥ 该下标的池引用 +1 —— **含字符串型属性值的 `typedValue.data`**（`dataType == 0x03` 时 data 同样是池索引，漏平移会出现「主值错位、Raw 正确」的怪象，例如 `versionName=".MainActivity" (Raw: "1.3.73")`、`package="category"`）；随后在 `<application>` 的 StartElement 属性区末尾追加一条 `TYPE_INT_BOOLEAN`(0x12) 属性，`attrCount + 1` 并回填 chunk size。已接入 `build-apk.sh` 第 5 步组包处（必须在签名之前，否则签名校验不通过）。**② join 端连接状态全程可见 + 失败可操作引导** —— 此前所有连接提示都被吞掉：通知组件的 sticky 守卫在 `stickyKey` 非空且本次非 sticky 时**直接丢弃**普通提示，join 端把状态写进去等于石沉大海，用户看到的只有一片空白，这正是「无反应」在 UI 层的放大。现 `lanrelay.ts` 新增 join 端状态机 `connecting → connected / failed / disconnected`：进游戏先上「正在连接…」，`ws.onopen` 转 connected 并明确提示**连接成功**，6 秒 `JOIN_TIMEOUT_MS` 超时兜底（不再无限等待），`onclose/onerror` 进 `failJoin()`（用 `settled` 去重，error 与 close 成对触发只处理一次）。失败文案**分两级**：先立即上屏通用原因 + 三条排查指引（① 两台手机连的是同一个 Wi-Fi；② 对方已点『创建房间』并停留在该页面；③ IP 填的是对方房间界面显示的地址），50ms 后再做一次**原生 Socket 探测**并刷新为准确诊断 —— `LanBridge.probePeer(host, port)` 有意走 `java.net.Socket` 而非 HTTP 栈，因此不受 cleartext 与 mixed content 策略影响，能把「网络根本不通」（timeout / error，多半是网段不对或对方没建房）与「网络通但 App 内被拦 / 端口未监听」（refused，或 ok 却仍连不上）这两类**互斥**原因分开，据此给出对应处置。弹窗底部带「**重新连接**」（`retryJoin()` 原样重连）与「**返回主菜单**」两个按钮，不再让用户对着空白干瞪眼。另修两处时序：`browsercontainer.initLanMode()` 里 sticky 弹窗的创建从 `messageRelay.subscribe()` **之后前移到之前**，否则 join 端地址非法时当场写入的失败弹窗会被后建的弹窗盖掉；`menu-cn.js` 的 `startLan("join")` 在进游戏**前**新增 `isLanAddress()` 格式校验（支持 `ip` 与 `ip:port`，四段 0~255、端口 1~65535），不合法直接 toast「IP 格式不正确，应形如 192.168.1.5」并拦下，不必开一局才知道填错。**验证**：`tsc --noEmit` 对改动文件 0 报错；webpack 构建通过（index.js 515 KiB）；`grep` 确认 `retry-lan` / `probePeer` / 「等待主机开球」/「同一个 Wi-Fi」均已进 dist；APK 2.3M，`aapt2 dump xmltree` 校验 `usesCleartextTraffic(0x010104eb)=true`、`versionName="1.3.73"`、`versionCode=26090473`、`targetSdkVersion=35`、`package="com.tailuge.billiards.cn"` 全部正确且无串位；`resources.arsc` Stored、权限仅 INTERNET、签名通过；dex 内 `probePeer` 存在，`LanBridge` 的 `RuntimeVisibleAnnotations` 计数 8（含新增方法）。**约束**：未动 `LanServer.java` 的转发协议，未动物理 / 规则 / AI，也未动弹窗 CSS；`usesCleartextTraffic` 放行与 `probePeer` 诊断覆盖的是两类互斥失败原因（前者治「完全连不上」，后者治「地址对不上 / 对方没建房 / 端口未监听」），**两者必须同时保留**，删掉任何一个都会让其中一类失败重新变回「无反应」） | ~2.3 MB |
-| `billiards-cn-v1.3.72.apk` | 安卓安装包（v1.3.72，**修复局域网建房弹窗「本机 IP 不可用 / App 版本过低 / 请把安卓 App 升级到 v1.3.68 或以上」的 bug —— 根因是 `@JavascriptInterface` 注解 Retention 错配**。`window.__lan` 的 6 个桥方法（startServer / stopServer / isRunning / clientCount / lanIp / lanInfo）虽标注了 `@JavascriptInterface`，但 `renderstub/android/webkit/JavascriptInterface.java` 占位桩写成了 `@Retention(RetentionPolicy.CLASS)`，javac 据此生成的是 `RuntimeInvisibleAnnotations` 而非 `RuntimeVisibleAnnotations`，d8 不会把不可见注解写进 dex 的 `annotation_directory_item`，ART 反射 `addJavascriptInterface` 暴露的方法时读不到，于是 `window.__lan` 整个对象的方法全不暴露、建房弹窗拿不到本机 IP。**① renderstub 桩改 `@Retention(RUNTIME)` + `@Target(METHOD)`**，并强制重编进 `renderstub.jar`（`build-apk.sh` 去掉了 `if [ ! -f renderstub.jar ]` 守卫，每次都重建）；javap 校验 `RuntimeVisibleAnnotations` 由 0 → 7、最终 APK 的 dex `annotation_directory_item` 偏移由 0 → 26408（非零）。**② Java 端加 `LanBridge.pushLanInfo()`** 主动 `evaluateJavascript` 调 `window.__lanPush(json)` 兜底推送，`MainActivity.onPageFinished` 里主动推送一次。**③ 网页端 `browsercontainer.ts` 双通道**：新增 `installLanPush()`（注册 `window.__lanPush` 写 `lanPushCache`）、静态 `detailFromRaw()` 解析 IP，`readInitialLanDetail()` 在桥方法缺失时回退 `lanPushCache` 等待推送，并**删除「App 版本过低」死文案**（此前版本号对不上就卡死在这一提示）。验证：webpack 构建通过、`tsc --noEmit` 0 报错、真机装 v1.3.72 建房弹窗正确显示本机 IP。**约束**：仅改 JSBridge / WebView 通信层（`renderstub` 桩、Java 桥、TS 双通道读取），不碰任何物理引擎、碰撞参数、挥杆动画、AI 与游戏规则） | ~2.3 MB |
-| `billiards-cn-v1.3.71.apk` | 安卓安装包（v1.3.71，根治 v1.3.70「一直显示正在获取本机 IP…」——v1.3.70 同步调一次 `__lan.lanInfo()` 后只在拿到空串时显示占位、**没有重试机制**，真机 WebView 与 Java 桥通讯偶发 100~500ms 延迟导致首次返回空后弹窗永远卡占位。修复：`browsercontainer.initLanMode` 写完 sticky 弹窗后挂 300 / 900 / 2500ms 三次 `setTimeout` 轮询主动调 `__lan.lanInfo()`，拿到 IP 或明确诊断即停；2500ms 为 force 模式，**即使 JSBridge 永远不通也强制刷成「本机 IP 不可用 + 升级/重装指引」**，不再让用户干等无意义占位。约束：仅改 page 端，`MainActivity`/弹窗 CSS/物理/AI 全部不动） | ~2.3 MB |
-| `billiards-cn-v1.3.70.apk` | 安卓安装包（v1.3.70，两项。**① 彻底根治建房弹窗「连了 Wi-Fi 仍停在等待对手加入…」**——v1.3.69 依赖 `LanServer.bind` 成功 emit started 事件带 IP，但部分 Android ROM 上 emit 链断（evaluateJavascript 失败 / acceptLoop 异常被吞 / 事件晚于页面 idle），page 收不到 started、弹窗永远显示占位；改为 `browsercontainer.initLanMode` 进来时**同步**调 `__lan.lanInfo()` 取一次 IP 直接写进 sticky 弹窗 detail，无论 started 是否到达弹窗一出来就有 IP 或诊断，Java 端与 LanRelay 链路不变（作冗余）。**② 弹窗 UI 统一到游戏底栏**——原蓝青渐变玻璃风格与底栏金棕木纹按钮割裂，改为木纹金棕渐变 + 2px 金边 + 内白高光 + 外深阴影，与底栏触发按钮同款配色。约束：IP 修复不再依赖任何异步事件；UI 改造仅 Info 主题，winner/loser 配色保留） | ~2.3 MB |
-| `billiards-cn-v1.3.69.apk` | 安卓安装包（v1.3.69，三项。**① 彻底修复建房弹窗不显示本机 IP**——根因 v1.3.67/68 靠「LanServer started 事件 → page 异步取 lanInfo」二段链路，部分时序 page 没收到事件或调用失败、detail 永远停占位；改为 `LanServer.bind` 成功后**同步**取一次网络诊断（与 `LanBridge.lanInfo()` 同源算法，遍历 NetworkInterface、wlan>eth 优先级、排除热点/USB 共享/link-local），把 ip/iface/hasWifiIface/error 塞进 started 事件 emit 给 page，弹窗一次到位；v1.3.68 的 800/2000ms 重试降级为「旧版 APK 没带 ip 字段时兜底」。**② AI 力度物理化**（v1.3.68 改动纳入本条交付）——按真实物理反解出杆速度：物体球滑动段等效减速 1.84× 纯滚动、低杆剩余滚动速度实测拟合（−0.45 低杆只剩 48%）、袋口距离按真实袋心与袋半径换算（修正内缩点导致的 3.0R 偏差），实测 800 局摔袋率 10.6% → 0.3%，进球率保持 82.6%。**③ 修变更履历格式**——v1.3.66/67/68 三版只写概要无 ul 子条目、破坏格式约束，一并补回。约束：本机 IP 修复改 LanServer/LanBridge/lanrelay 三处协议需同时生效；AI 物理化仅新增 `powerphysics.ts`，未动 `model/physics/` 常量与碰撞/进袋判定） | ~2.3 MB |
-| `billiards-cn-v1.3.68.apk` | 安卓安装包（v1.3.68，两项。**① 修复建房后本机 IP 显示不出**——Java 端新增 `lanInfo()` 诊断接口（返回 IP + 网口名 + 是否检测到 Wi-Fi + 候选地址 + 异常原因，网口优先级 wlan>eth 并排除热点/link-local），页面侧按诊断分级提示（没连 Wi-Fi / 已连但没拿到 IPv4 / 取地址异常）并给排查指引，房间启动后 800ms 与 2000ms 各重试一次（DHCP 下发延迟）；顺带修「菜单填带端口地址会拼成 ws://host:9999:24816」的 bug（正则拆端口）。**② AI 力度完全物理化**——同上物理反解（滑动段 1.84×、低杆拟合、袋心半径换算），800 局摔袋率 10.6% → 0.3%。约束：LanInfo 分级仅 page 端实现，Java 端仍按「取不到就空串」语义；AI 物理化仅新增模块、未动物理常量与碰撞/进袋判定） | ~2.3 MB |
-| `billiards-cn-v1.3.67.apk` | 安卓安装包（v1.3.67，两项。**① 局域网建房/等待弹窗改长驻 sticky**——本机 IP 直接写进弹窗主信息块并带「复制」按钮，直到 WebSocket 连上/收到 hello 才关闭；删顶部 `#lanRoomInfo` 信息条（v1.3.66 临时方案）。**② 专业 AI 防摔袋优化**——远程力度上限 90R→72R、低杆补偿 5~10% 修「低杆球停袋心外沿」、`enumeratePlans` 的 `lineBlocked` 终点由球心改 ghost 修薄切首撞错球、`safetyOrFallback` 升级为安全球模式推极轻球主动防守；harness 800 局 scratch 11.5% → 10.6%、pot 不降。约束：sticky 机制仅 sticky=true 启用，duration=0 仍走 timeout=0 不被新提示覆盖；AI 改动未动难度档位映射） | ~2.3 MB |
-| `billiards-cn-v1.3.66.apk` | 安卓安装包（v1.3.66，四项。**① 系列赛总比分常驻比分栏**——人机对战开局即显示「你 X : Y 电脑」，随每局结算累加（`utils/series.ts` 持久化）。**② 专业电脑防摔袋/防犯规优化**——力度上限 110R→96R、默认带低杆收球、母球轨迹级路径防摔袋、无球可进挑视线最不被挡的球；摔袋率 11.5% → 8.9% 且进球率不降。**③ 局域网建房后本机 IP 常驻顶部信息条**（v1.3.67 已改 sticky 弹窗）。**④ 回放「跟随视角」回退到 v1.3.58 前每帧三点框定平滑跟随**（不再逐杆锁机位、不再进球后追袋口乱飞）。约束：未动场景/物理/规则/联机协议；防摔袋仅 Professional 档生效） | ~2.3 MB |
-| `billiards-cn-v1.3.65.apk` | 安卓安装包（v1.3.65，六项，在线网页端正式下线、此后只交付安卓 APK。**① 新增 UFC 八角笼场景**（第 9 个环境场景，八角笼+笼网+角柱+帆布+低看台+专属天穹）。**② 「继续与电脑对战」升级为系列赛比分**（记录你与电脑累计胜局，退主菜单清零）。**③ 新增局域网对战**（同 Wi-Fi 两台手机真人对战：安卓侧自写 RFC6455 WebSocket 服务端 `LanServer.java` + `LanBridge.java` 以 `addJavascriptInterface` 暴露 `window.__lan`，manifest 新增唯一权限 INTERNET，构建脚本权限检查同步放行）。**④ 修 8 球专业档 AI 两缺陷**（组内还有球却直接打黑 8、线路被挡时硬打或犯规）。**⑤ 台呢滚动摩擦调到真实量级**（μr≈0.0047→≈0.010，慢速滚动行程减半、走位更可控）。**⑥ 在线网页端下线**（删 index.html/PWA/历史发布产物，dist 41M→5.4M）。约束：`series.ts` 为新增模块；物理仅 `physicsparams` 的 mu 默认值；联机未碰规则判定与回放；场景几何只新增 ufc） | ~2.3 MB |
-| `billiards-cn-v1.3.64.apk` | 安卓安装包（v1.3.64，**① 8 个场景选择全部放开** —— 室内 / 沙滩 / 原始森林 / 办公室 / 网吧 5 张卡片此前在 `menu.html` 里各自硬编码了 `disabled` 属性 + 「暂不可用」角标，而 `menu-cn.js` 的 `initScenes()` 是对全部 `.skin-card` 绑 click 的，逻辑侧从来没拦过 —— 这批锁是早期「场景几何没做、切过去会黑屏」时代的保护，v1.3.63 已把 5 个场景的几何补完，本版摘掉锁，**8 张卡全部可点**。**② 足球场 / 篮球场「渲染垃圾」定位到 4 个几何根因并逐个修掉**：*根因 ① 球场过大* —— football 16×10m、basketball 12×7m，而球桌只有 2.88×1.44m，球场是球桌的 **5.6 倍长**，铺满远景后每条白线在屏幕上不足 1 像素宽、糊成一团灰绿；缩到 10×6.4m / 8×4.8m。*根因 ② 看台过高* —— 瞄准相机可见高度上限约 `0.295 + 0.035·d`，看台原 3 排、最高 0.9m，在离相机约 8m 处（该距离上限仅 0.575m）整排顶到画面上沿、横在球桌上方；改 **2 排、stepZ 0.30→0.20**，最高降到 0.4m。*根因 ③ 座椅红蓝双色* —— `seatHexes` 原传蓝 + 暗红交替，20m 外单座 0.55m 宽不足 2px，混色成一条突兀暗红横带，而真实球场看台是单一主色；改全蓝单色，看台外框同步收小（football 22×15→14×10、basketball 17×12→11×8，gap 1.4→1.2 / 2.6→1.6）。*根因 ④ 标线硬编码、没跟着球场缩* —— 篮球三分弧半径写死 5.6m、直段落点 ±5.3m，而缩后的球场半宽只有 2.4m，整条弧线跑到场地外面，画面上只剩两根穿出边线的白线，这是「垃圾」观感的主要来源；全量按比缩放（三分弧 5.6→3.0、直段 ±5.3→±2.8、中圈 1.75→0.9、罚球弧 1.75→1.2、罚球线距端线 2.6→2.0；足球大禁区 6.4×2.6→4.0×1.6、小禁区 3.2×1.1→2.0×0.7、中圈 1.75→0.9、罚球弧 1.75→1.0、角弧 0.42→0.30）。**③ 门柱与泛光灯塔同步下调**：原门柱间距 3.66m 已超过缩后小禁区宽度 2.0m，球门比禁区还大；9m 高的灯塔需要近 18° 仰角才进画，而瞄准相机是俯视的，那部分几何永远看不到 —— 门柱 `0.09×0.09×2.44` → `0.08×0.08×1.6`、横梁 `3.9×0.09` → `2.0×0.08`、灯塔 `9.0m` → `6.0m` 并拉近到 (±9, ±6)。**验证**：webpack 构建 271ms 通过；`tsc --noEmit` 对 `sceneenvironment.ts` 0 报错；**8 场景 × 2 屏 × 2 视角 = 32 项全量回归全绿**，零 JS 报错，构建耗时 0~50ms 全部低于 120ms 上限，far 断言全部 ok；football 画面亮度标准差 **76.7→73.6**、basketball **68.2→58.3** —— 数值明显变化证明几何确实改了，且不再过曝。**约束**：只动 `sceneenvironment.ts` 的球场常量与看台 / 标线 / 门柱参数、`dist/menu.html` 的 5 张卡与版本号、`dist/css/menu-cn.css` 的注释；**不碰物理引擎、碰撞参数、规则判定、回放逻辑、音效，也不动其余 6 个场景的几何**） | ~2.5 MB |
-| `billiards-cn-v1.3.63.apk` | 安卓安装包（v1.3.63，**剩余 5 个场景（room/office/cybercafe/beach/forest）按雪山级纵深补成 3D 几何环境；football/basketball 因坐标系错位整段重做；新增场景环境 LRU 缓存（终于不漏 GPU 缓冲了）****① 雪山场景重制 —— 旧版为什么不像雪山**：`buildSnowMountain()` 用「旋转 -90° 的 `ConeGeometry` + FBM 顶点位移 + 按高度渐变顶点色」造山，本质是 7 个尖顶，没有山脊线、没有鞍部、没有雪线，俯视以外任何视角看都是「几个尖尖」。新版 `buildSnowMountainV3()` 改为**极坐标环形地形带**：`RingGeometry` 天生建在 XY 平面、可直接把 z 当高度（与本项目 Z-up 坐标系天然契合），从球桌外缘 r=26 铺到 r=120、共 6 层递进加密，由 `snowTerrainZ(r, ang)` 统一求高度。**② 四层噪声叠出山脊**：基础 `fbm2D(seedA)` 定大尺度骨架 → **ridged 变换 `1 - \|2·fbm - 1\|`** 折出尖峭脊线（这是雪山区别于丘陵的关键 —— 普通 fbm 处处圆滑，ridged 在 fbm 过 0.5 处产生折痕）→ 细节层 `DET_F=4.6` 补中尺度沟壑 → 微地形 `MICRO_F=9.5` 只加 ±0.028 高频起伏（纯粹为掠射角的阴影颗粒感）。采样用**极坐标拉伸笛卡尔域**（`u = cos(θ)·r·k`、`v = sin(θ)·r·k`），θ=0 与 θ=2π 天然落在同一点，**无接缝**。**③ 天际线死平的根因与修法**：第一版轮廓是一条水平直线（起伏跨度仅 **0.63°**）—— 因为**沿任意方位角的射线都会撞到山脊**，径向振幅 `snowAmpZ(r)` 随 r 单调增大到饱和，于是「该方向最高点」的仰角在所有方位收敛到同一渐近值，数学上就注定是直线。新增 `snowAzMask(r, ang)`：**纯方位角 + 缓慢径向漂移**的振幅掩码（漂移项 `r·0.006` 让同一道山脊在不同距离上缓慢扭动，不至于像风车叶片），各方向山体高度乘 0.35~1.45 倍，天际线起伏跨度 **0.63° → 5.83°**。**④ 山体发灰死白：光照被算了两遍 + ACES 把动态范围压没了**：地形原本用 `MeshLambertMaterial`，而顶点色里**已经烘焙过一遍太阳**（`nd = max(0, N·L)`），接着又吃场景真实光照（sun 1.8 + hemi 0.55 + ambient 0.32 ≈ 2.53 辐照度），任何反照率 0.5 以上的颜色全部过曝，实测亮度标准差只有 **8**。改为 `MeshBasicMaterial` + `toneMapped: false` + `fog: false`，顶点色即最终显示色 —— 必须绕开 ACES：实测其灰阶响应为「线性 0.45→188、0.70→211、0.95→223、1.50→236」，**0.5 以上全被压到 194+**，动态范围几乎尽失。改用**显示空间着色模型**：sRGB 反照率先转显示空间，再按 `out = albedo × (AMB + SUN × pow(max(0,N·L), GAMMA))` 直接算，最后以 `SRGBColorSpace` 写回，明暗完全可控，亮度标准差 8 → **40.7**。**⑤ 雾把山压平：改用烘焙大气透视**：`scene.fog` 按**视空间深度**线性混合，可见山体（r=26~120）几乎全落在原 `Fog(30, 250)` 区间内，明暗差被 `(1 - fogFactor)` 整体压缩，山体亮度中位数被抬到 196、p90 只有 215，全挤在亮部发灰（std 仅 21）。改为地形 `fog: false` + 顶点色**烘焙** `SNOW_HAZE`（`smoothstep(28, 118, r)` × 0.35 混入天色）：近景山脊完全不加雾，远山最多 35%，既保住对比又留住「远山淡入天色」的纵深感；`scene.fog` 顺势推远到 `(70, 320)`，只作用于球桌等非地形物体。**⑥ 岩石不能只看坡度**：第一版只按坡度判岩石，高山方向坡度到 1.3（约 52° 崖壁）时整片判成岩石，比天空（201）还暗，画面顶部糊成一堵黑石墙。改为**「坡度 × 雪线」双重控制** `rock = slopeRock × (1 - smoothstep(0.3, 0.62, hT))` —— 陡坡出露岩石，但峰顶保持雪白；岩石配色由 `0x39424d/0x66727e` 提亮到 `0x4d5763/0x7b8794`（原色太黑，远看像破洞）。背光面死黑则靠 `AMB` 0.26→0.29（雪面互反射，物理上合理）+ `SUN` 提到 1.15 解决，亮部削到纯白 255 压过天空（雪 p90 212 → 234，天空 203）。**⑦ 天穹渐变此前根本没生效**：渐变停靠点写死在 `t = z/r ∈ [0.22, 0.55]`，而玩家实际能看到的天空只占 `z/r ∈ [0, 0.036]`（约 2° 仰角以内），整段渐变全在视野之外，看到的就是一块纯色。现把停靠点做成 `buildSkyDome(..., stops)` 参数，雪景传 `[0.01, 0.04]` 并换用更冷冽的 `0xc8e4f8 / 0xa8d4f2 / 0x74b4e6` 三档配色。**⑧ 远裁剪面 `camera.far` 放大到 165 的安全验证**（用户明确要求自行测试「能实际看到场景且不影响正常游戏视角」）：`SNOW_FAR = SNOW_SKY_RADIUS(145) + 20 = 165`，非雪景仍为 `R×1000 ≈ 32.8`。**8 个场景 × 2 个视角全量回归**：瞄准视角台呢 54.4%~91.7%、俯视 67.2%~80.3%，**零 JS 报错**，球桌在所有场景所有视角下都牢牢占据画面主体（雪景瞄准视角：台呢 67.1% + 天空雪山 23.4%）。**⑨ 顺带修掉一个严重既有缺陷：俯视模式下球桌被整个盖住** —— beach / room / office / cybercafe 四场景俯视**完全看不到球桌**（实测台呢占比 **0%**，满屏一片沙色/灰色）。根因在 `assets.ts` 的「背景房间盒子」：`BoxGeometry` 缩放 `(80, 40, 30)`、位置 `z = 16`，于是盒子占 `z ∈ [1, 31]`，而**球桌在 z≈0、俯视相机在 z=5.363（盒子内部）** —— 房间地板（z=1）正好悬在球桌正上方 1.2m，把球桌挡得严严实实。讽刺的是这个盒子在瞄准视角下**根本不可见**（相机 z=0.295 在盒子下方，`BackSide` 全部剔除），即它唯一生效的地方就是制造遮挡。修复：把 `GROUND_Z`（球桌底沿 -0.203）从 `sceneenvironment.ts` 导出，房间 z 偏移改为 `GROUND_Z + 15 = 14.797`，让地板正好落在球桌底沿。实测俯视台呢 **0% → 68.2%~68.8%**，瞄准视角 39.7% → 39.6%（无影响，仅远端背景由纯色改为墙色，亮度 219 → 213）。**⑩ 清理 500 行死代码**：旧版 `buildSnowMountain()`（732–923 行）自 V3 上线后已零调用，其整条私有调用链 `makeMountainCluster` / `buildMountainMeshes` / `buildGlacierCanyon` / `applyFbmDisplace` / `paintRockSnowVertices` / `paintSnowCapVertices` 一并删除（`sceneenvironment.ts` 1415 → 915 行），删除后全量扫描确认零残留引用、零孤儿常量。另清理 dist 下 4 个调试期临时产物（`preview.html`、`three_esm.js`、`three.core.js`、`three.tsl.js`）。验证：webpack 构建通过；`tsc --noEmit` 错误总数保持 30（全为既有遗留，无新增语义错误）；8 场景 × 2 视角全量截图回归，零 JS 报错。约束：只动 `sceneenvironment.ts` 的地形/天空/岩石构建与着色、`view.ts` 的雪景 fog 与远裁剪面、`assets.ts` 的房间盒子 z 偏移；**不碰物理引擎、碰撞参数、规则判定、回放逻辑、音效与 UI**） | ~2.5 MB |
-| `billiards-cn-v1.3.62.apk` | 安卓安装包（v1.3.62，**上一版** —— 雪山场景按参考图重做为程序化极地山脊（不再是几个圆锥），远裁剪面放大到 165 并逐场景实测确认不干扰游戏视角；修掉「俯视模式根本看不到球桌」的严重既有缺陷；清理 500 行死代码。完整说明见 v1.3.63 行下方与 `RELEASE_NOTES.md` 历史条目） | ~2.5 MB |
-| `billiards-cn-v1.3.61.apk` | 安卓安装包（v1.3.61，台球桌外观全面升级，告别"素面朝天"。**根因定位**：解包 GLTF 模型发现桌呢 `cloth` 材质只有 `baseColorFactor` 纯色、没有任何 `baseColorTexture`，`wood` 桌框材质同样无贴图 —— 模型层面就没有纹理，叠加经典 5 主题的 `clothTexture` 配置全是 `"none"`（换肤时只改纯色、不生成任何纹理），两层根源叠加这就是"素"的全部真相。**① 台呢织物质感**：5 款经典主题 `clothTexture` 由 `"none"` 统一改为 `"velvet"`（菱格压花暗纹）；`baseClothGradient()` 重写为周期正弦波叠加逐像素渲染 —— 贴图以 RepeatWrapping 2×2 平铺，只有周期函数才能保证接缝处无缝，另叠加 14000 个 1px 随机透明度噪点模拟织物纤维的细碎反光。**② sheen 织物高光**：cloth 材质由 MeshStandardMaterial 升级为 MeshPhysicalMaterial（sheen 0.55 / sheenRoughness 0.5 / roughness 0.95），sheenColor = 台呢色向白 lerp 35% —— 织物在掠射角的泛白 backscatter 是 Standard 材质渲染不出来的，sheen 正是 three.js 为天鹅绒类织物准备的通道；材质实例按原材质缓存避免重复升级，新实例必须继承 `name="cloth"` 否则二次换肤按材质名路由就匹配不到了，缓存命中时同步刷新 sheenColor 防止残留旧主题色。**③ 桌框木纹**：`getFrameTexture()` 原来无发光时直接返回 null（框体就是一块纯色），现改为始终生成；`buildFrame()` 新增 46 条正弦拉丝木纹 + 2 个径向渐变节疤（正弦整数周期保证水平平铺无缝），带 frameGlow 发光特效的主题跳过木纹以突出发光。**④ 两款新主题**：「翡翠鎏金」（深翡翠台呢 + 金菱格压花 + 金铆钉 + 桌框金描边发光）与「紫夜流光」（深紫夜色渐变台呢 + 霓虹条纹理 + 桌框紫粉双色发光）；菜单新增两张主题卡片与英文映射（Emerald Gilded / Violet Nightglow）。**⑤ 回放/图解简化桌同步**：`tablemesh.ts` 的 `generateTable()` 此前永远内置蓝紫色（0x243599 / 0x4455a9）不随主题变化，现同步主题台呢色 + 台呢贴图 + 库边色，与主场景观感一致。验证：`tsc --noEmit` 错误总数保持 30（全为既有遗留，无新增）；webpack 构建通过（index.js 474 KiB）；`node --check` menu-cn.js 通过。约束：只动换肤贴图生成、材质升级与两张新主题配置，**不碰物理引擎、碰撞参数、规则判定与回放逻辑**） | ~2.5 MB |
-| `billiards-cn-v1.3.60.apk` | 安卓安装包（v1.3.60，五项改动。**① 回放拖进度条：跨段倒退后仍「卡在当前时间点」、进球数不同步**。`restoreScoreBefore()` 走的是 `applyToController` → base.handleScore → `updateScoreHud` 这条链，链路本身是通的，真正漏掉的是**残留事件**：`seekToFraction()` 只 `clearTimeout(this.timer)`，而 `container.eventQueue` 里上一次留下的 `StationaryEvent` 会在下一帧被 `processEvents()` 消费 → `handleStationary()` → `playNextShot(delay)`，把刚重跑好、本应停在这一帧的状态又推进一杆，HUD 看着就像回到拖动前的数值。修法：`seekToFraction()` 头部加 `eventQueue.length = 0` 切断残留链路，`restoreScoreBefore()` 末尾再加一道兜底（直接 `updateScoreHud(p1,p2,b,active)` + 对 `hud.p1Element/p2Element` 写 `textContent`）。**② 俯视镜头看不到白球轨迹 —— 两个真实病根**。*病根 A（相机基向量退化）*：`up` 是 `(0,0,1)`（Z 轴朝上），而俯视视线方向恰好也是 `(0,0,±1)`，两者严格平行，`lookAt()` 构造正交基时叉乘为零向量，相机朝向退化。原版 `CameraTop.viewPoint()` 靠一个 `-0.01*R` 的横向偏移躲开这个奇异点，新写的 `topViewAtCenter()` 漏了它。已补回同样的偏移，并把视距改为「纵向 / 横向取更紧的一项 × 1.15 边距」。*病根 B（取景范围过小）*：原先只框「白球 → 被击球 → 袋口」三点包围圆，半径常常只有一两个 R，而白球撞完目标球后的走位往往横穿半张台，后半程直接滚出画面。现新增 `ShotMeta.cueTrack`：在 `precomputeShot()` 的物理循环里顺手采样白球轨迹（每 30 步一点、上限 400 点），俯视框定改用「focus 三点 ∪ 白球轨迹」的包围盒外接圆；跟随模式也掺入轨迹的 4 个稀释采样点。另修 `frameCameraForShot()` 取的是 `shotMeta[currentShotIndex + 1]`（**下一杆**的框定）来摆当前杆机位，改用本杆。**③ 斯诺克规则详细化**：单一简介扩为 8 大要点（球与台 / 开球 / 阶段 / 计分与 147 / 置球点 / 自由球 / 犯规 / 清彩顺序 + 胜负），中英双份。**④ 环境场景解锁 + 视野改造**：足球场 / 篮球场卡片的 `disabled` 移除；但原场景按真实米制搭建（足球场 40×25、看台距场心 20、层高 6），而球桌只有 1.22×0.6、俯视 fov 20° 时视野半径仅约 0.78 —— 40 米的球场在画面里只剩脚下一小块草地，看台远在 20 米外根本不入画。现两个球场整体缩到 5.5×3.5 / 5.6×3.0（与球桌尺度相称），并各挂一个半径 20 的天穹补背景（**半径必须 ≤20**：非雪景时 `camera.far` 只有 `R*1000≈28.5`，沿用雪山的 130 会被整颗裁掉）。**⑤ 删除游戏内设置里的「语言」「画质档位」整组**：删 `menu.html` 411–434 行与 `help.html` 对应两块，并清理 `menu-cn.js` / `help-cn.js` 的残留引用 —— **这些引用没有 null 保护**（`$("setQuality").addEventListener`、`$("btnAutoQuality").addEventListener`、`syncSettingsUI()` 里的两处赋值），只删 HTML 会在初始化时抛 TypeError 把整个设置面板打断，现全部加判空。验证：`tsc --noEmit` 错误总数保持 30（全为既有错误，无新增语义错误）；webpack 构建通过（index.js 471 KiB）；`menu-cn.js` / `help-cn.js` `node --check` 通过；APK 零权限、resources.arsc Stored、体积 2.5M。约束：只动回放跳转与相机、规则文案、场景几何与缩放、设置面板 DOM/JS，**不碰物理引擎、碰撞参数、渲染管线与规则判定逻辑**） | ~2.5 MB |
-| `billiards-cn-v1.3.59.apk` | 安卓安装包（v1.3.59，四项改动。**① 回放拖进度条：拖到跨杆的位置就会静默停住（没暂停、没报错，画面却不动了），进球数也不再更新 —— 两个独立病根叠加**。*病根 A（拖完就停）*：`seekToFraction()` 里确定性重跑的循环是 `while (table.time < localTarget && !allStationary())`，跳转目标一旦超过本杆真实物理时长 循环就提前退出，此时桌面**已经静止**；而 `Container.advance()` 推 `StationaryEvent` 的条件是 `!stateBefore && allStationary()` —— 必须由「运动」转为「静止」才触发，球在 seek 结束那一刻 就已经静止，这个事件**再也不会产生**，于是 `handleStationary()` 永不执行， 而它正是「球停后安排下一杆」的**唯一入口**。修法是在 `onSeekEnd()` 之后调 `resumeAfterSeek()`：若球已静止且队列里还有未播的杆，主动补一个 `StationaryEvent` 接回断链。 *病根 B（进球数对不上）*：`this.shots` 是被 `shift()` 逐条消费的队列，`seekToFraction()` 却只改 `currentShotIndex`、从不重建队列 —— 往回拖时已播的杆早被 shift 掉，队列头部其实是「未来」的杆， 于是往回拖跳杆、往前拖重播，而比分 HUD 靠队列里的 SCORE 事件推进，自然对不上。 修法：留一份 `allShots` 全量副本并预计算 `shotEventOffsets[k]`，跨杆跳转时按 `off + 1` 切片重建 队列（**+1 是因为 `table.hit()` 已把本杆 AimEvent 消费掉**，用 off 会整杆重播）， 再用 `restoreScoreBefore(off)` 回填该时刻之前最后一个 SCORE 事件。 另修两处：`clearTimeout` 由只写在 `onSeekStart`（键盘/程序触发走 `input + change` 不经它） 提到 `seekToFraction()` 开头，否则杆间 timer 到期会多推一次 HitEvent 让杆号错一位； `handleBreak()` 漏了 `currentShotIndex = -1` 与 `shotMeta = []` 的复位。 **顺带修 `precompute shot 0 failed`（整局预计算此前一直是废的）**：`ShotMeta.cueballId` 存的其实是 `ball.id`，而它是全局自增编号 —— `rules.table()` 新建的桌球 id 是 48~63，与 `balls` 下标 0~15 不是一回事；取母球却写 `sim.balls[meta.cueballId]` 即 `balls[48]` → `undefined`， 接着 `sim.hit()` → `Cue.hit(undefined)` 抛 `Cannot set properties of undefined (setting 'state')`， 异常被 catch 后整局预计算作废（`shotMeta` 清空），进度条失去整局总时长、只能逐杆叠加。 该字段注释本来就写的是「下标」，属注释与实现不符；现改字段为 `cueballIdx`、赋值改 `balls.indexOf(cueball)`、取值按下标，预计算恢复正常（回放阶段控制台报错 1 → **0** 条）。**② 删除游戏设置里的「外观与场景」整组（球杆主题 + 环境场景）** —— 与 v1.3.58 删「台球桌外观」 同样的理由：首页都有专门入口，游戏内是重复。删 `menu.html` 505–537 行整段 `.setting-group`， 并同步删 `menu-cn.js` 四处引用（`syncSettingsUI()` 的两个 select 赋值、两个 `change` 监听、 `initCueThemes()`/`initScenes()` 的 `syncActive` 回写）—— **必须一起删，前两处没有任何 null 保护**， 只删 HTML 会让 `$("setCueTheme")` 取到 null 并在初始化时直接抛 TypeError 白屏；首页三入口保留。**③ 音效三处** —— *撞库声此前几乎不随力度变化*：`REF_SPEED.Cushion` 写 **6 m/s**， 但该值语义是「撞库的典型速度上限」，实际撞库只有 **0.5~3 m/s**（6 是按最大出杆速度 160R≈5.24 估的， 球撞库时动能早被台呢和库边吃掉大半），归一化后 `kk` 只落在 0.08~0.5、音量 `0.3 + kk*0.7` 实际只在 **0.36~0.65** 浮动，再叠 ±8% 增益抖动，两次不同力度的撞库根本听不出区别。 现改三条：参考速度 6 → **3.2**（与 Pot 对齐，让 kk 用满 0~1）； 音量区间 `[0.30, 1.00]` → **[0.18, 1.00]**（轻撞明显更轻，不再被 0.3 底噪垫成「怎么撞都一个响」）； **播放速率由恒定的 1 改为 `0.88 + kk*0.24`**（重撞更脆、轻撞更闷）—— 真实撞库音色亮度本就随力度变化， 之前完全没做，而只有 2 条同源素材，光靠音量差拉不开层次，补上音高维度才分得开； 速率抖动 ±7.5% 是乘在 rate 上的，与力度调制叠加不冲突。 *落袋声偏小*：`0.5 + kk*0.5` → **`0.65 + kk*0.35`**，落袋是最需要被听见的正反馈， 慢球滚进袋口时 kk 只有 0.2、旧公式给 0.6 常被环境音盖掉；下限抬 30%，上限仍 1.0 不削顶。 *删除进球后的「成功」特效提示音*：LIB 去掉 `success` 条目、删掉 `playSuccess()` 方法本身、 清理 6 处调用点（drill / eightball / nineball / sagu / snooker / threecushion）—— 它是**叠在落袋音之后** 播放的，落袋音已把「进了」说清楚，再叠一层叮咚纯属多余吵闹、连续进球还会连着响； `boteventhandler.ts` 的机器人桩对象也一并去掉 `playSuccess() {}`。**④ 斯诺克桌：确认确实小了，默认由 10 尺改为 12 尺** —— 此前与八球/九球**共用同一套台面** `R*43 × R*21`（R = 0.03275 m）约 **2.82 × 1.38 m**，而标准 12 尺斯诺克台是 **3569 × 1778 mm**， 短了约 **21%**、窄了约 **23%**；斯诺克球小、球多、袋口紧，台面一缩开球堆球和长台走位全变形。 `TableConfig.defaultTableSize()` 改为按规则取值：斯诺克 **12**、其余 10。 选 12 是因为 `snooker.ts` 的 `tableModelStretchBySize` 已有调好的 `12: {x: 1420, y: 700}`， 且 GLTF 模型 `models/snooker.min.gltf` 本身按 12 尺建模 —— 物理尺寸与模型拉伸直接对齐， 不需重新标定顶点缩放。另修三处会把新默认值带偏的**硬编码 10**：`recorder.getTableSize()` 录制回放时写死返回 10 会导致回放尺寸与实际对局不一致、回放跑歪；`container.ts` 粒子系统同改； `browsercontainer.ts` 重定向守卫原本拿 URL tableSize 与硬编码 10 比较，斯诺克默认改 12 后 会把正常斯诺克局误判为需要重定向。 验证：浏览器端到端 **32/32 全过**（斯诺克物理台面放大 **1.196×**、视觉模型 **1.173×** 两者同步； 回放拖回后未停在暂停态、继续推进、比分回填到该时刻应有的值并能重新累积回最终值； 三个外观项已从游戏设置移除、首页三入口仍在、菜单未白屏）；回放阶段控制台报错 1 → **0** 条； `tsc --noEmit` 错误总数**保持 30**（全为既有错误，未新增语义错误）；webpack 构建通过（index.js 469 KiB）。 约束：只动回放跳转逻辑、菜单设置 DOM/JS、音效参数表与斯诺克桌尺寸，**不碰物理引擎、碰撞模型、渲染管线与规则判定逻辑**） | ~2.4 MB |
-| `billiards-cn-v1.3.58.apk` | 安卓安装包（v1.3.58，五项改动。**① 回放跟随视角：病根是整条链路根本没接上** —— `Replay.updateReplayCamera()` 及其下游 `camera.updateReplayFocus() → replayFrameView` **一个调用者都没有**，`replayFrameHook` 每帧只调了 `tickSeekUI()`；所谓「跟随」实际是另一套每帧重算机位的逻辑，球一滚镜头就飘、出杆瞬间还会整段平移。现已接进 hook，并改用**「锚点 + 有界微调」模型**：出杆前由 `frameCameraForShot(aim)` 用本杆的母球/目标球/袋口算一次性机位锚点（`REPLAY_ELEVATION = 0.72`）并 `forceMove()` 直接落位；出杆后默认**完全锁定**，只有 `allowReplayNudge()` 判定为多球连进（进球数 ≥ 2）、长链条（本杆时长 > 2600ms）或尾段拖沓（已过首个进球 1200ms 且未到末球进袋后 400ms）时才允许小幅微调，偏航 ≤ 0.56rad（约 32°）、抬升 ≤ 14R、视点 ≤ 12R、缓动系数 0.02（约 50 帧），判据是把待进袋球投影到 NDC 超过 0.72 才回拉，球已在画面中央时一动不动；下一杆 `handleStationary()` 清锚点后重新完整定位，手动切视角按钮也统一走同一套定位。**② 删除游戏设置里冗余的「台球桌外观」** —— 首页 `#screen-tableskin` 已能设置，两处读写同一个 `settings.tableSkin` 与同一个 localStorage key；删 HTML 行的同时必须删掉 `menu-cn.js` 里对应的 change 监听与初始化赋值，否则 `$("setTableSkin")` 取到 null 会在启动时直接抛错。**③ AI 三档难度重做：专业档此前是个假档** —— `Professional.aim()` 返回 `[aimEvent, farKnuckleAimEvent, farKnuckleHit]`，而只有数组**最后一项** HitEvent 真正击球，即专业档每次出杆都是**远库边全力的 farKnuckleHit**，与激进档 TheFarJaw 完全一样；它的候选枚举、切角排序、防落袋、自适应力度全部只作用于两个 AimEvent，而 AimEvent 只是预览（`Controller.handleAim()` 是空实现），对物理结果零影响 —— 已改为 `pocketHit`。**难度参数此前根本不存在**：`AimCalculator.generateShot()` 的 `noise` 实参在全部 6 个调用点都被硬编码成 0，唯一随机性是默认 `spinOffset = randomSpin()`（±0.3 侧旋），可它只命中了最弱的稳健档（激进/专业都显式传了 Vector3），`rules.ts` 的 `aiNoiseScale` 声明后从没人读 —— 实际只有两档且强弱关系还是反的。新增 `difficulty.ts`：稳健 ClawBreak（噪声 0.030、力度抖动 12%、切角下限 cos 0.15，走位/防落袋/侧旋/自适应力度/安全球全关）、激进 TheFarJaw（0.010 / 5% / 0.20，开候选评估 + 防落袋 + 自适应力度）、专业 Professional（0.0015 / **0** / 0.34，全部开启）；力度抖动用均匀分布而非高斯（高斯长尾偶尔甩出离谱力度）。专业档母球控制新增 `choosePower()`（按距离 55R/80R/100R/MAX，薄球 < cos0.5 打八五折，有落袋风险封顶 70R）与 `chooseSpin()`（落袋风险 -0.35 低杆刹车；走位 > 6R 给 +0.3 跟进、< 2R 给 -0.15 缩杆；薄球强制 ≤ -0.2），`estimateStop()` 加薄厚系数 `travel = min(8R, (母球到目标球×1.1 + R) × (0.25 + 0.9×薄度))`，分离距离估算终于和切角挂钩； `rankPlans()` 按「不落袋 → 切角更直 → 走位更顺 → 不贴库 → 离袋更近」排序，无解时走 `safetyOrFallback()` 打安全球并用 `DEFAULT_SHOT_POWER` 保证母球吃到库、避免「没碰库」犯规。顺手修 `browsercontainer.ts` 只判 TheFarJaw 导致选「专业」时开局错显「电脑 · 稳健」。**④ 球杆预览界面改版**：标题居中、操作提示由 17px 缩到 11px 移到标题**下方**、关闭按钮改绝对定位不挤占标题空间、长名省略号截断；放大范围放宽， `ZOOM_MAX 1.4→1.6`，缩小下限由固定 0.35 改为 `max(0.25, (FIT_R + 0.2) / baseDist)` —— 横屏 0.756→0.633（多退 16%）、竖屏 0.350→0.273（多退 22%），`SAFE_CLEAR = 0.2` 是近裁剪面 0.1 的两倍，实测两个方向安全余量恰为 0.2000，不穿模。**⑤ 击球后球杆不再停留在球桌上**：`Cue.update()` 里送杆动画 t ≥ 3 后 `strokeX` 就饱和（杆停在 -4R），但 `mesh.visible` 一直为 true，于是从击球瞬间到所有球停下球杆一直横在台面上；新增 `retractAfterStroke()` 在 t 达到 `STROKE_END_T = 3`（与击球曲线控制点最大 t 一致，正是真实台球里击完即收杆的时机）隐藏球杆与杆影，`aimMode()`/`placeBallMode()`/`hit()` 复位，并在 `watchaim.ts`/`spectate.ts`/`replay.ts` 三处进入下一杆瞄准时显式调 `cue.aimMode()` 把杆重新亮出来（否则对手回合/回放里球杆会一直消失）。验证：浏览器冒烟测试 **26/26 全过**（覆盖五项）；`tsc --noEmit` 报错数 31→30（修掉 3 个既有问题，未引入新的语义错误）；webpack 构建通过（index.js 465 KiB）。约束：只动回放相机、AI 策略与难度表、球杆预览 UI、设置面板 HTML/JS、球杆可见性，**不碰物理引擎、碰撞参数、渲染管线与规则判定逻辑**） | ~2.4 MB |
-| `billiards-cn-v1.3.57.apk` | 安卓安装包（v1.3.57，修复电脑获胜显示"你赢了"的结算判定错误 + 删除玩家名旁冗余的 (stripes) 标注：**病根是胜负判定恒真** —— 电脑回合的终局判定 `amIWinner = table.cueball.id === session.playerIndex` 从开伦类规则（三颗星/沙古，双方各有一个母球、母球 id=玩家序号）照搬而来，但八球/九球全桌只有一个母球（balls[0]，id=0），单机玩家序号又恒为 0，于是 `0 === 0` **永远为真**，无论这杆是谁出的都判玩家赢；能走进这条无参分支的只有一种情形 —— 电脑出杆后球停、BEGIN 事件触发自然终局，出杆方是电脑、玩家必输，结果却恒弹"你赢了"，而"你输了"的几个入口（玩家犯规进黑八 handleGameEnd(false)、玩家认输）都是显式传参走另一条分支，所以 bug 表现是单向偏向玩家。修复后该分支直接判 `amIWinner = false`，电脑合法打进黑八/九号获胜时正确显示"你输了 🥈"；其余终局路径逐一核查不受影响（玩家自己出杆合法进黑八走 PlayShot → rules.update() → handlePot，本来就判玩家赢；玩家犯规进黑八判负、电脑犯规送黑八判玩家赢两处均显式传参；三颗星/沙古/斯诺克走比分分支原样保留）。另给八球/九球 handlePot 里同样式的母球判定补注释 —— 它在单机模式恒真但碰巧是正确结果，注释明确警告不要把电脑的胜负接到这个判定上。删标注：八球分完花色后曾往玩家名后追加硬编码英文标注形如"玩家(stripes)"，中英文混排突兀且 HUD 进球托盘已直观显示本方球组，纯属冗余；电脑名称不受影响（"电脑(专业)"的括号是难度标注，原样保留）。仅改结算判定与 HUD 名称两处，不碰物理、碰撞参数、渲染、音效与任何规则逻辑） | ~2.4 MB |
-| `billiards-cn-v1.3.56.apk` | 安卓安装包（v1.3.56，补采 Freesound 真实录音，音效库 15 → 26 变体：v1.3.55 的 7 条进球音频谱质心最低也有 1622Hz，全是"脆"的，缺了真实台球里最常见的"球慢慢滚到袋口、几乎没撞击就掉下去"的**闷响**，慢球进袋听起来跟快球一样脆；库边与击球则各自只有一条原始录音，靠 tight/full 两种裁剪长度凑变体，同源于同一次撞击，轮转换不掉重复感。先把已用 7 个原始录音的全部瞬态重扫一遍榨干（能用只剩 pot_mid #1 的 707Hz；cue #1 的 T30 达 0.434s 是混响尾不是击球声；库边那条总共就 1 个事件），确认必须外部补采。新增 fs_search.py（免 API key，抓 Freesound 搜索页 + 逐条开详情页读许可证）与 fs_fetch.py（取 HQ 预览 mp3；原始 wav 下载要登录，进不了管线），跑 10 组关键词、57 个候选，**所有 CC-BY-NC 一律排除**（含一整批斯诺克素材），最终只留 3 条（2×CC0 + 1×CC-BY 4.0），落盘前逐条比对线上页面。因无法试听，新增 eval_candidates.py 用三个客观指标筛选：信噪比（阈值 26dB，实测可用素材 48~57dB）、尾部残响比（末 10% RMS ÷ 峰值，阈值 0.02，两条候选因 0.056 / 0.031 长尾被判掉）、峰均比。**关键发现：峰均比是硬物理上限而非增益问题** —— 某候选击球素材峰均比达 22.2，峰值顶到 0.93 天花板时 A 加权 RMS 只能到 0.042（比目标低 7.7dB），再拉增益只会削顶后被峰值保护原样拉回，怎么调都到不了，只能弃用；换用素材峰均比 9.7 可达 0.096。最终新增 11 个变体：进球从一条素材的 105 个事件里按质心**对数均匀取 8 条**，覆盖由 1622~4390Hz 拉宽到 **629~4390Hz**，并按质心重排为轻/中/重三档各 5 条（力度分档现在真的在换音色而不只是换长度）；击球补 2 条（2639 / 3486Hz），与原有 2114Hz 合成三种音色；碰撞补 1 条（2425Hz，衰减比 0.0012 为全批最干净）。库边/击球的重复感改用 **±7.5% 速率抖动**弥补（普通为 ±3.5%）：轮转只能消除"同一条连播"、消不掉"这几条本来就像一个音"，而音高上的微小差异比"换一条长度略不同的录音"更易察觉，±7.5% 约合 1.25 个半音仍在同一音级内不会听成跑调。补采另带出四项连带修复：① **事件序号是跨脚本契约** —— 两脚本检测参数不一致导致同一素材数出 53 vs 105 个事件，挑中的"第 N 个"在另一边其实是别的瞬态，会静悄悄切错素材，参数已提到 lib.DETECT 共用；② 增益限幅由 0.75~1.30 放宽到 0.50~1.60（补采素材动态范围大得多，实测响度散布 ±3dB 明显不齐）；③ success 的目标值一直卡在增益下限才停在 0.171，放宽下限后会掉到 0.114（轻 3.5dB）等于凭空改掉玩家已习惯的胜利音音量，已按实测值锁定；④ 起振延迟阈值**按类别区分**（落袋 60ms / 其余 30ms），进球前 0.044s 是球滚向袋口的过程，保留更真实。验证：26/26 变体解码后无削顶、首尾已归零（相对各自峰值均 ≤ −27dB）；真实浏览器里 26 条全部加载、力度分档正确、连播完整轮转、抖动 0.965~1.034、去抖生效、覆盖率 100%、无控制台报错。库边仍只有 2 条 —— 已确认 Freesound 上**唯一的 CC0 库边素材就是现在这条**，外部补采走不通。仅改音效层，不碰物理、渲染与 UI） | ~2.4 MB |
-| `billiards-cn-v1.3.55.apk` | 安卓安装包（v1.3.55，进球/碰撞/击球/库边音效改用真实录音：v1.3.20 把 v1.0.9 的真实录音换成了程序化合成，合成音只有 2 个二阶谐振器 —— 实测 dB 域衰减非线性仅 1.21dB 而真实录音达 3.14dB、共振峰数 14.0 对 17.5，这就是「电子味」的来源。但原始素材是未剪辑的现场录音，不能直接用（pot_mid.ogg 前 0.87s 死寂、pot_heavy.ogg 7 秒里压着 5 次落袋、ballcollision.ogg 前 0.74s 静音、cushion.ogg 前 0.38s 静音）。故新增音效加工管线 tools/sounds/：用峰值保持包络做瞬态检测、按类别定制切片长度，从现有 7 个原始录音切出 15 个单事件变体（碰撞 3 条，天然呈现闷 1142Hz/中 2542Hz/脆 4464Hz 三档；库边 2 条、击球 2 条用「紧/松」两种裁剪做出变体；落袋 7 条，其中 5 条来自 pot_heavy.ogg 里挖出的真实落袋；成功提示 1 条），再做 A 加权等响度对齐（清脆音质心 4.5kHz、闷响 560Hz，人耳在 2~5kHz 最灵敏，用普通 RMS 拉平会把清脆音抬得刺耳），总量 82KB。播放端用绝对速度阈值选档（碰撞 1.8/3.6、落袋 2.0/4.0 m/s）、同档内变体依次轮转而非纯随机、每次播放随机微调速率 ±3.5% 与增益 ±8%。修复「轮转游标跨力度档失效」——游标原按类别记录，切档时 indexOf 返回 -1 导致轮转重置，实测混合力度下永远只用得到前两个重档变体、另外三个成了死素材。另清理死代码：outcomeToSound 里处理 "Break" 的分支从未执行（OutcomeType 枚举只有 Pot/Cushion/Collision/Hit/Proximity），genBreak()/genRoll() 及全部合成函数一并移除，sound.ts 由 578 行精简到 395 行。保留 3D 空间音频、室内混响、压缩限幅、落袋去抖动，混响湿度由 0.22 下调至 0.16。仅改音效层，不改动任何物理逻辑、碰撞参数、渲染与 UI） | ~2.4 MB |
-| `billiards-cn-v1.3.54.apk` | 安卓安装包（v1.3.54，球杆预览改用游戏内真实球杆：此前预览自带一套简化模型（长径比仅 8.9:1，像一根胖棒槌），与游戏内真实球杆的 46.7:1 完全不是同一根杆；现新增 tools/cue-textures/ 把游戏内 cuetexturefactory.ts + settings.ts 原样打包为 dist/cue-texture-factory.js（挂 window.CueGameCue，three 走 external 故仅 45KB，已并入 npm run build），预览直接取用真实分区贴图与真实几何参数，并删掉约 680 行并存的简化模型代码（cue-preview-3d.js 由 65.6KB / 1640 行降到 42.2KB / 953 行）；另修复切主题时贴图缓存被误 dispose、以及预览关闭时转屏后再打开画面错乱两个缺陷） | ~2.3 MB |
-| `billiards-cn-v1.3.53.apk` | 安卓安装包（v1.3.53，袋口包边颜色随桌框发光色同步：v1.3.40 把 GLTF 桌台的 blackpocket / Material.001 统一改成 cushionColor，导致带 frameGlow 发光特效的主题（熔岩裂纹、黑曜石黑等）外框明亮发光但袋口仍显黑棕；现 pocketColor = frameGlow || cushionColor，有发光特效时袋口/包边与发光色一致，无发光主题保持库边色） | ~2.3 MB |
-| `billiards-cn-v1.3.52.apk` | 安卓安装包（v1.3.52，球杆主题预览改全屏：由「长按弹 300×130 小窗」改为「选中后再点一下卡片」全屏弹出，单指拖动 360° 旋转、双指捏合缩放；修复预览里球杆只有总长 4.1（先角与皮头未建模）的问题，改为完整 5.0；相机改为球坐标轨道并重写居中算法为正解二分，修复球杆正对镜头时偏心 0.40 NDC、球杆被推出画面的严重缺陷） | ~2.3 MB |
-| `billiards-cn-v1.3.51.apk` | 安卓安装包（v1.3.51，球杆视觉全面重做：杆身与杆尾贴图拆分为握把/装饰带/端盖三段分区，12 款特色皮肤按描述定制杆身材质、握把肌理与端盖造型，新增材质光泽参数区分哑光与高光，先角改为浅米白色硬质材质） | ~2.3 MB |
-| `billiards-cn-v1.3.50.apk` | 安卓安装包（v1.3.50，修复音效力度标定：碰撞/击球/进球/碰库四类声音随撞击力度连续变化，碰库由固定音色改为按力度合成） | ~2.3 MB |
-| `billiards-cn-v1.3.49.apk` | 安卓安装包（v1.3.49，真正修复比分栏电脑难度显示：解决 play.html 语言切换脚本每 400ms 覆盖回「电脑」的问题；同时包含 v1.3.48 击球点复位修复） | ~2.3 MB |
-| `billiards-cn-v1.3.48.apk` | 安卓安装包（v1.3.48，修复击球后白球击球点未自动复位 + 尝试修复比分栏电脑难度显示，但实际仍被 play.html 脚本覆盖为「电脑」） | ~2.3 MB |
-| `billiards-cn-v1.3.39.apk` | 安卓安装包（v1.3.39，修复 v1.3.38：球杆预览反射错位/低端机材质 / GLTF 桌台袋口与桌边凸点） | ~3.9 MB |
-| `billiards-cn-v1.3.38.apk` | 安卓安装包（v1.3.38，三项界面优化：变更履历去嵌套框 / 桌洞随桌布主题变色+去桌边凸点 / 球杆预览横置加长） | ~3.9 MB |
-| `billiards-cn-v1.3.37.apk` | 安卓安装包（v1.3.37，修复全主题白屏根因：烬火焚风配置崩溃） | ~3.9 MB |
-| `billiards-cn-v1.3.36.apk` | 安卓安装包（v1.3.36，修复预览无法渲染 + 去除标题） | ~3.9 MB |
-| `billiards-cn-v1.3.35.apk` | 安卓安装包（v1.3.35，12 主题真实球杆预览：每个主题独立材质/纹理/造型） | ~3.9 MB |
-| `billiards-cn-v1.3.34.apk` | 安卓安装包（v1.3.34，球杆预览品质升级：更粗壮、木纹/皮革/金属材质、主题色派生、灯光舞台感） | ~3.9 MB |
-| `billiards-cn-v1.3.33.apk` | 安卓安装包（v1.3.33，修复「第二次长按起白屏」：renderer 只建一次永不销毁，松手只停旋转不复创上下文） | ~3.9 MB |
-| `billiards-cn-v1.3.32.apk` | 安卓安装包（v1.3.32，修复真机 three.js 预览白屏，改用稳健纯色 Lambert 材质） | ~3.9 MB |
+| 文件 | 说明 |
+|------|------|
+| `billiards-cn-v1.8.8.apk` | 安卓 8.0+ 直装包，versionCode 261116808，14 MB |
+| `release-v1.8.8.zip` | 含源码 / SDK / APK / 发布页，可离线重建 |
 
-**SHA256**
+## 验收
 
+| 项 | 结果 |
+|---|---|
+| 3 主题 × 8 二级屏对比度（WCAG 3:1） | **全部 OK，零处低于阈值** |
+| 返回键：正常环境 / pushState 抛异常 | 设置页可返回、`__onMenuBack()` 返回值正确、pageerror 0 |
+| 主题切换（设置页点「绿绒」） | `html` 与帮助 iframe 同步变 `felt`，`.panel` 渐变转 `rgb(33,79,56)→rgb(12,43,28)`，存档写入 `felt`，`aria-selected` 同步，errs 0 |
+| 底部操作栏 5 段图标 | 三主题下全部清晰可辨 |
+| APK | `resources.arsc` Stored ✓、4 字节对齐 ✓、签名 ✓、仅 INTERNET 权限 ✓ |
+| webpack | `compiled successfully`，`dist/index.js` 638 428 B |
+
+---
+
+# v1.8.7 发布说明
+
+**发布时间**：2026-11-16（北京时间）
+**版本**：v1.8.7 / versionCode **261116807**（对 v1.8.6 的 261115806 递增；构建戳 26111614）
+**主题**：界面主题系统升级 —— 三套主题统一覆盖首页与游戏内弹窗 + 设置里一键切换并持久化
+**性质**：纯表现层 + 设置数据；**物理层、碰撞、规则、挥杆动画、回放时间轴、网络逻辑均未改动**
+
+## 变更概要
+
+1. **三套主题贯穿全应用**：paper（米白 · 米白纸面 + 墨字 + 朱红）/ felt（绿绒 · 深绿呢 + 木框 + 黄铜）/ arcade（午夜 · 近黑 + 电光青 + 柠檬黄）。此前只作用于首页，本版让通知结算、帮助浮层、白球设置、退出确认四类弹窗与教程横幅同步换肤。
+2. **统一切换 + 持久化**：「游戏设置」新增「界面主题」三选一，点一次首页与游戏内弹窗同时变色并写入 localStorage，重开保持。首页保留 `?theme=` 选稿参数（优先级最高，且不写回存档）。
+3. **新增共用 token 层** `css/theme-tokens.css`：纯变量、无布局规则；`--ui-*` 作唯一色板源，首页 `--hr-*` 别名、通知 `--notification-*` 按主题重赋，所有变量带字面量兜底。menu / play 两页同时引入，绝不引入 `home-redesign.css` 以免重染球台。
+4. **边界**：游戏内计分板 / 底部操作栏 / 球桌 3D 场景不随主题变化（高频操作 HUD，非本次「弹出框」范围）。所有交互 id / class / JS 钩子（`__showExitConfirm` / `__onAndroidBack` / `__CHANGELOG_HTML`）保留。
+
+## 下载
+
+| 文件 | 说明 |
+|------|------|
+| `billiards-cn-v1.8.7.apk` | 安卓 8.0+ 直装包，versionCode 261116807 |
+| `release-v1.8.7.zip` | 含源码 / SDK / APK / 发布页，可离线重建 |
+
+## 验收
+
+- 3 主题 ×（首页 + 通知 + 白球 + 退出确认）计算样式实测全部按主题切换；pageerror 0，三视口零溢出。
+- 切换即时生效、刷新保持、跨页同步、`?theme=` 选稿优先且不污染存档，全部通过。
+- 弹窗文字对比度 6.27–17.4:1，全达 WCAG AA。
+
+---
+
+# v1.8.3 发布说明
+
+**发布时间**：2026-11-13（北京时间）
+**版本**：v1.8.3 / versionCode **261113803**（对 v1.8.2 的 261112802 递增；构建戳 26111301）
+**主题**：回球改走模型自带金色轨道与端部集球槽 + 场景选择持久化 + 下线三个场景
+**性质**：视觉动画层重写 + 配置/UI 清理；**物理层、碰撞、规则、回放时间轴未改动**
+
+## 背景
+
+v1.8.2 交付后，用户对着实机逐条否掉了回球方案，并提了场景侧的三条问题：
+
+> 不要增加进球通道，用原本的球桌模型金色进球通道和集球盘
+> 进球后在球盘中不符合滚动的物理效果，在集球盘中会统一排放到某一个角落，而且中袋进的球还会在底袋进入进球通道
+> 进入游戏退出游戏后会恢复为默认的雪山场景
+> 删除八角笼，足球场，篮球场场景
+
+拆成五条硬要求：
+
+1. 删掉 v1.8.2 自建的侧裙外通道与自造集球盘，只走写实桌 GLB 自带的金色轨道与端部集球槽，**不得新增任何通道几何**；
+2. 落袋球在槽内要有滚动 / 铺开的观感，**不能整齐堆到某一个角落**；
+3. 中袋球**必须走中袋所在的长边**，不得瞬移到底袋入口再进通道；
+4. 场景选择**必须持久化**，进游戏再退出不得恢复雪山；
+5. **下线 UFC 八角笼 / 足球场 / 篮球场**，UI 与代码一并清理。
+
+## 根因定位
+
+### A. 「中袋球从底袋进」「球堆在角落」的根因
+
+v1.8.2 的回球是**一条共用固定路径**：所有袋口先横移到 `X_START = 1.44`（+x 端袋位置）再统一往 −x 滚。中袋（`x ≈ 0`）落袋后自然要先瞬移到底袋入口，观感就是「从底袋进去的」。终点又是 `SLOT_STEP = 0.068` 的等距槽位表，球必然码成一列。
+
+### B. 「模型自带集球盘被挡住」是误判
+
+v1.8.2 当初的结论是「自带集球盘被侧裙完全挡住」，因此自建了一套。本轮把写实桌 GLB 的三个合并网格拆开单独渲染取证，结论相反：
+
+| 网格 | 顶点数 | 实际内容 | 包围盒 |
+|---|---|---|---|
+| `Cn9ft_Albedo` | 17111 | 整桌外观（桌面、侧裙、桌腿） | `x∈[−1.585,1.585]` `y∈[−0.865,0.865]` `z∈[−0.834,0.008]` |
+| `材质.005` | 18546 | **6 个白色网兜** | `z∈[−0.210,−0.023]`，袋口中心与物理 `PocketGeometry.pocketCenters` 完全重合 |
+| `材质.002` | 4036 | **金色轨道框架 + −x 端集球底板** | `z∈[−0.453,−0.198]`，两条长边在 `y≈±0.786`，端部底板 `x∈[−1.511,−1.30]` |
+
+也就是说**自带通道是完整的**，只是藏在桌下、俯视机位看不见，v1.8.2 才误以为没有。本轮改为直接复用，自建几何全部删除。
+
+### C. 「退出变回雪山」的根因
+
+不在 `src/utils/settings.ts`，而在 **`dist/menu-cn.js`** 里的一句：
+
+```javascript
+if (merged.scene !== "snow") merged.scene = "snow"
 ```
-149785677e5d36dd1c046d88f0659f47b8f0e4f0c82ffee8353608a8df5e9a3f  台球大师-离线版-v1.0.0.apk
+
+读存档后无条件把非雪山场景改回雪山，所以选什么都存不住。
+
+## 方案与改动
+
+### A. 回球重写（`src/view/ball-return.ts`，353 → 约 430 行）
+
+- **删干净**：`CHANNEL_Y / X_START / X_TRAY / TRAY_X0 / SLOT_STEP / SLOT_COLS` 等常量，以及 `slopedBar() / buildChannel() / buildTray() / slotPosition() / takeSlot() / usedSlots` 全部移除。`BallReturn` 组内只剩 `ReturnBall_*` 代理球，**零新增几何**。
+- **按袋口分别铺路径**：`buildRoute(pocket)` 用 `pocket.y >= 0 ? 1 : -1` 判定所在长边，路径为「袋口 → 网兜底 → 本侧框架 → 沿本侧滚到 −x 端 → 转向槽口」。中袋球从自己那条边下去，不再跨边。
+- **沿框架层滚**：`RAIL_Y = 0.715`、`RAIL_Z = −0.295`，贴着模型金色框架的实际高度（实测中段 `z≈−0.35~−0.40`、两端抬到 `z≈−0.20`）。
+
+| 参数 | 值 | 含义 |
+|---|---|---|
+| `NET_BOTTOM_Z` | `−0.205` | 网兜底（落袋下沉终点） |
+| `RAIL_Z` | `−0.295` | 框架层高度 |
+| `TRAY_FLOOR_Z` | `−0.453` | 端部集球底板高度 |
+| `X_TURN` | `−1.335` | 转向槽口的 x |
+| `TRAY_Y_LIM` | `0.635 − R` | 槽内 y 夹限 |
+
+### B. 槽内 2D 刚体（`TrayBody` / `stepTray`）
+
+| 项 | 做法 |
+|---|---|
+| 滚动 | `exp(−TRAY_DAMP·dt)` 摩擦衰减，初速按登记序号微分（`vx = −0.12 − (idx%3)·0.05`、`vy = −side·(0.42 + idx·0.07)`），避免同点同速挤成一团 |
+| 槽壁 | 弧形收口：`trayCenterX(y) = −1.352 − 0.105·t²`（`t = min(1, |y|/0.62)`），半宽 `TRAY_ARC_HALF_W = 0.048`，与模型端头实测弧线一致（`y=0` 处 x≈−1.353、`y=±0.65` 处 ≈−1.466） |
+| 反弹 | 壁面恢复系数 `0.35` |
+| 球间分离 | 迭代 8 轮 + 收敛判据，**每轮后重新夹回弧线槽壁**；`stepTray` 返回 `stillOverlap`，轻微被推的球也要同步位置（v1.8.2 探针就是卡在这里堆叠） |
+| 两段状态机 | `phase: "route" | "tray"` |
+
+### C. 场景持久化（`dist/menu-cn.js` + `src/utils/settings.ts`）
+
+- `menu-cn.js` 新增白名单 `SCENE_IDS = ["room","beach","snow","tea","cell","seed"]`，把强制回落换成 `if (SCENE_IDS.indexOf(merged.scene) < 0) merged.scene = "snow"`。
+- `settings.ts` 同步加白名单校验，旧存档里已下线的 `football / basketball / ufc` 自动回落到 `snow`。
+
+### D. 三个场景下线
+
+| 层 | 清理内容 |
+|---|---|
+| UI | `dist/menu.html` 删除 3 张 `.skin-card`（`football` / `basketball` / `ufc`），剩 6 个场景 |
+| 配置 | `ENV_SCENES` 删 3 项；`EnvSceneDef.kind` 联合类型删 `"football" | "basketball" | "ufc"` |
+| 构建 | `ENV_SPECS` 删 3 项、`buildSceneEnvironment` 删 3 个 `case`（约 800 行几何：`buildFootballField` / `buildBasketballCourt` / `buildUfcOctagon` / `buildOctCanvas` / `buildOctFenceGeos` / `buildOctPostGeos` / `octSDF` + 全部 `UFC_*` / `FB_*` / `BK_*` 常量） |
+| 工具函数 | 删除 `lineGeo / ringGeo / dotGeo / stakeGeo / mergePlain / mergeBaked / buildStands / seatStripe / buildOuterGround / buildHoop / buildGoal / fillBaked`；`bakeVertices` 改 `export` 保留通用烘焙能力 |
+| 素材 | 删除 `dist/assets/scenes/football.jpg`、`basketball.jpg` |
+
+## 量化验收（浏览器实机，SwiftShader）
+
+**新探针**
+
+| 探针 | 覆盖 | 结果 |
+|---|---|---|
+| `probe-v183-return.js` | 各自袋口出发、中袋不瞬移、沿框架层滚、零新增几何、终态在自带槽内、球间不重叠、自然铺开、复位清空、零页面错误 | **9/9** |
+| `probe-v183-scenes.js` | 菜单只剩 6 场景、选茶室写存档、重载保留、进游戏沿用、退出回菜单仍保留、旧存档 `football` 回落雪山、零页面错误 | **7/7** |
+
+回球探针关键数据：
+
+```text
+PASS  R1_两球各自从自己的袋口出发（不共用入口）
+PASS  R2_中袋球仍在中袋下方（未瞬移到底袋入口 x≈1.46）
+PASS  R2b_沿模型金色框架层滚动（|y|≈0.715, z≈−0.3）  {"railHits":38}
+PASS  R6_未新增通道或集球盘几何（BallReturn 内只有代理球）
+PASS  R3_终态全部落在模型自带集球槽内  {"last":[[-1.41,0.217,-0.42], ...]}
+PASS  R4_槽内球互不重叠（间距 ≥ 1.9R）  {"minGap":0.0646,"need":0.0622}
+PASS  R5_槽内球自然铺开、不堆在同一角落  {"ySpan":0.588,"xSpan":0.033}
+PASS  R7_复位后代理球清空  {"cleared":0}
+PASS  R8_零页面错误  {"errs":[]}
+合计：9/9
 ```
 
-## 特性
+`minGap` 两次跑分别为 0.0646 / 0.0655，均高于 1.9R（0.0622）；`ySpan` 0.588 说明六球沿弧线铺开近 0.6m，`xSpan` 仅 0.033 说明都贴着同一条弧、没有前后错层。
 
-**全中文界面** — 菜单、玩法说明、设置面板、操作介绍、得分板、犯规提示、胜负结算全部汉化，包括斯诺克彩球名称（黄球 / 绿球 / 咖啡球 / 蓝球 / 粉球 / 黑球）。
+**既有回归全绿**
 
-**零权限纯离线** — 安装包不申请任何系统权限，未声明 `INTERNET`，从系统层面无法联网。无广告 SDK、无统计埋点、无崩溃上报。所有资源内嵌，运行全程零网络请求。
+回放 `18/18`、跳球 `6/6`、摆球 `5/5`、黑8 `4/4`、删除确认 `7/7`、v157 终检 `5/5`（合计 45 项）；`tsc --noEmit` **22 条基线零新增**；`webpack` 编译通过。
 
-**六档画质自适应** — 首次启动根据设备内存、CPU 核心数、GPU 型号自动推荐档位，从「极速」（像素风、最省电）到「极致」（旗舰机型）。可随时手动切换或重新检测。
+## 已知取舍
 
-**内置操作介绍与设置** — 首次启动自动展示操作指南；设置面板支持画质、音效、音量、瞄准辅助线、震动反馈，菜单与游戏内实时同步。
+- 回球仍是**纯视觉层**：代理球复用原球 geometry / material，不参与物理与碰撞；真实球在 `State.InPocket` 时依旧由 `BallMesh.updateAll()` 隐藏，两者不抢对象。
+- **回放模式不播回球动画**（与 v1.8.2 一致）：`replayMode` 跳过登记，否则进度条 seek 把球直接置成 `InPocket` 会冒幽灵球。
+- 槽内是 **2D 刚体近似**，不是真 3D 刚体：球只在槽平面上运动，垂直方向固定在 `TRAY_FLOOR_Z + R`。槽本身很浅，这个近似看不出来，但比真 3D 求解便宜得多。
+- 端部弧线是按实测点拟合的二次曲线（`−1.352 − 0.105·t²`），不是模型精确轮廓。换桌模或换端头造型时需要重新标定这组常量。
 
-## 玩法
+# v1.8.2 发布说明
 
-| 玩法 | 规则 | 对手 |
+**发布时间**：2026-11-12（北京时间）
+**版本**：v1.8.2 / versionCode **261112802**（对 v1.8.1 的 261111801 递增；构建戳 26111216）
+**主题**：全桌机位自由旋转 / 缩放 + 落袋球沿侧边通道滚进集球盘
+**性质**：相机输入层与纯视觉动画层；**物理层、碰撞、规则、回放时间轴未改动**
+
+## 背景
+
+v1.8.1 把球桌边界与视角修好之后，用户又提了两条体验反馈：
+
+1. **全桌机位是固定机位** —— 只能被动看那个角度，想换个方向或拉近看细节都做不到；
+2. **球进袋后瞬间消失** —— 模型自带的金色集球轨道藏在桌裙底下，全桌机位里几乎看不见，落袋过程没有交代。
+
+需求确认结果（用户选项）：全桌机位**只做旋转 + 缩放**，不做平移、不做复位按钮，三态按钮循环保留且切走再切回保留用户机位；回球方案选**侧裙外新增可见通道**（因为模型自带集球盘被侧裙完全挡住）。
+
+## 方案与改动
+
+### A. 全桌机位自由化（`src/view/camera.ts` + 新增 `src/view/far-gestures.ts`）
+
+| 项 | v1.8.1 | v1.8.2 |
 |---|---|---|
-| 九球 | 按号码顺序击球，先进 9 号者胜 | 练习 / 电脑·稳健 / 电脑·激进 |
-| 八球 | 清完己方半区，再打黑 8 | 练习 / 电脑·稳健 / 电脑·激进 |
-| 斯诺克 | 红球彩球交替，比拼总分 | 练习 / 电脑·稳健 / 电脑·激进 |
-| 三库开伦 | 无袋台，碰三库后撞两球得分 | 仅练习 |
+| 机位 | 固定 `FAR_POS = (2.35, −2.85, 1.92)` | 独立 `farCam = { yaw, pitch, dist, target }` 球面相机 |
+| 旋转 | 无 | 单指 / 鼠标拖动 → `orbitFarBy(dx, dy)` |
+| 缩放 | 无 | 滚轮 / 双指捏合 → `zoomFarBy(factor)` |
+| 平移 / 复位 | — | **不做**（按用户选项） |
+| 切走再切回 | 回到固定点 | **保留用户机位**（`farCam` 独立于回放 `freeCam`） |
 
-电脑对手为本地 AI，不依赖服务器。
+- 初值由 `FAR_DELTA = (2.35, −2.8, 2.07)` 反解 `yaw / pitch / dist`，保证**首屏构图与 v1.8.1 完全一致**；`FAR_DIST_MAX` 从 `R×95` 修正为 `R×200`（原上限比初始距离还小，第一次滚轮拉远会被夹住）。
+- 切进全桌时用 `farSnap` 直接跳位（软渲染下 lerp 过渡帧会穿房顶），手势改动时才 `lerp(0.45)` 平滑。
+- 手势事件链：`view.element` 捕获阶段绑 `pointerdown`，`globalThis` 捕获阶段绑 `pointermove/up/cancel`，`wheel` 在元素捕获阶段 `preventDefault() + stopPropagation()`。**刻意不调用 `setPointerCapture`** —— 它会触发 `pointerleave` 把活跃指针清掉，导致拖动失效。
+- 输入串扰屏蔽（`src/container/container.ts`）：`shouldIgnoreDrag` 扩展为 `isAimSuppressed() || farView`，防止拖屏改瞄准角；canvas wheel 拦截，防止 `aiminputs.ts` 的 document 级 wheel 改力度。
+- 手势与回球动画期间刷新 `lastEventTime`，避免容器 60 秒空闲停渲染。
 
-## 环境要求
+### B. 侧边回球通道 + 集球盘（新增 `src/view/ball-return.ts`）
 
-- Android 5.0（API 21）及以上
-- 支持 OpenGL ES 2.0
+- 具名 `Group("BallReturn")`，独立命名材质（`BallReturnGold` / `BallReturnTray` / `BallReturnTrayGold`），避免被写实桌换肤重着色误伤。
+- 近侧长边侧裙外挂 U 形窄槽：`CHANNEL_Y = −0.92`、`X_START = 1.44 → X_TRAY = −1.23`；`−x` 端集球盘 `TRAY_X0 = −1.6`，球按 `SLOT_STEP = 0.068` 依次停在槽位。
+- 通道初版是大块亮金板，全桌机位下横贯画面、遮住桌腿；改为**深色窄底槽（宽 0.075）+ 两道 0.006 细金导轨**，集球盘底改暗金，实拍复核桌腿重新可见、球与槽都辨认得清。
+- 每帧扫描 `ball.state === State.InPocket` 的边沿，生成 `ReturnBall_*` 代理 `Mesh`（复用原球 geometry / material）——因为 `BallMesh.updateAll()` 在 `InPocket` 时会隐藏原 `mesh / shadow`，直接复用会打架。
+- 动画分段：袋口下沉 `0.25s` → 桌下横移 `0.35s` → 侧通道匀速 `T_RUN = (X_START − X_TRAY)/1.35` → 入盘减速 `0.30s`；多球 `0.24s` 错开。滚动用 `rotateOnWorldAxis(up × dir, ds/R)`。
+- 回放兼容：`replayMode` 跳过登记（否则 `seekToFraction → restoreShotStart` 直接把球置成 `InPocket` 会冒幽灵球）；球状态非 `InPocket` 时自愈清理代理球与槽位占用。
 
-## 相对上游的改动
+## 量化验收（浏览器实机，SwiftShader）
 
-**离线化**：移除 WebSocket 多人大厅与消息中继、分数上传、遥测统计、崩溃上报、Google Fonts 外链、分享外链、局面图导出、在线分析面板。
+**新探针**
 
-**移动端适配**：新增 LOD 画质系统控制渲染分辨率 / 抗锯齿 / 球体几何精度；界面适配刘海屏安全区域；横屏布局优化；新增进球与碰撞震动反馈。
+| 探针 | 覆盖 | 结果 |
+|---|---|---|
+| `probe-v182-farcam.js` | 首屏构图不变、拖动改 yaw/pitch、滚轮改 dist 且力度不变、瞄准角不变、pitch/dist 夹限、三态切走切回保留 farCam、零页面错误 | **7/7** |
+| `probe-v182-return.js` | 三球登记代理球、通道中间帧 ≥20 样本、沿 −x 推进且 quaternion 变化、球间距 ≥2.2R、终态停在盘槽、复位清空、真实物理中袋落袋触发、零页面错误 | **8/8** |
 
-**新增**：中文主菜单、内置操作介绍页、内置游戏设置面板。
+低帧率取证坑：SwiftShader 约 1.3fps、每帧 `dt≈0.8s`，回球动画几帧就跳完。探针接管 `container.frame`，用固定 `50ms` 步长手动推进并分段截图，才拿到通道中间帧。真实物理落袋用 `t.advance(0.005) × 120` 把球直线打进中袋验证 `Falling → InPocket` 会触发动画。
 
-## 开源协议
+**既有回归全绿**
 
-本项目基于 GPL-3.0 协议的 tailuge/billiards 改造，衍生作品同样遵循 **GPL-3.0**。
-对应的完整源码见本 Release 附件（如 `taiqiu_offline_source_v1.0.9.zip`）。
+回放 `18/18`、跳球 `6/6`、摆球 `5/5`、黑8 `4/4`、删除确认 `7/7`、v157 终检 `5/5`；`tsc --noEmit` **22 条基线零新增**；`webpack` 编译通过。
 
-## 更新日志
+## 发版前补修：自由机位穿墙导致整片米色
 
-**v1.6.1（2026-10-16）**
+发布前的「六角度逐帧像素验收」发现一个此前探针没抓到的真实缺陷：新探针 `probe-v182-farcam.js`
+只断言了 `yaw/pitch/dist` 数值变化，**没有验画面**。把相机转到 `yaw=−1.30`（默认 −0.87，只转 25°）
+或滚轮拉远 13%（`dist 4.20 → 4.75`）后，实拍是**整片米色、球桌完全消失**。
 
-- **1 号球颜色加深**：`src/utils/rack.ts` 的 `BALL_COLORS[1]` 由 `#ffd900` → **`#d9a800`**（HSV 46°,100%,85%）。v1.6.0 引入 ACES 色调映射 + 环境反射后球面中间调被抬亮、又叠了清漆高光，原满亮度亮黄在实机远距离下与白球几乎分不开；新色只压明度、色相仍在黄区、饱和度保持 100%，既有「加深」的厚实感，又不与 5 号橙球（`#ff3300`）混淆。**量化验收**：页面内实读球 1 = `#d9a800`，球 2~9 保持 `0000ff / ff0000 / 800080 / ff3300 / 008000 / 600000 / 000000 / ffff00`（只动了 1 号）；逐球「标号→投影坐标→渲染像素」对照无错配；摆球流程（`probe-placeball156`）**5/5 全绿**；跳球回归（`probe-jump157-real`）**6/6 全绿**；`tsc` **22 条基线零新增**。**未改动物理、规则、渲染管线与其它球色**。
+诊断（`tools/render/diag-v182-ceiling.js`）：房间外壳 `room_wood` 的包围盒是
+`x∈[−3.8,3.8]`、`y∈[−2.9,2.93]`、天花板 `z≈2.6`；坏机位相机落在 `y=−3.71 / −4.04`，
+已经**穿出 −y 墙面**，从墙外朝球桌看，看到的是墙的背面。临时隐藏墙 / 天花板后画面完全恢复
+（球桌、家具、雪山背景都在），确认是遮挡而非渲染崩溃。
 
-**v1.6.0（2026-10-16）**
+**修复**（`src/view/camera.ts` `farPosition()`）：沿「注视点 → 相机」方向对房间安全盒
+`x∈[−3.4,3.4] / y∈[−2.85,2.55] / z∈[0.45,2.45]` 求交，把 `dist` 夹到最近交点内侧：
 
-- **3D 画面整体升级（美术重做）—— 环境光照、台呢绒面、台球吊灯与接地阴影、软包家具**（回应「3D 效果还是停留在 2D 简陋的水平」）。定位到四条**管线级**根因（非「模型不够多」）：PBR 材质的 `scene.environment` 从未设置（清漆球无环境可反射，观感同哑光塑料珠）、室内无色调映射（高光直接被裁成色块）、台呢只有颜色贴图没有法线、球无接触阴影。**改动**：① **程序化台球厅环境贴图**（新增 `src/view/environmentmap.ts`）—— 用 three.js 几何体搭微型台球厅交 `PMREMGenerator.fromScene` 烘焙为 CubeUV 环境贴图，按 renderer 实例 `WeakMap` 缓存（渲染器惰性重建自动重烘焙），`environmentIntensity 0.35` + 按材质分级 `envMapIntensity`（台呢 0.18 / 库边 0.45 / 桌框 0.7 / 球 1.0），不下载 HDR、APK 体积零增长；② **室内 ACES 色调映射**（`view.ts` `SCENE_TONE`）`room` 档 ACES + exposure 0.98；③ **台呢绒面法线贴图**（`tableskinfactory.getClothNormalTexture`）三层周期性 value-noise（`makeValueNoise2D` 自带 wrap）+ Sobel 求梯度 → 切线空间法线，强度 0.55 / repeat 5，同时 cloth sheen 0.55 → 0.3；④ **台球吊灯 + 顶光接地阴影** —— `sceneenvironment.buildBilliardLamp`（吸顶盘 + 吊杆 + 黄铜横杆 + 三头奶白灯罩，挂 `CeilingGroup` 内随顶棚整体隐藏不挡俯视视线）+ `view.ts` 新增 `SpotLight`（强度 14 / angle 0.72 / penumbra 0.62 / decay 2，1024² 阴影、`shadow.focus 0.92`）；⑤ **球杆材质与分段**（`cuemesh.ts`）分段 9→28，四段材质改 MeshStandardMaterial 吃环境反射（`applyCueTheme` 内 `shininess` → `roughness` 保持「哑光石砚 ↔ 玻璃冰晶」跨度）；⑥ **房间家具重做** —— 新增 `roundedBoxGeo`（`RoundedBoxGeometry`）与 `cylGeoX`，沙发/落地灯/边几全部圆角化（圆角棱边法线连续 → 烘焙顶点色自然渐变）；⑦ **低端画质护栏** —— 吊灯阴影在画质档 0/1 自动关闭，档 2 以上开启。**量化验收**：回放主探针改造后 **20/20 全绿**；跳球 **6/6 全绿**（30/45/60/72° = 6.54/13.07/19.61/23.65 cm）；开局摆球/八球/删除确认 **5/5 + 4/4 + 7/7 全绿**；`tsc` **22 条基线零新增**；帧时（软件渲染同机位）新管线 266.67ms vs 关闭新管线 239.99ms（**+11%**，含 +25 draw call / +42k 三角面）；台呢近场色 (66,87,66) → (115,137,108)（明度 +1 档、G/R 比 1.19 更饱和）；沙滩/雪山/足球/篮球/UFC 五场景实机复核无穿帮。**物理层、碰撞解算、规则判定、回放时间轴一行未改**。
+- `yaw/pitch` 方向**完全保留**，用户旋转自由度不受影响，只是拉远时相机停在墙内侧；
+- `−y` 下界特意取 `−2.85`（默认机位值），保证首屏构图与 v1.8.1 **逐像素一致**；
+- 不动场景资产、不改材质，副作用仅限全桌机位。
 
-**v1.5.8 / v1.5.7 / v1.5.6（2026-10-01 ~ 10-15）**
+验收：`tools/render/verify-v182-freecam-real.js` 用**真实渲染循环**（不 monkey patch 内部方法）
+跑 6 个机位（默认 / 左转 / 右转 / 拉远 / 拉近 / 探针拖动后的机位），逐帧统计台呢绿色像素占比，
+修复后全部通过。
 
-- **v1.5.8**：修复回放**自然播放**到结尾时进度条停在终局之前（#88 复发）—— 三重病灶（杆末/杆间时钟空转、末杆实跑短于预演、自然播放漏播最后一杆）分别以 `tickSeekUI` 时钟封顶、`handleStationary` 播完即 `seekToFraction(1)`、终局闸门语义收紧修复；回放真实路径主探针 **20/20 全绿**、R6 自然播放到底 **PASS**。
-- **v1.5.7**：专业级 AI 解球链路重建（#85：收力下限改物理反解 + 立即犯规与未来风险分级 + 一库/两库候选依次尝试 + 补两库镜像解球 + 窄窗口补枪，首撞合法率极端局面 **27.8% → 83.3%**、长程两库 **61.1% → 94.4%**）+ 跳球物理回归真实区间（#86 新增 `JUMP_VZ_EFFICIENCY = 0.48`：72° **99.4 cm → 23.6 cm**）+ 回合击球点残留（#87 出杆当下 `resetSpinAfterShot()`）+ 回放拖到尽头（#88 末端吸附窗口顶到 1）+ 删除击球点面板多余说明文字（#84）。
-- **v1.5.6**：跳球落地衰减 + 回放四项（进度条吸附 `SEEK_SNAP_FRAC`）+ 开局摆球（#78~#83）。
+---
 
-**v1.5.4（2026-09-28）**
+## 发版后热修：发布页「点下载进度不动」
 
-- **回放体验五项修复（#68~#72）· 回放自由视角 + 进度条进球点分色**：① **#68 击球点轨迹预告** —— 回退 v1.5.3 圆盘十字线方案，调整击球点时改为在 3D 视图直接显示白球行进路线与被击目标球行进路线（所见即所得）。② **#69「保存回放后急退、再进回放无反应」三重防御**（`src/controller/replay.ts`）—— 「已保存 ✓」提示改为 IndexedDB 真正落库后才显示；回放数据损坏（parse 异常 / init 缺失 / shots 为空）时明确提示并返回主菜单，绝不静默卡死；数据过大导致 sessionStorage 写入失败时就地提示，不再跳转白屏。③ **#70 回放自由视角 + 进度条分色**（`camera.ts` + `replay.ts` + `recorder.ts` + `container.ts`）—— 删除跟随视角（`buildReplayAnchor` / `stepReplayNudge` / `replayFrameView` 整链与 `frameCameraForShot` / `topDownBounds` / 视角按钮全部下线）；改为单指拖动绕台心球面旋转（yaw / pitch）+ 双指捏合与滚轮缩放，相机 lookAt 恒指台心（实测拖动 / 捏合 / 滚轮后视线与台心夹角 **0.00°**），pitch∈[0.18,1.45] / dist∈[R×14,R×95] 限幅不钻台下，位置 lerp 0.3 平滑逼近，图解 / 开伦仍强制俯视；录制链路给每杆打归属标记 `ow`（`recorder.record` 的 local / remote 双路径天然区分玩家 / AI，经 JSONCrush 无损压缩往返保留，旧回放无 ow 兼容为玩家色），进度条进球吸附点**蓝 = 玩家（#35a7ff）、红 = AI（#ff5a3c）**；附带容错 —— 回放预演物理遇「Depth exceeded resolving collisions」（碰撞解算 100 层不收敛）异常时按已模拟结果优雅收尾（`precomputeShot` / `beginShotBookkeeping` / `seekToFraction` 三处 try-catch），不再整杆预计算作废导致进度条退化。④ **#71 跳球出界白球残影** —— 白球飞出桌面后渲染层隐藏 offTable 球 mesh，结算后白球重新上场不再出现「库边凭空多一个白球」。⑤ **#72 回合白球未重置** —— 轮到本方回合时白球击球点状态未重置导致白球连袋的问题修复。**量化验收**：#70 专项探针（`probe-replay70-freecam`）**8/8 全绿**（自由视角生效 / 初始注视台心 / 拖动改变机位且视线-台心夹角 0.00° / 滚轮缩放限幅 / 捏合缩放 / 进度条吸附点 DOM 与预计算 meta 逐点一致（蓝 rgb(53,167,255) / 红 rgb(255,90,60)）/ 旧视角按钮无残留 / 零页面错误）；归属标记链路（录制→压缩→解码→DOM）JSONCrush 往返 `ow` 无损；#69 回归探针 **3/3 全绿**；主题 × 击球点组合冒烟 **19 主题全 PASS、FAIL 0**；`tsc --noEmit` 22 条基线错误**零新增**；webpack 构建成功。**未改动物理引擎与碰撞参数**（回放预演「碰撞解算不收敛」容错仅为工程健壮性包裹，不改变解算参数与结果）。
+用户反馈：点下载后进度条不动。实测定位到**下载请求丢了访问凭证**，不是文件大、也不是服务器慢。
 
-**v1.4.3（2026-09-24）**
-
-- **19 款球杆主题视觉全面增强**：① 全主题统一「圆柱定向光照」（`cuetexturefactory.ts` 新增 `cylinderRelief/axialDepth/jointCollar/enhance`）：四层周向光照（背光暗面 multiply 压暗保细节保饱和 → 宽受光面 + 窄镜面高光带 screen 提亮不过曝 → accent 轮廓反光），全部周期 1 周向函数、左右缝合无痕；强度 = 主题 relief × 底图明度自适应。② 接缝金属接环：cueShaft/cueButt 两段各画半枚拼合成等宽接环，半透明透出 accent 色。③ 遗留 dragon/azure/minions/peppa/qilin/ultraman 6 款补齐独立杆尾（新增 `buildDragonButt` 等 6 函数 + 4 个端盖工具），19 款杆尾分区齐备。④ 周向缝合修复（新增 `drawWrapped` 三遍补画 + 越界裁剪），36 张贴图逐一量化验证接缝连续（判据 <3.5）。⑤ 19 张球杆缩略图重渲染（`npm run build:previews`）。**实测（掩膜级）**：烬火焚风最亮 79→**140**、暗部 p10 2→**25**；8 款深色主题同样提升，亮色 7 款面积持平、p10 全部 ≥24。**回归**：`tsc --noEmit` 22 条基线零新增；专业档 botmatch 120 局清台 **100%**、卡死 0%、均杆 10.17；**未改动物理引擎与碰撞参数**。注意本轮为 v1.4.0 → v1.4.3 的累积交付（v1.4.0 比分球序/贴边自转/重置击球点/力度条跟手/AI 贴库选袋/缩略图预渲染；v1.4.1 AI 力度不足 + 辅助线 throw 修正；v1.4.2 细微瞄准条右端逻辑对齐 + AI 无碰库犯规闸门；v1.4.3 球杆主题视觉增强）。
+**根因**：网关（CloudStudio Gateway）对本站所有路径都要求凭证 —— URL 上的 `sharecode`，或名为
+`__wb_rsc` 的 HttpOnly cookie（`Secure` / `Path=/`）。发布页下载卡片原先是相对路径
+`href="billiards-cn-v1.8.2.apk"`，**不带 sharecode**。页面本身能打开说明 cookie 在，但下载动作一旦
+被系统下载器 / 新标签页 / 内置 WebView 接管，独立请求**不会带上这个 HttpOnly cookie** → 403 →
+下载器拿到一个几百字节的 403 HTML，进度条永远停在 0。
 
-**v1.3.60（2026-08-31）**
-
-- **回放：跨段倒退后仍「卡在当前时间点」、进球数没跟时间点同步**。v1.3.59 已重建事件队列
-  并回填比分，链路本身是通的；这一版修的是**它没管到的残留事件**。
-
-- **残留的 `StationaryEvent` 会把刚跳好的位置再推进一杆**。
-  `seekToFraction()` 只做了 `clearTimeout(this.timer)`，而 `container.eventQueue` 里上一次
-  出杆留下的 `StationaryEvent` 并没有清掉。它在下一帧被 `processEvents()` 消费
-  （条件是 `allStationary()`，而 seek 刚跑完台面恰好是静止的）→ `handleStationary()`
-  → `playNextShot(delay)`，于是「本应停在这一帧」的状态又被推进一杆，HUD 上的比分
-  看起来就退回了拖动前的数值。修法是在 `seekToFraction()` 头部加 `eventQueue.length = 0`。
-  另在 `restoreScoreBefore()` 末尾加一道兜底：直接调 `updateScoreHud(p1, p2, b, active)`
-  并对 `hud.p1Element / p2Element` 写 `textContent`，即便上面那条链路任何一环被吞掉，
-  HUD 数值仍与目标时刻一致。
-
-- **俯视镜头基本看不到白球轨迹 —— 病根有两个，都在新代码里**。
-
-- **病根 A：相机基向量退化**。`up` 常量是 `(0,0,1)`（Z 轴朝上，本项目的 Z-up 世界），
-  而俯视的视线方向恰好也是 `(0,0,±1)` —— 两者严格平行，`lookAt()` 构造正交基时
-  `cross(up, z)` 得到零向量，相机朝向退化成未定义。原版 `CameraTop.viewPoint()`
-  一直靠一个 `-0.01*R` 的横向偏移躲开这个奇异点，v1.3.59 新写的
-  `Camera.topViewAtCenter()` 漏掉了它。已补回同样的偏移，并把视距算法改为
-  「纵向约束 radius/tan(fov/2) 与横向约束 radius/(tan(fov/2)*aspect) 取更紧的一项 × 1.15 边距」。
-
-- **病根 B：取景范围远小于白球的实际走位**。原先只框「白球 → 被击球 → 目标袋口」
-  三点包围圆，半径常常只有一两个 R，而白球撞完目标球之后往往还要横穿半张台，
-  后半程直接滚出画面 —— 这就是用户说的「基本看不到白球的轨迹」。
-  现在 `precomputeShot()` 的物理循环里顺手采样白球轨迹（每 30 步取一点、上限 400 点，
-  存入新增的 `ShotMeta.cueTrack`），俯视框定改用「focus 三点 ∪ 白球轨迹」的包围盒外接圆；
-  跟随模式同样掺入轨迹的 4 个等距稀释采样点（稀释是必须的：把几百个点直接丢给
-  `setReplayFrame()` 会被轨迹的密集段把机位拖偏）。
-  顺便修掉 `frameCameraForShot()` 取 `shotMeta[currentShotIndex + 1]`（**下一杆**的框定）
-  来摆当前杆机位的问题，改用本杆 `shotMeta[currentShotIndex]`。
-
-- **斯诺克规则详细化**：原来只有一段简介，现扩为 8 大要点 —— 球与台、开球、
-  阶段与交替、计分与满分杆 147、置球点、自由球、犯规（罚 4~7 分）、清彩顺序与胜负，
-  中英文双份同步。
-
-- **环境场景解锁 + 视野改造**：足球场 / 篮球场卡片去掉 `disabled`，可点选。
-  但「能选」和「看得清」是两件事 —— 原场景按真实米制搭建（足球场 40×25、看台距场心 20、
-  层高 6），而球桌只有 1.22×0.6，俯视 fov 20° 时视野半径仅约 0.78：40 米的球场在画面里
-  只剩脚下一小块草地，看台远在 20 米开外根本不入画，等于白做。
-  现两个球场整体缩到 5.5×3.5 与 5.6×3.0（与球桌尺度相称），并各挂一个天穹补背景。
-  天穹半径必须 ≤20：只有雪景会把 `camera.far` 放大到 `SNOW_FAR=150`，其余场景是
-  `R*1000≈28.5`，沿用雪山的 130 会被整颗裁掉。
-
-- **删除游戏内设置里的「语言」「画质档位」整组**。删掉 HTML 只是第一步 ——
-  `menu-cn.js` 里还有四处**没有 null 保护**的引用：`$("setQuality").addEventListener`、
-  `$("btnAutoQuality").addEventListener`、以及 `syncSettingsUI()` 里的两处赋值。
-  只删 HTML 的话，初始化时 `$("setQuality")` 取到 null 会直接抛 TypeError，
-  把 `initSettingsPanel()` 整段打断，后面的音效 / 音量 / 瞄准线控件全都绑不上，
-  设置面板等于废掉。现已全部加判空（这与 v1.3.58 删「台球桌外观」、
-  v1.3.59 删「外观与场景」踩的是同一个坑）。
-
-**v1.3.59（2026-08-30）**
-
-- **回放拖进度条：拖到跨杆的位置就静默停住、进球数也不再更新**。两个独立病根叠加。
-
-- **病根 A（拖完就停）**：`seekToFraction()` 里确定性重跑的循环是
-  `while (table.time < localTarget && !allStationary())`。跳转目标一旦超过本杆真实物理时长，
-  循环就提前退出，此时桌面**已经静止**；而 `Container.advance()` 推 `StationaryEvent` 的条件是
-  `!stateBefore && allStationary()` —— 必须由「运动」转为「静止」才触发。球在 seek 结束那一刻
-  就已经静止，这个事件**再也不会产生**，于是 `handleStationary()` 永不执行，而它正是
-  「球停后安排下一杆」的**唯一入口**。表现就是：进度条拖完画面停住，没暂停、没报错、
-  UI 上也没有任何提示。修法是在 `onSeekEnd()` 之后调 `resumeAfterSeek()` —— 若此刻球已静止
-  且队列里还有未播的杆，主动补一个 `StationaryEvent`，把断掉的链路接回去。
-
-- **病根 B（进球数对不上）**：`this.shots` 是一条被 `shift()` 逐条消费的队列，
-  `seekToFraction()` 却只改了 `currentShotIndex`、从不重建队列。往回拖时已经播过的杆早被
-  shift 掉了，队列头部其实是「未来」的杆 —— 于是往回拖会跳过若干杆、往前拖又会重播，
-  而比分 HUD 靠队列里的 SCORE 事件推进，自然对不上。修法：构造时留一份 `allShots` 全量副本，
-  并预计算 `shotEventOffsets[k]`（第 k 杆的 AimEvent 在全量序列中的下标）；跨杆跳转时按
-  `off + 1` 切片重建 `this.shots`（**+1 是因为下面的 `table.hit()` 已经把本杆的 AimEvent
-  消费掉了**，用 `off` 会让本杆再被完整重播一次），再用 `restoreScoreBefore(off)` 把该时刻之前
-  最后一个 SCORE 事件回填到比分与当前击球方。
-
-- **顺带修一个会让杆号串位的隐患**：`onSeekEnd` 同时绑在 `change` 上，而键盘方向键 /
-  程序触发只走 `input + change`，**不经过** `onSeekStart`。原来 `clearTimeout(this.timer)`
-  只写在 `onSeekStart` 里，于是杆间 delay 那个 timer 到期仍会 push HitEvent →
-  `beginShotBookkeeping()` 把 `currentShotIndex` 再 +1，与刚设好的 idx 错开一位，
-  后面每一杆的 meta 全部串位。现在 `clearTimeout` 提到 `seekToFraction()` 开头，
-  任何入口进来的跳转都会先清 timer。
-
-- **顺带修 `handleBreak()` 的漏复位**：重新开球时此前没有重置 `currentShotIndex = -1`
-  与 `shotMeta = []`，会导致 `shotEventOffsets` 指向新序列、而 `shotMeta` 还留着上一局的，
-  一并补上。
-
-- **顺带修 `precompute shot 0 failed` —— 整局预计算此前一直是废的**。回放启动时
-  `precomputeAllShots()` 会先在独立的 simTable 上把每一杆都预演一遍，好让进度条一开始就知道
-  整局总时长。但 `ShotMeta.cueballId` 存的其实是 `ball.id`，而 `ball.id` 是**全局自增编号** ——
-  `rules.table()` 新建出来的桌球 id 是 **48~63**，与 `balls` 数组下标 **0~15** 根本不是一回事。
-  取母球时写的却是 `sim.balls[meta.cueballId]`，即 `balls[48]` → `undefined`，
-  紧接着 `sim.hit()` → `Cue.hit(undefined)` 抛
-  `Cannot set properties of undefined (setting 'state')`。异常被 catch 后整局预计算作废
-  （`shotMeta` 清空），进度条失去整局总时长，只能每播完一杆才追加一段。该字段的注释本来就写的是
-  「本杆白球在 balls 数组中的下标」，属于注释与实现不符。现把字段改成 `cueballIdx`、
-  两处赋值改为 `balls.indexOf(cueball)`、两处取值按下标走，预计算恢复正常
-  （回放阶段控制台报错 1 条 → **0 条**）。
-
-- **删除游戏设置里的「外观与场景」分组**（整组，含「球杆主题」与「环境场景」两行）。
-  与 v1.3.58 删掉同组「台球桌外观」同样的理由：这些设置在首页都有专门入口，游戏内这一组是重复的。
-  删除 `menu.html` 里 505–537 行整段 `.setting-group`，并同步删掉 `menu-cn.js` 里四处引用 ——
-  `syncSettingsUI()` 对两个 select 的赋值、两个 `change` 监听、`initCueThemes()`/`initScenes()`
-  里往 `syncActive` 的回写。**这四处必须一起删**：前两处**没有任何 null 保护**，
-  只删 HTML 会让 `$("setCueTheme")` 取到 null 并在初始化时直接抛 TypeError、菜单白屏。
-  首页三个入口（环境场景 / 球杆主题 / 台球桌）原样保留。
-
-- **撞库声此前几乎不随力度变化**。`REF_SPEED.Cushion` 写的是 **6 m/s**，而这个值的语义是
-  「撞库的典型速度上限」。实际撞库速度集中在 **0.5~3 m/s**（6 是按最大出杆速度 160R≈5.24 估的，
-  可球撞到库边时早被台呢和库边吃掉大半动能）。归一化后 `kk = speed/6` 只落在 0.08~0.5，
-  音量 = `0.3 + kk*0.7` → 实际只在 **0.36~0.65** 之间浮动；再叠上 ±8% 的增益抖动，
-  两次不同力度的撞库在听感上根本分不出来。改动三条：① 参考速度 6 → **3.2**（与 Pot 对齐），
-  让 kk 用满 0~1；② 音量区间 `[0.30, 1.00]` → **[0.18, 1.00]**，轻撞明显更轻，
-  不再被 0.3 的底噪垫成「怎么撞都一个响」；③ **播放速率由恒定的 1 改为 `0.88 + kk*0.24`** ——
-  重撞更脆、轻撞更闷。真实台球的撞库音色亮度本来就随力度变化，之前完全没做，
-  而手里只有 2 条同源素材，光靠音量差很难拉开层次，补上音高这个维度才真正分得开。
-  速率抖动（±7.5%）是乘在 rate 上的，与力度调制叠加，不冲突。
-
-- **落袋声偏小**：`0.5 + kk*0.5` → **`0.65 + kk*0.35`**。落袋是最需要被听见的正反馈，
-  而慢球滚进袋口时 kk 只有 0.2 左右、旧公式给到 0.6，环境音一盖就没了。
-  下限抬高 30%，上限仍是 1.0 不削顶。
-
-- **删除进球后的「成功」特效提示音**。LIB 里去掉 `success` 条目，删掉 `playSuccess()` 方法本身，
-  并清理 6 处调用点（drill / eightball / nineball / sagu / snooker / threecushion）。
-  这条音效是**叠在落袋音之后**播放的，落袋音本身已经把「进了」这件事说清楚了，
-  再叠一层叮咚纯属多余吵闹，连续进球时还会连着响。`boteventhandler.ts` 里给机器人用的桩对象
-  也一并去掉 `playSuccess() {}`。
-
-- **斯诺克桌：确认确实小了，默认由 10 尺改为 12 尺**。斯诺克此前和八球/九球**共用同一套台面**
-  `R*43 × R*21`（R = 0.03275 m），换算约 **2.82 × 1.38 m**；而标准 12 尺斯诺克台是
-  **3569 × 1778 mm**，长度短了约 **21%**、宽度窄了约 **23%**。斯诺克球小、球多、袋口紧，
-  台面一缩，开球堆球和长台走位全都变形。`TableConfig.defaultTableSize()` 现在按规则取值：
-  斯诺克 **12**、其余保持 10。选 12 而不是 11 或 13，是因为 `snooker.ts` 的
-  `tableModelStretchBySize` 里已经有调好的 `12: {x: 1420, y: 700}`，而 GLTF 模型
-  `models/snooker.min.gltf` 本身就是按 12 尺建的 —— 物理尺寸与模型拉伸直接对齐，
-  不需要重新标定顶点缩放。
-
-- **顺手修三处会把新默认值带偏的硬编码 10**：`recorder.getTableSize()` 在录制回放时写死返回 10，
-  回放里的桌面尺寸与实际对局不一致，回放会直接跑歪，改为按 `container.rules.rulename` 取；
-  `container.ts` 的粒子系统同样改为按规则取；`browsercontainer.ts` 的重定向守卫原本拿 URL 的
-  tableSize 与硬编码 10 比较来决定是否重定向，斯诺克默认改成 12 之后会把正常的斯诺克局
-  误判成需要重定向。
-
-- **验证**：浏览器端到端共 **32/32 全过** —— 斯诺克桌尺寸（物理台面放大 **1.196×**、
-  视觉模型 **1.173×**，两者同步，模型与碰撞体没脱节）、回放进度条（拖回后未停在暂停态、
-  继续推进、比分回填到该时刻应有的值并能重新累积回最终值）、设置面板（三个外观项已从游戏设置
-  移除、首页三入口仍在、菜单未白屏）；回放阶段控制台报错 1 → **0** 条。
-  `tsc --noEmit` 错误总数**保持 30**（全部为既有错误，未新增语义错误）；
-  webpack 构建通过（index.js 469 KiB）。**约束**：只动回放跳转逻辑、菜单设置 DOM/JS、
-  音效参数表与斯诺克桌尺寸，**不碰物理引擎、碰撞模型、渲染管线与规则判定逻辑**。
-
-**v1.3.58（2026-08-30）**
-
-- **回放跟随视角：每杆击球前定位、出杆后锁定**。用户反馈「回放跟随视角镜头一直在飘」。
-- **病根：整条跟随链路根本没接上**。`Replay.updateReplayCamera()` —— 以及它下游的
-  `camera.updateReplayFocus() → replayFrameView` —— **一个调用者都没有**。`replayFrameHook`
-  每帧只调了 `tickSeekUI()`；所谓「跟随」实际是另一套逻辑：每帧重新摆一次相机，
-  于是球一滚镜头就跟着飘，出杆瞬间还会整段平移。现已把 `updateReplayCamera()` 接进
-  `replayFrameHook`。
-- **改用「锚点 + 有界微调」模型**：
-  - `playNextShot()` 出杆前调 `frameCameraForShot(aim)`，用本杆的母球/目标球/袋口算出
-    **一次性机位锚点**（`REPLAY_ELEVATION = 0.72`），再 `forceMove()` 直接落位
-    （`forceMove` 的 `replayFrameView` 分支用 `fraction = 1` 表示不插值），
-    实现「每一杆击球前完成相机定位」；
-  - 出杆后相机默认**完全锁定**，只保留 `setReplayNudge()` 驱动的小幅偏移；
-  - 图解/三颗星/俯视三种情形仍走原来的 `suggestMode(topView)`，不受影响。
-- **什么情况下才允许微调**：`allowReplayNudge()` 三条任一成立 ——
-  本杆进球数 ≥ 2；本杆时长 > 2600ms（长链条）；当前时刻已超过首个进球 1200ms
-  且还没到末球进袋后 400ms（尾段节奏拖沓）。只有这几种情形才会去问
-  「下一个即将进袋的球在哪」（`currentPotWatchPoint()`，进袋前 700ms 看球、
-  进袋后 500ms 看袋口）。
-- **微调幅度严格封顶且平滑**：偏航 ≤ `0.56 rad`（约 32°）、抬升 ≤ `14R`、
-  视点偏移 ≤ `12R`，缓动系数 `0.02`（约 50 帧走完），绝不剧烈跳转；判据是把待进袋球
-  投影到 NDC（`REPLAY_NUDGE_SAFE_NDC = 0.72`），超出才回拉 —— 球已在画面中央时一动不动。
-- **下一杆重新完整定位**：`handleStationary()` 里球全停后清掉 `shotInFlight` 与 nudge；
-  `setReplayFrame()` / `clearReplayFrame()` / `updateReplayFocus()` 都会重置锚点；
-  手动切视角按钮 `onCamClick` 也改为走 `frameCameraForShot()`，与自动流程同一套定位。
-- **AI 难度：专业档此前是个「假档」**。`Professional.aim()` 返回的是
-  `[aimEvent, farKnuckleAimEvent, farKnuckleHit]`，而只有数组**最后一项** HitEvent
-  真正击球 —— 也就是说专业档每次出杆都是**远库边全力的 `farKnuckleHit`**，
-  和激进档 TheFarJaw 一模一样；它那些候选枚举、切角排序、防落袋、自适应力度
-  全部只作用于两个 AimEvent，而 AimEvent 只是预览
-  （`Controller.handleAim()` 是空实现），对物理结果零影响。真实出杆已改为 `pocketHit`。
-- **难度参数此前根本不存在**：`AimCalculator.generateShot()` 的 `noise` 实参在全部
-  6 个调用点都被**硬编码成 0**；唯一的随机性是默认的 `spinOffset = randomSpin()`
-  （±0.3 随机侧旋），可它**只命中了最弱的稳健档**（激进/专业都显式传了 Vector3）。
-  `rules.ts` 里声明的 `aiNoiseScale` 从头到尾没人读。三档难度实际上只有
-  「稳健 vs 其余」两档，且强弱关系还是反的 —— 最弱档反而是唯一会手抖的档。
-- **新增 `src/network/bot/difficulty.ts` 难度表**：
-
-  | 档位 | 瞄准噪声 | 力度抖动 | 切角下限 | 开启的能力 |
-  |---|---|---|---|---|
-  | 稳健 ClawBreak | 0.030 | 12% | cos 0.15 | 无（走位/防落袋/侧旋/自适应力度/安全球全关） |
-  | 激进 TheFarJaw | 0.010 | 5% | cos 0.20 | 候选评估 + 防落袋 + 自适应力度 |
-  | 专业 Professional | 0.0015 | **0** | cos 0.34 | 全部（含走位、安全球、侧旋控制） |
-
-  力度抖动用均匀分布而非高斯 —— 高斯长尾偶尔会甩出离谱的力度值。
-- **专业档母球控制**：新增 `choosePower()`（按距离分 55R/80R/100R/MAX，薄球
-  `< cos 0.5` 打八五折，有落袋风险封顶 70R）与 `chooseSpin()`（落袋风险给 -0.35
-  低杆刹车；走位距离 > 6R 给 +0.3 高杆跟进、< 2R 给 -0.15 缩杆；薄球强制 ≤ -0.2）。
-  `estimateStop()` 加了**薄厚系数** ——
-  `travel = min(8R, (母球到目标球 × 1.1 + R) × (0.25 + 0.9 × 薄度))`，
-  母球分离距离的估算终于和切角挂上钩（旧版不管多薄都按同样距离算走位）。
-- **专业档不再出现低级失误**：`rankPlans()` 按「不落袋 → 切角更直 → 走位更顺 →
-  不贴库（新增 `railHug()`）→ 目标球离袋更近」排序；无解时走 `safetyOrFallback()`
-  打安全球（选接触后离对手球最远的目标），力度用 `DEFAULT_SHOT_POWER` 保证母球能吃到库，
-  避免「没碰库」犯规。
-- **顺手修一个显示 bug**：`browsercontainer.ts` 只判了 `TheFarJaw`，选「专业」时
-  开局提示会错显成「电脑 · 稳健」，已补上专业分支。
-- **删除游戏设置里的「台球桌外观」**。同一项设置在首页（`#screen-tableskin`）已经能改，
-  两处读写的是**同一个** `settings.tableSkin` 字段、**同一个** localStorage key，
-  游戏内那一行纯属冗余。删除 HTML 那一行的同时必须删掉 `menu-cn.js` 里对应的
-  change 监听与初始化赋值 —— 否则 `$("setTableSkin")` 取到 null 会在启动时直接抛错。
-- **球杆预览界面改版**：标题（球杆主题名）居中显示，操作提示
-  「单指拖动旋转 · 双指捏合缩放」由 17px 缩到 11px 放在标题**下方**，
-  右上角关闭按钮改为绝对定位不挤占标题空间，标题过长时省略号截断。
-- **球杆预览放大范围放宽**：`ZOOM_MAX` 1.4 → 1.6；缩小下限由固定的 0.35 改为
-  按机位动态计算 `max(0.25, (FIT_R + SAFE_CLEAR) / baseDist)`，其中 `FIT_R ≈ 2.5011`
-  是球杆包围球半径、`baseDist` 是初始机位距离 —— 横屏 0.756 → **0.633**（能多退 16%），
-  竖屏 0.350 → **0.273**（能多退 22%）。常数 `SAFE_CLEAR = 0.2` 是**近裁剪面 0.1 的两倍**，
-  实测两个方向的安全余量都恰为 0.2000，球杆不会穿进相机。
-- **击球后球杆不再停留在球桌上**。此前 `Cue.update()` 里送杆动画在 `t ≥ 3` 之后
-  `strokeX` 就饱和不动了（杆停在 -4R 处），但 `mesh.visible` 一直为 true，
-  于是从「击球瞬间」到「所有球停下」这整段时间里，球杆就这么横在台面上。
-  新增 `retractAfterStroke()`：t 达到 `STROKE_END_T = 3`（与击球曲线控制点最大 t 一致，
-  正是真实台球里「击完即收杆」的时机）时隐藏球杆与杆影；
-  `aimMode()` / `placeBallMode()` / `hit()` 复位。同时在 `watchaim.ts`、`spectate.ts`、
-  `replay.ts` 三处进入下一杆瞄准时显式调 `cue.aimMode()` 把杆重新亮出来 ——
-  否则对手回合 / 回放里球杆会一直消失。
-- **验证**：浏览器冒烟测试 **26/26 全过**（覆盖上述五项，含球杆可见性时间序列采样 ——
-  瞄准阶段可见、击球后 8 秒内 40 次采样有 29 次为隐藏，球停后重新出现）；
-  `tsc --noEmit` 报错数 31 → 30（修掉 3 个既有问题，未引入新的语义错误）；
-  webpack 构建通过（index.js 465 KiB / three_module.js 351 KiB / three_core.js 257 KiB）。
-- **约束**：只动回放相机、AI 策略与难度表、球杆预览 UI、设置面板 HTML/JS、球杆可见性，
-  **不碰物理引擎、碰撞参数、渲染管线与规则判定逻辑**。
-
-**v1.3.57（2026-08-30）**
-
-- **修复：电脑赢了结算面板却弹"你赢了"**。用户实测截图：电脑获胜后结算面板显示"你赢了 7-7"。
-- **病根：胜负判定恒真**。电脑回合的终局判定是
-  `amIWinner = table.cueball.id === session.playerIndex`（`boteventhandler.ts` 的
-  `handleGameEnd()` 八球/九球分支，v1.2.15 引入）。这行从开伦类规则（三颗星/沙古）照搬而来：
-  开伦**双方各有一个母球**，母球 id 恰好等于玩家序号（0/1），判定成立；但八球/九球
-  **全桌只有一个母球**（`Rack.triangle()` 里只有一个 `Rack.cueBall`，即 balls[0]，id=0），
-  单机玩家序号又恒为 0，于是 `0 === 0` **永远为真** —— 无论这杆是谁出的，都判玩家赢。
-- **为什么只弹"你赢了"而不弹"你输了"**：能走进这条判定分支的只有一种情形 ——
-  电脑出杆后球停、玩家端 `WatchShot` 发 `BEGIN` 事件、`BotEventHandler.handleStationary`
-  检出 `isEndOfGame` 后调用**无参** `handleGameEnd()`。此时出杆方是电脑、玩家必输，
-  旧代码却恒判"你赢了"。而"你输了"的几个入口（玩家犯规进黑八
-  `handleGameEnd(false, "8-ball pocketed on foul")`、玩家认输 `menu.ts`）都是显式传参，
-  走 `forcedAmIWinner !== undefined` 分支 —— 所以 bug 的表现是单向的：永远偏向玩家。
-- **修复**：这条分支直接判 `amIWinner = false`（能进这里必是电脑出的杆）。电脑合法打进
-  黑八/九号获胜时，`MatchResultHelper.presentGameEnd` 收到 false → bot 模式下
-  `determineWinner` 原样返回 → `notifyLoss` → 结算面板正确显示"你输了 🥈"。
-- **其余终局路径逐一核查，均不受影响**：
-  - 玩家自己出杆合法打进黑八/九号：走 `PlayShot → rules.update() → handlePot → isEndOfGame`，
-    判定 `table.cueball === balls[playerIndex]` 恒真但**碰巧是正确结果**（出杆者必是玩家）；
-  - 玩家犯规进黑八：`handleGameEnd(false, "8-ball pocketed on foul")` 判负 ✓；
-  - 电脑犯规进黑八：`handleEightBallFoul` 显式 `handleGameEnd(true)` 判玩家赢 ✓；
-  - 三颗星/沙古/斯诺克：走比分判定分支（`p1 >= p2`），原样保留 ✓。
-- **顺手加固**：给八球/九球 `handlePot` 里同样式的母球判定补了注释 —— 明确警告
-  "能走到那里的必然是玩家自己出的杆，恒真是碰巧正确，不要把电脑的胜负接到这个判定上"，
-  防止将来再踩同一个坑。
-- **删除：玩家名旁的 (stripes)/(solids) 标注**。八球分完花色后，`container.ts` 会往玩家名后
-  追加一个硬编码英文标注（`typeLabel = p1type === 1 ? "solids" : "stripes"`），形如
-  "玩家(stripes)"—— 中英文混排突兀，且 HUD 左上角的进球托盘本来就直观显示了本方分到的球，
-  标注纯属冗余。电脑名称不受影响（标注只加在玩家槽位上；"电脑(专业)"的括号是难度标注，原样保留）。
-- **验证**：webpack 构建通过；六条终局路径人工推演（玩家合法进黑八赢 / 电脑合法进黑八输 /
-  玩家犯规进黑八输 / 电脑犯规送黑八赢 / 认输 / 三颗星比分判定）逐条核对代码路径；
-  真实浏览器端到端见发布前冒烟测试。约束：只改结算判定与 HUD 名称两处
-  （`boteventhandler.ts` / `container.ts` / 两条注释），**不碰物理、碰撞参数、渲染、
-  音效与任何规则逻辑**。
-
-**v1.3.56（2026-08-30）**
-
-- **补的是什么洞：v1.3.55 的 7 条进球音全是"脆"的**。按频谱质心排一遍就露馅 —— 现有 `pot_*`
-  的质心最低也有 **1622Hz**、最高 4390Hz，中间没有一条"闷"的。而真实台球里最常见的恰恰是闷的那种：
-  球慢慢滚到袋口、几乎没撞击就掉下去，泛音极少。v1.3.55 只有"球高速砸进袋"一种质感，慢球进袋听起来
-  跟快球一样脆。库边和击球是另一类问题：**各自只有一条原始录音**，靠 tight/full 两种裁剪长度凑出两个
-  变体，同源于同一次撞击，轮转也换不掉那个"又是同一个音"的感觉。
-- **先把现有素材榨干，再往外找**。重新扫了 v1.3.55 已用 7 个原始录音的全部瞬态，能用的只剩
-  `pot_mid #1`（707Hz，正好补低段）；`cue #1` 的 T30 达 0.434s 是混响尾不是击球声；
-  `pot_light #0/#2` 一个被截了头、一个低 19dB 只是余响；库边那条录音总共就 1 个事件。外部补采是必须的。
-- **授权链条全部机器校验后才落盘**。新增 `tools/sounds/fs_search.py`（免 API key，直接抓 Freesound
-  服务端渲染的搜索页，再逐条打开详情页读许可证）与 `fs_fetch.py`（取 HQ 预览 mp3，128kbps，公开 CDN、
-  无需登录；原始 wav 下载要登录，不能进管线）。跑了 10 组关键词、57 个候选，许可证并行核验，
-  **所有 CC-BY-NC 一律排除**（其中 Angie81Dee 那整批斯诺克素材全是 NC，整体作废），最终只留下
-  `fs539854`（Za-Games，CC0）、`fs763601`（ChloePieterse，CC0）、`fs830221`（KVV_Audio，CC-BY 4.0），
-  落盘前逐条比对了线上页面。
-- **因为听不了，筛选靠客观指标**。新增 `tools/sounds/eval_candidates.py`，对每个候选瞬态量三个数：
-  **信噪比**（底噪抬太高会出嘶声，阈值 26dB，实测可用素材 48~57dB）、**尾部残响比**（末 10% 的 RMS ÷
-  峰值，阈值 0.02，fs443067 / fs441857 因 0.056 / 0.031 被判掉）、**峰均比**。
-  另有两条踩坑修正：素材太短没有静音间隙时"最安静的 0.2s 窗口"其实装着撞击声本身，
-  S/N 会算出离谱的 4.4dB 误杀好素材（已改为取不到间隙就返回 None、改用尾部比判）；
-  低峰值不等于高底噪（fs655351 峰值仅 0.073 但 S/N 达 48~57dB，我最初误判过）。
-- **峰均比是硬物理上限，不是增益问题**（本次关键发现）。某候选击球素材动态范围极大、峰均比高达
-  **22.2** —— 峰值顶到 0.93 天花板时，A 加权 RMS 只能到 0.042，比击球目标 0.085 低 7.7dB。再拉增益只会
-  削顶，然后被峰值保护原样拉回来，**怎么调都到不了目标响度**。所以它不是"增益不够"，是这条素材根本
-  不能用。改用 `fs830221 #4`（峰均比 9.7，可达 0.096）。
-- **新增 11 个变体，音效库 15 → 26 条 / 138.7 KB**。落袋从 `fs763601` 的 105 个事件里按质心
-  **对数均匀取 8 条**，把覆盖从 1622~4390Hz 拉宽到 **629~4390Hz**（低段补出 629 / 868 / 1022 /
-  1312 / 1562Hz 五条闷的）；击球补 `cue_s1`（2639Hz）/ `cue_s2`（3486Hz），与原有 2114Hz 合成三种音色；
-  碰撞补 `collision_clack`（2425Hz，衰减比 0.0012 全批最干净）。落袋同时按质心重排为
-  **轻/中/重三档各 5 条**，力度分档现在是真的在换音色而不只是换长度。
-- **库边/击球的重复感用加大抖动弥补**。轮转只能消除"同一条连播"，消不掉"这几条本来就像一个音"。
-  新增 `RATE_JITTER_SPARSE = 0.075`（普通抖动 ±3.5%），变体稀少的类别（cushion 仅 2 条且同源于同一撞击、
-  cue 的 tight/full 同源所以实际只有 3 种音色）改用 ±7.5%。**音高上的微小差异比"换一条长度略不同的录音"
-  更容易被察觉**，而 ±7.5% 约合 1.25 个半音，仍在同一音级内，不会听成跑调。实测 cushion 抖动
-  0.9358~1.0484，散布 0.11。
-- **补采带出的一串连带修复**。① **事件序号是跨脚本契约** —— `eval_candidates.py` 用默认
-  `min_gap=0.25` 而 `build.py` 用 0.10，同一条素材两边数出 53 vs 105 个事件，eval 挑中的"第 9 个"
-  在 build 里其实是别的瞬态，会静悄悄切错素材；参数已提到 `lib.DETECT` 共用。
-  ② **增益限幅 0.75~1.30 → 0.50~1.60**：`cue_s1` 要 2.02×、`pot_sink_6` 要 0.68×，双双卡在边界上，
-  实测响度散布 ±3dB 明显不齐。③ `success` 目标值原本写 0.070 但实际一直卡在增益下限才停在 0.171，
-  放宽下限后会掉到 0.114（轻 3.5dB）—— 等于凭空改掉玩家已习惯的胜利音音量，已按 v1.3.55 实测值锁定为
-  0.171。④ 起振延迟阈值**按类别区分**（落袋 60ms / 其余 30ms）：`pot_sink_8` 的 0.044s 是球滚向袋口的
-  过程，保留更真实，不是缺陷。
-- **验证**：26/26 变体解码后无削顶、首尾已归零（相对各自峰值均 ≤ −27dB，已发布的 `pot_mid` 是 −75dB，
-  属瞬态正常首采样值）；真实浏览器里 26 条全部加载成功、力度分档正确（0.3→`pot_sink_1`、
-  2.5→`pot_light`、4.5→`pot_sink_8`）、落袋 10 连播完整轮转 5 个变体、抖动 0.9654~1.0344、
-  落袋去抖 3 次只响 1 次、覆盖率 100%、无控制台报错；线上发布页另跑一遍端到端，26 个 sfx 全 200、
-  旧 `dist/sounds/` 零请求。
-- **约束**：只改音效层（`src/view/sound.ts` + `tools/sounds/`），不碰物理、渲染与 UI。库边仍然只有 2 条 ——
-  已确认 Freesound 上**唯一的 CC0 "pool ball rail" 就是现在用的这条**，且相似推荐接口需要登录，
-  外部补采这条路对库边走不通。可用的开球素材（`fs204187`，CC0）虽已筛出，但 `OutcomeType` 没有 Break
-  分支、`genBreak()` 在 v1.3.20 已删，加回开球音属于功能新增而非修音色，留待后续版本。
-
-**v1.3.55（2026-08-30）**
-
-- **病根：音效是程序化合成的，不是真实录音**。v1.0.9 曾使用 Freesound 真实录音，但 v1.3.20 重构音效系统时
-  换成了噪声瞬态 + 二阶谐振器的合成方案。合成音虽然干净，但每个音效只有 2 个谐振器 —— 频谱上至多 2 个
-  共振峰、衰减是单指数。实测 **dB 域衰减非线性仅 1.21dB，而真实录音达 3.14dB**（多模态各自按不同时间常数
-  衰减，叠加后是自然的折线而非一条直线），共振峰数 14.0 对 17.5。这就是听感"假"的量化来源。
-- **为什么不能简单换回原来的 ogg**：那批素材是**未剪辑的现场原始录音**，直接播有明显缺陷 ——
-  `pot_mid.ogg` 前 0.87s 是死寂（进袋后要等将近 1 秒才出声）、`pot_heavy.ogg` 7.0s 长音里压着 5 次独立落袋
-  中间夹长静音、`ballcollision.ogg` 前 0.74s 静音、`cushion.ogg` 前 0.38s 静音。这正是当年改用合成音的
-  直接原因之一。
-- **做法：新增音效素材加工管线 `tools/sounds/`**（`build.py` + `lib.py` + `compare.py`）。不重新合成、
-  不下载新素材，而是从现有 7 个原始录音里切出**单事件干净片段**。瞬态检测用峰值保持包络而非瞬时幅度 ——
-  台球声是宽带瞬态，波形每秒过零数千次，直接判 `abs(x)` 会被过零点立刻截断。切片长度按类别定制：
-  碰撞是 30~130ms 的短瞬态，落袋要保留 200~300ms 的完整过程，一刀切会把两种都切坏。
-  只做裁剪与归一，**不做任何音色合成，100% 保留原始录音**。
-- **产出 15 个变体 / 82.0 KB**（`dist/sfx/`）：球球碰撞 3 条（同一条录音里的三次撞击，天然呈现
-  闷 1142Hz / 中 2542Hz / 脆 4464Hz 三档）、库边 2 条、击球 2 条（这两个素材本身只有一次撞击，
-  用"紧/松"两种裁剪做出两个变体，时长差 30~40ms，一个干脆一个带余响）、落袋 7 条
-  （`pot_heavy.ogg` 里挖出 5 次真实落袋 + light/mid 各 1 条）、成功提示 1 条。
-- **等响度对齐按 A 加权 RMS 而非普通 RMS**：台球音效频谱差异极大（清脆碰撞质心 4.5kHz、库边闷响 560Hz），
-  人耳在 2~5kHz 最灵敏、500Hz 以下迟钝约 10dB，用普通 RMS 拉平会把清脆音抬得刺耳、闷响被压住。
-  各类别目标值按游戏设计分层（落袋 0.075 最突出、击球 0.085、碰撞 0.070、库边 0.062 最轻，
-  避免满台跑球时太吵）。补偿增益限幅 0.75~1.30：极短瞬态峰均比很高（`pot_heavy_1` 达 19），
-  硬拉会让峰值削顶失真，而人耳对 <50ms 瞬态的感知响度本就更接近峰值而非 RMS。
-- **播放策略：力度分档 + 变体轮转 + 播放抖动**。选哪条录音用**绝对速度阈值**（碰撞 1.8/3.6 m/s、
-  落袋 2.0/4.0 m/s，取自 v1.0.9 标注的实测经验区间），音量仍按归一化力度连续变化。
-  （踩过的坑：若沿用归一化值再切三档，落袋速度 2.0 以上就全落进重档，轻/中两档几乎永不使用。）
-  同档内多条录音**依次轮转**而非纯随机 —— 随机在变体少时经常连续抽到同一个，就是"机关枪效应"。
-  每次播放再随机微调速率 ±3.5%、增益 ±8%，模拟真实世界的不可重复性。
-- **修复：变体轮转游标跨力度档失效**。游标原按"类别"记录、存的是变体表绝对索引；轻档选中索引 0 后
-  再切到重档，0 不在重档候选池里 → `indexOf` 返回 -1 → 起点被算成 0 → 每次都从头开始。
-  实测混合力度下**永远只用得到前两个重档变体，另外三个成了死素材**。改为按 (类别, 力度档) 分别记录，
-  修复后 15/15 变体全部可命中。
-- **清理死代码**：`outcomeToSound` 里处理 `"Break"` 的分支从未执行过 —— `OutcomeType` 枚举只有
-  Pot/Cushion/Collision/Hit/Proximity 五种，压根没有 Break，对应的 `genBreak()` 也就从未被调用；
-  `genRoll()` 同样无人调用。连同全部合成函数（`resonate`/`noiseBurst`/`genCue`/`genCollision`/
-  `genCushion`/`genPot`）与未使用的 `loadExternalOgg` 一并移除，`src/view/sound.ts` 从 578 行精简到 395 行。
-- **保留 v1.3.20 的架构成果**：3D 空间音频（PannerNode HRTF，声源位置取自发声球桌面坐标）、
-  室内混响（反馈延迟 + 低通）、masterGain + compressor 限幅、落袋去抖动（同一球 250ms 内不重复发声）。
-  混响湿度由 0.22 下调到 0.16 —— 真实录音本身已带现场反射，两层空间感叠加会显得空旷。
-- **验证**：真实浏览器端到端跑通 —— 15 个变体全部加载成功（旧 `dist/sounds/` 已无任何请求）、
-  力度分档正确（0.3→soft/light、2.5→mid、4.5→hard/heavy）、重落袋连播 10 次完整轮转 5 个变体且无相邻重复、
-  抖动实测 0.9661~1.0348、落袋去抖 3 次只响 1 次、15 个变体覆盖率 100%、无控制台报错。
-- **素材授权**：全部来自 Freesound，CC0 或 CC-BY，无 NC 限制；CC-BY 素材作者署名见"开源声明.md"第五节
-  致谢表（已同步更新为新的 `dist/sfx/` 文件名映射）。
-- 约束：只改音效层（`src/view/sound.ts` + 新增 `tools/sounds/`），**不改动任何物理逻辑、碰撞参数、
-  渲染与 UI**；旧的 `dist/sounds/` 原始素材保留原位（加工管线的输入源，删掉就无法重新构建）。
-
-**v1.3.54（2026-08-29）**
-
-- **病根：预览和游戏内根本不是同一根杆**。球杆主题的全屏 3D 预览（`dist/cue-preview-3d.js`）此前自己维护了一套"简化模型"：总长 `L=5.0`、杆尾半径 `0.28`，长径比只有 **8.9:1**；配色也只用球杆卡片上的两个色值（`data-c1`/`data-c2`）铺色，再叠一层本地生成的木纹/皮革噪点贴图。而游戏内真实球杆（`src/view/cue.ts` + `src/view/cuemesh.ts`）是全长 `R*43`、杆尾半径 `(R*0.23)/0.5`，长径比 **46.7:1**（与真实球杆 147cm/3cm≈49:1 一致），并且杆身、杆尾各挂一张 `256×1024` 的程序化分区贴图（v1.3.51 起握把/装饰带/端盖三段分区）。两者粗细差了 5 倍多，所以预览里那根东西"一眼就不是真实球杆"。
-- **做法：把游戏内资源原样打包给预览用，而不是照着抄一份**。新增 `tools/cue-textures/`（入口 `entry.ts` + 独立 `webpack.config.js`），把 `src/view/cuetexturefactory.ts`（19 个主题的程序化贴图工厂，2218 行）与 `src/utils/settings.ts` 原样打成 `dist/cue-texture-factory.js`，挂 `window.CueGameCue`。其中 `three` 走 external→`window.THREE`，所以包内不含 three（仅 45KB），且产出的 `CanvasTexture` 与预览同属一个 THREE 实例，可直接赋给 `material.map`。该构建已并入 `npm run build`（新增 `build:cuetex` 步骤），源码改了贴图产物会自动跟着更新，不会再次脱节。加载链为 `three.standalone.js` → `cue-texture-factory.js` → `cue-preview-3d.js`，顺序不可变（贴图工厂把 `window.THREE` 提升为模块级常量，先注入会拿到 undefined），产物顶部也加了显式守卫。
-- **几何与材质逐项对齐 `cuemesh.ts`**。预览新的 `buildCue()` 按 `CUE_GEOM`（由 `entry.ts` 从 `src/model/physics/constants.ts` 的 `R` 反算导出）组装四段圆柱 `cueButt`/`cueShaft`/`cueFerrule`/`cueTip`，比例 0.28 / 0.71 / 0.007 加皮头厚 0.0055，周向分段 9，半径系数（杆尾顶端 ×0.9、皮头顶端 ×0.93）与游戏内完全一致；材质走 `MeshPhongMaterial` 并对齐 `applyCueTheme()`——有贴图时 `map` 取 `getCueTexture`/`getCueButtTexture` 且基色置白，`auto`（随台面）时按 `shade(台呢色, +0.12 / -0.28)` 派生，光泽优先取主题 `finish.shaft/butt`、无 finish 且无贴图时回落 50/80。先角固定 `0xf0e8d6`、皮头取皮肤 `tipColor`。几何按真实尺寸建好后再整体缩放到预览世界尺度（总长 5.0），因此相机、地面、倒影、光环的既有常量全部沿用，改动收敛在几何与材质上。
-- **删掉那套并存的简化模型**。随着 `buildCue` 改走真实资源，预览里那份 `THEMES` 配置表（19 个主题的本地配色/几何分支）与 `woodTexture`/`leatherTexture`/`plainMetal`/`makeTexture` 等本地绘制器（合计约 680 行）已无任何引用，一并删除，从根源上杜绝"预览与实机两套外观再次跑偏"。`cue-preview-3d.js` 由 65.8KB 降到约 27KB。
-- **修复：切主题时贴图缓存被误销毁**。`disposeTree()` 原先会连 `material.map` 一起 `dispose()`。改用全局缓存的贴图后，这会把 `CueGameCue` 缓存里那张 Texture 的 GPU 资源释放掉，之后再切回该主题拿到的仍是同一个已释放对象，球杆会变纯黑。现改为只 dispose geometry 与 material，贴图由工厂统一持有、随页面生命周期存在。
-- **修复：预览关闭时转屏，再打开后画面错乱**。重建球杆原先只做 `applyLayout() + requestRender()`，不重算画布尺寸。若用户在预览关闭状态下转屏，`resize` 事件发生时浮层是 `display:none`，`canvas.clientWidth` 为 0，`relayout()` 会退回 200×140 兜底并把 `vertical` 算成 false；再打开预览走的就是这条重建路径，于是渲染缓冲停在 200×140 被拉伸到全屏、`aspect` 1.429（实际 0.47）、球杆朝向判断也错。现改为重建后补一次 `_resize()`。
-- **一点说明：「随台面」主题在暗色桌台下会很暗，这是游戏内的真实表现**。`auto` 主题的球杆颜色由当前台球桌的台呢色派生，因此选「黑曜石黑」（默认）、「熔岩裂纹」「霓虹蓝紫」「朱红鎏金」这类刻意压暗的桌台时，球杆本身也接近纯黑——预览里看到的正是它在对局中的真实样子。想看明亮球杆，可换一张亮色桌台（如粉色糖果、金辉、全息银），或直接选其余 18 款自带贴图的球杆主题。
-- **自测**：Xvfb + Mesa 软件光栅化（`ANGLE SwiftShader` / WebGL 2.0）下跑通——① 19 个主题逐个打开，杆身/杆尾均挂上 256×1024 真实贴图（`auto` 按设计为纯色派生），画面非背景像素 67%~68%、平均亮度 49.5~53.5 全在正常区间、无 JS 报错；② 回头重开前 3 个主题，像素统计偏差 0.00%，确认贴图缓存未被误 dispose；③ 同一主题反复开关 4 次，四次统计逐位一致（WebGL 上下文红线未破）；④ 竖屏 1080×2340 下 `vertical=true`、画布 1054×2237、`aspect` 0.471 均正确；⑤ 单主题轮廓实测杆尾端厚约 33px、杆头端约 19px，锥度清晰可辨。另用 Node 直接加载 `dist/cue-texture-factory.js` 发货产物，19 个主题贴图全部生成成功（`auto` 按设计返回 null），尺寸均为 256×1024。
-- **约束**：仅改展示层（预览渲染与资源打包），不改动任何物理逻辑、挥杆动画、碰撞参数，也不改游戏内球杆本身的行为；已用原 `build-apk.sh` + `release.keystore` 重签 APK 并重新发布。
-
-**v1.3.53（2026-08-29）**
-
-- **袋口包边颜色随桌框发光色同步**。v1.3.40 把 GLTF 桌台的 `blackpocket`（6 个球洞内壁）和 `Material.001`（袋口包边/金属件）统一改成了 `cushionColor`。对于带 `frameGlow` 发光特效的主题（熔岩裂纹、黑曜石黑、霓虹蓝紫、朱红鎏金、全息银、粉色糖果），`cushionColor` 被刻意压暗，导致明亮发光的外框下袋口区域仍显黑棕，与主题主色脱节。本版在 `src/view/assets.ts` 的 `Assets.tableCustomizationFor` 中新增 `pocketColor = frameGlow || cushionColor`：当主题定义了桌框发光色时，袋口/包边直接取发光色；无发光主题（经典、翡翠、赤焰、蓝宝石、金辉）回退到原有库边色，保持既有协调感。随后在 `Assets.paintTable` 中让 `blackpocket` 与 `Material.001` 使用 `pocketColor` 上色。
-- **首屏加载与实时换肤路径同步生效**。因为颜色配置放在 `tableCustomizationFor` 返回的配色对象中，`customizeTableScene`（首屏 GLTF 加载）和 `recolorTable`（游戏内/菜单实时切换球桌皮肤）都会自动带上新的 `pocketColor`，无需在两处分别维护。未使用的本地程序化桌台 `TableMesh` 路径不受影响。
-- **保留材质参数**。继续沿用 v1.3.41 的处理：`emissive` 置黑、`metalness = 0`、`roughness = 0.75~0.8`、关闭多余纹理与 `specularIntensity`，确保亮色袋口不泛白、不反光。
-- **约束**：仅改展示层（GLTF 桌台材质着色），不改动任何物理逻辑、挥杆动画、碰撞参数；已用原 `build-apk.sh` + `release.keystore` 重签 APK 并重新发布。
-
-**v1.3.52（2026-08-29）**
-
-- **根因：预览窗 300×130 太小，且模型、机位、交互三处都为此做了妥协**。旧实现是「长按卡片弹出小窗」，叠加三个问题——① 浮层 `.cue-preview-overlay` 写死 `width:300px; height:130px`，在 2340×1080 横屏上只占 13% 宽、12% 高；② 更关键的是预览里建的是**截断球杆**：`showFull` 默认 `false`，只建模到总长 4.1（完整 5.0），**先角（ferrule）和皮头（tip）根本没有网格**，玩家看到的永远是一根没头的杆；③ 机位是为 300×130 手调的 `camera.position.set(-2.2, 1.4, 2.8)` / `lookAt(0.6, 0, 0)`，且带一个 `-0.45` 偏移常量——那是给截断杆（local Y ∈ [-2.5, 1.6]）配重心用的，换成完整杆会整体偏左。三者叠加导致「看不清细节、也看不完整」。
-- **修复 ①：触发方式由「长按」改为「点两下」**。第一下仍是选中主题（保留 `buzz(10)` 触感反馈），**再点一下已选中的卡片**即全屏弹出预览。已选中卡片右上角显示金色 `3D` 角标作为可点提示（选择器带 `#cueThemeCards` 前缀限定，因为 `.skin-card` 是球桌 / 场景 / 球杆三类卡片共用的类名）。首次进入提示一次「再点一下卡片可全屏预览 3D 效果」，用 `localStorage` 记录，不再重复打扰。移除长按相关的 `pressTimer` / `longFired` / `onPointerRelease` 与 `.cue-card-longpress` 样式。
-- **修复 ②：浮层改为真正的全屏，按「头部 / 舞台 / 提示」三段布局**。`.cue-preview-overlay` 由固定 300×130 改为 `inset:0`；`z-index` 由 60 提到 3000（避免被底部操作条盖住）；**移除 `pointer-events:none`**（旧值是为了让长按不穿透，现在浮层本身要接收手势）。内部改为 flex 纵向三段：顶部主题名 + 44×44 大关闭按钮，中间 `.cue-preview-stage` 是 `flex:1` 的画布舞台（12px 圆角 + 金色描边），底部操作提示「单指拖动旋转 · 双指捏合缩放」。原主题名 / 提示语由 `position:absolute` 改为正常流式排布。
-- **修复 ③：建模完整球杆**。`showFull` 改为 `true`，渲染总长 5.0 的完整杆，先角与皮头都在。摆放统一交给新的 `applyLayout()`：横屏把杆放平到 X 轴、`position.x = 0`（完整杆中心就在原点）；竖屏（宽高比 < 1）保持竖直并隐藏地面、光环、倒影，否则竖杆会穿过 `y = -1.35` 的地面。地面光环半径由 3.3~3.38 放大到 3.9~3.99 以匹配更长的杆。
-- **修复 ④：机位改为球坐标轨道相机**。删掉写死的 `position` / `lookAt`，改由 `orbit = { yaw, pitch, zoom }` 每次渲染前经 `applyCamera()` 计算。yaw 自由 360°；pitch 横屏限位 `-18° ~ +20°`（下限是硬边界：相机 `y = d·sin(pitch) + pan`，再低会掉到地板 `y = -1.35` 以下导致倒影穿帮；看端盖细节靠 yaw 转到杆头正对相机即可，限位还能让球杆始终接近水平、占满屏幕宽度），竖屏因地面已隐藏放宽到 `±70°`。默认 `yaw=30 / pitch=12 / zoom=1`。FOV 仍保持 34°（26°~40° 之间近端膨胀比只从 1.16 变到 1.23，改了不划算）。
-- **修复 ⑤：居中算法由「不动点迭代」重写为「精确二分」（本版最重要的正确性修复）**。旧 `computePan()` 用不动点迭代 `du += m·d·tanV` 逼近居中平移量，步长里的深度用的是**包围盒中心深度 `d`**。但球杆近端角点实际深度只有 `d − 2.5`（约近 2.5 倍），步长因此超调约 2.5 倍。实测在球杆几乎正对镜头（`yaw ≈ 85°~95°`）时迭代来回震荡、完全不收敛，**包围盒偏心高达 0.40 NDC（约半个屏幕），球杆会被推出画面**。推导后可证：相机沿 right/up 平移 `T = dr·r + du·u` 时，由于 `{r, u, v}` 正交，有 `depth = d − P·v`（**与平移量无关**）、`xc = P·r − dr`、`yc = P·u − du`（**两轴彻底解耦**）。于是每个轴上的目标函数 `max_c((a_c−x)/w_c) + min_c((a_c−x)/w_c)` 都是 x 的分段线性严格递减函数，**二分必然收敛**。改为二分求解后，全角度偏心从 0.40 降到 **1.7e-5 NDC（约 0.02 像素）**。
-- **修复 ⑥：基准距离 `baseDist` 的拟合也改为对距离二分，并修正采样漏点**。旧 `fitDistance()` 把「距离」与「居中平移」交替迭代（由 `|xc|` 反解 d、再用新 d 重算平移，往复 4 次），在球杆正对镜头时会以约 0.5 的公比缓慢下滑，**6 次迭代后仍偏大约 1%，且收敛性没有保证**。改为：先用 pan=0 时的反解值作上界（未居中时 `max|n| ≥ 跨度/2`，故必为真值上界），再对距离二分（居中后半跨度随距离单调递减，已按 d 从 0.6 到 60 逐点验证）。拟合采样由 `yaw ∈ [0, 20, 40]` 放宽到 **0°~180° 每 6°（31 个样本）**——只采半圈是因为包围盒中心对称、`(yaw, pitch)` 与 `(yaw+180, −pitch)` 等价；步长 15° 会漏掉真正的最差点导致 0.48% 出画，6° 时残余出画仅 0.006%（约 0.03 像素）。`baseDist` 仍取全姿态最大值（静态，不随角度变化），保证转到任何角度都不出画、也不出现画面「呼吸」。另为 `relayout()` 增加宽高比记忆化，避免真机上连发的 resize / orientationchange 重复计算（拟合约 4ms）。
-- **修复 ⑦：手势（单指旋转 / 双指捏合）**。移植自已在上个版本真机验证过的 `src/view/dom/aimslider.ts` 实现，并针对 Android WebView 的已知陷阱逐条处理：① `preventDefault()` 必须是 `pointerdown` 的第一行；② `preventDefault()` 之后**绝不能**再调 `setPointerCapture`（会立刻触发 `pointercancel`）；③ 监听器挂在 `window` 的捕获阶段，手指移出元素也能继续跟；④ 忽略非本次手势的 `pointerId`；⑤ 双指捏合中抬起一指后**重新锚定**，避免视角跳变。另屏蔽 `gesturestart/gesturechange/gestureend` 与 `contextmenu`；桌面端补了滚轮缩放便于调试。灵敏度为「横拖满屏宽 = 转 180°」。
-- **修复 ⑧：改为按需渲染（dirty flag），取消自转**。视角既然完全交给手动，手指静止时画面本就不需要重绘。新增 `requestRender()`（同一帧内 N 次手势事件只合并成一次渲染）与 `renderOnce()`；`_loop()` 退化为单次渲染，不再推进 `spin` / `floatPhase`，`setAutoRotate()` 收到 `true` 也只渲染一帧。实测同一帧内 10 次 move 只渲染 1 次，静止 1 秒渲染 0 次，比旧的常驻 rAF 循环省电。
-- **守住 WebGL 上下文复用红线**。v1.3.32 曾出现「第二次打开预览白屏」，根因是 `dispose()` + `forceContextLoss()` 销毁了 WebGL 上下文、而 WebView 无法重建。本版延续既定策略：**renderer 整个页面生命周期只创建一次、永不销毁**，关闭浮层只调 `stop()`；`dispose()` 保留但加注释标明禁止调用。切主题时改用 `disposeTree()` 只释放旧的几何体与贴图（在 `scene.remove()` **之前**调用，否则会漏），实测连切 5 个主题后贴图数 8→8、几何数 16→16，无泄漏。全屏下 `setPixelRatio` 上限由 2 压到 **1.5**（DPR2 全屏约 1000 万像素，中低端机吃不消）。
-- **修复 ⑨：缩放下限改为按包围球动态求解，避免相机退进球杆内部**。`ZOOM_MIN` 原先写死 `0.35`，在横屏（`baseDist ≈ 4.27`）下对应相机距离只有 `1.50`，远小于球杆包围球半径 `√(2.5²+0.28²+0.28²) ≈ 2.53`——双指捏合到底时相机会直接穿进球杆里，看到的是背面 / 内壁。实测 `yaw=88°`（杆头几乎正对镜头）时画面平均亮度从 51 **崩到 4.7（几乎全黑）**，`yaw=30°` 时又**过曝到 172**。现改为在 `relayout()` 里按下限动态求解：`zoomMin = max(ZOOM_MIN, (FIT_R + SAFE_CLEAR) / baseDist)`，其中 `SAFE_CLEAR = 0.7` 是相机与包围球表面之间保留的最小间隙。横屏得 `0.756`（仍可再拉近约 25%，配合 360° 旋转足够看清细节），竖屏 `baseDist ≈ 9.90` 得 `0.316`、由绝对下限兜到 `0.35`。转屏导致下限变大时会把当前 zoom 一并夹回来，避免竖屏下残留「相机在杆里」的姿态。修复后拉到最近时各角度亮度稳定在 28.8~57.4。
-  - 这个缺陷是在「抓取多视角截图做视觉验收」时发现的：`zoom=0.5` 那张截图平均亮度只有 5.4，比清屏底色 `(10,16,32)` 还暗，顺藤摸瓜查出的。单看数值断言（填充率 / 偏心 / 居中性）都正常，只有真的把画面渲出来看才发现。
-- **自测**。无头容器没有 GPU，Playwright 自带的 `headless_shell` 又不含 SwiftShader，所有 `--use-gl=angle/swiftshader/egl` 组合都拿不到 WebGL 上下文；改用 `Xvfb :99` + Mesa 软件光栅化 + `headless=False` + `--use-gl=desktop` 才拿到真实的 `ANGLE (SwiftShader)` / WebGL 2.0。在此基础上跑了 **31 条断言全部通过**，关键几项：三种画幅（APP 横屏 2340×1080 / 桌面 1280×720 / 竖屏 1080×2340）各扫描 1440~2088 个姿态，峰值填充率 99.98%~100.01%（既不出画也不保守）、最大偏心 1.7e-5；单指横拖 260px 实测 yaw 变化 −20.22°（期望 −20.22°）；pitch 精确夹在 −18.00°/+20.00°；从 zoom=1.6 张开一倍精确得 0.800（验证捏合比例本身）；捏合中抬指重锚 Δyaw=0.000°；缩到最小时相机距离 3.231 > 包围球半径 2.531，且 7 个角度亮度均落在 28.8~57.4 的正常区间（不会退进球杆内部）；反复开关 4 次画面均有内容（非清屏色像素 64.3%，截图法交叉验证 55.5%）；无 `CONTEXT_LOST` 与 JS 报错。另用 Node 直接抽取 `dist/cue-preview-3d.js` 里的真实函数做数值验证（保证「被测代码 === 发货代码」），六种画幅全部通过，`relayout()` 耗时 2.3~2.9ms。
-  - 附：本版同时修正了两个**测试自身的假阳性**——① 竖屏下「球杆占屏宽 ≥85%」的断言本身无意义（竖屏球杆是竖直的，应改看屏高），已改为与朝向无关的双侧判据（填充率 98%~100.5%，既不出画也不保守）；② 「反复开关画面非空白」的探针在 `preserveDrawingBuffer:false` 下，跨域求值再去 `readPixels` 只能读到全 0，且统计 alpha 是无效指标（`setClearColor(0x0a1020, 1)` 让 alpha 恒为 255）。已改为「同步 `renderOnce()` + 同一任务内立刻读」并改用「与清屏色明显不同的像素占比」，另加截图法交叉验证。
-- **顺带修复 `scripts/bump-version.py` 的版本号扫描**。脚本的 `current_max_version()` 原本直接对文件全文跑正则，会把 HTML 注释里写的「正在开发的版本号」（本次开发时写的 `<!-- 球杆 3D 预览浮层（v1.3.52：…）-->`）以及变更履历正文中引用的其它版本号都算进最大值，导致版本凭空多跳一档（本次就误跳到了 v1.3.53）。现已改为：扫描前先用 `re.sub(r"<!--.*?-->", "", txt, flags=re.S)` 剥离 HTML 注释；`menu.html` 只认两个权威位置——版本标题 `<h3>v1.3.N ·` 与 `__BILLIARDS_VERSION__`。（上一版已修复过同一脚本的插入锚点缩进逐版劣化问题。）
-- **约束**：仅改展示层（预览浮层 / 相机 / 手势），不改动任何物理逻辑、挥杆动画、碰撞参数；已用原 `build-apk.sh` + `release.keystore` 重签 APK 并重新发布。
-
-**v1.3.51（2026-08-29）**
-- **根因：杆身与杆尾共用同一张全杆长贴图**。`CueMesh.applyCueTheme()` 原先给 `cueShaft` 与 `cueButt` 赋的是同一张 `getCueTexture()` 生成的 256×1024 贴图，仅靠 UV 各取一段。握把、杆尾装饰带、端盖三者在贴图上没有独立坐标区间，任何「握把什么材质、杆尾嵌什么环、端盖什么造型」的描述都无法落地，只能做出一根从头到尾一个花样的杆。这是本次 12 段描述在原架构上无法实现的根本原因。
-- **修复 ①：贴图拆分为「杆身」+「杆尾三段分区」**。`cuetexturefactory.ts` 新增导出 `getCueButtTexture(themeId)`，与 `getCueTexture(themeId)` 分离；杆尾贴图按轴向划为握把区 `0 → 0.58·H`、装饰带 `0.58·H → 0.84·H`、端盖区 `0.84·H → H`（画布 `W=256` 周向 × `H=1024` 轴向）。`cuemesh.ts` 的 `applyCueTheme()` 改为按网格名分派：`cueButt` 取杆尾贴图，`cueShaft`/`cueFerrule`/`cueTip` 取杆身贴图。遗留 6 款主题（dragon / azure / minions / peppa / qilin / ultraman）在 `getCueButtTexture()` 内回退到 `getCueTexture()`，表现与改版前完全一致，无回归。
-- **修复 ②：12 款特色皮肤的杆身材质逐条按描述重制**。每款新增独立 `build*Shaft()` 绘制函数——墨云龙阙：乌墨黑致密木底 + 细腻暗金龙鳞浮雕（44×16 径向渐变鳞片，中心暗、边缘淡金、细金描边）+ 连绵云纹环绕；青竹听风：浅青竹底 + 清晰分段竹节轮廓，细银线勾边，叠加细微纵向竹丝纹；凤羽鎏金：黑檀底 + 弧形鲍鱼贝贴片按凤凰羽翼形态排布，细鎏金线勾边，贝母带自然虹彩；千里砚山：青灰石砚哑光底 + 淡墨山水浅浮雕，远山轮廓朦胧、整体低饱和；星核暗芒：深空哑光黑金属磨砂 + 细碎嵌入式星尘颗粒 + 青蓝电路纹螺旋延伸；霓虹溯光：半透深紫玻璃 + 粉蓝渐变带状结构沿杆身螺旋延展，内部色带层次通透分明；虚空裂隙：纯哑光炭黑金属 + 纵向数道凹陷裂隙，缝内填充半透幽紫；幽刺夜影：炭黑金属 + 放射状尖刺暗纹 + 小块深海贝母幻彩珠光；烬火焚风：黑红渐变底 + 自然熔岩龟裂纹，缝隙填暗红；云糖幻梦：粉白渐变半透果冻 + 柔和朦胧云朵暗纹；冰晶雪魄：透白半透明冰晶 + 内部自然冰棱丝状纹 + 边缘薄冰切面轮廓；万象权杖：黑金撞色金属 + 复古欧式几何浮雕（凹槽菱形 + 金框 + 内十字 + 四角卷草涡卷），层次立体。
-- **修复 ③：12 款握把与端盖造型逐条按描述重制**。新增 12 个握把生成器与 12 个端盖生成器。握把依次为——哑光黑檀带细密天然木纹、天然竹根粗糙肌理、深色编织缠线、仿粗陶磨砂触感、防滑橡胶细密点阵、黑色哑光软胶竖向防滑凹槽、哑光皮革压纹、虎纹压花真皮、粗纹防滑橡胶、哑光柔雾硅胶、磨砂冷白硅胶、深色手工缠绕皮线。端盖依次为——窄款哑光金属环（内侧刻极简云纹线条）、圆润竹根造型（无多余金属装饰）、环形鎏金饰件（表面刻简约羽纹）、方正小砚台（无亮色金属装饰）、圆形哑光金属饰片（蚀刻极简电路标识）、多边形金属切面（带镜面反光）、简洁钝锥形金属收口、小巧锥形磨砂金属配重、不规则熔岩岩石（表面凹凸粗糙）、圆润弧形（无硬质尖锐棱角）、多面冰晶切割、宽大圆形鎏金浮雕饰盘（镌刻繁复卷草纹，局部哑光与局部抛光对比）。
-- **新增材质光泽参数 `finish`**。`settings.ts` 的 `CueThemeDef` 增加可选字段 `finish?: { shaft: number; butt: number }`，映射到 `MeshPhongMaterial.shininess`，在 `applyCueTheme()` 中按杆身段 / 杆尾段分别套用。取值按描述里的材质语义标定：千里砚山（石砚哑光）`12/10`、虚空裂隙（哑光炭黑金属）`18/15`、墨云龙阙 `22/18` 走低调厚重路线；冰晶雪魄 `95/80`、霓虹溯光 `88/70`、万象权杖 `78/68`、云糖幻梦 `72/62` 走高光通透 / 抛光金属路线；青竹听风 `34/28`、凤羽鎏金 `62/55`、星核暗芒 `28/22`、幽刺夜影 `42/34`、烬火焚风 `32/26` 按各自材质落在中间区间。未配置 `finish` 的主题沿用原有默认光泽。
-- **先角改为浅米白色硬质材质**。`cuemesh.ts` 中先角材质由原先的银白 `0xe5e5e5` 改为浅米白 `0xf0e8d6`，`shininess` 提到 100 以体现硬质感，与描述中「先角为浅米白色硬质材质」一致。
-- **自测与确定性保证**。所有纹样绘制改用确定性伪随机（`srand(s) / rnd() / rr(a,b)`，LCG），每款皮肤固定种子，保证同一版本每次构建出的贴图完全一致，不会出现纹样闪烁或不同机器出图不一致。构建侧 `webpack 5.109.2 compiled successfully`；`tsc --noEmit` 对 `cuetexturefactory.ts` / `cuemesh.ts` 零报错（仓库其余 39 条报错集中在 `view/sound.ts`、`view/view.ts`、`view/assets.ts` 等历史遗留文件，与本次改动无关）。另用 esbuild + 无头 Chromium 离屏渲染出 13 张贴图预览图（`all-cues.png` 总览 + 12 张单款），逐款比对描述后完成视觉验收。
-- **附带修复**：`scripts/bump-version.py` 插入新版本章节时使用 `rstrip()` 把紧随其后的 `<div class="setting-group">` 缩进一并吃掉，导致每次迭代都让 `dist/menu.html` 的格式劣化一格（已累积 5 处）。现改为只剥离换行并回填原缩进，同时恢复历史遗留的 5 处缩进。
-- 仅改球杆展示层（贴图生成、材质参数、先角配色），不改动任何物理逻辑、挥杆动画、碰撞参数；6 款遗留主题行为不变；已重签 APK 并重新发布。
-
-**v1.3.39（2026-08-27）**
-- 球杆预览渲染质量修复：v1.3.38 横置后反射仍对 cue 本体做 `scale.y = -0.85`，导致反射沿长轴被压短、与主杆错位，出现“断节/多段”感。改为对 pivot 组做地面镜像缩放，并降低反射透明度；低端机不再强制 `MeshLambertMaterial`，统一用 `MeshPhongMaterial` 并补默认柔和高光；增强主光/轮廓光、压暗地面装饰环/刻度线。
-- GLTF 模型桌台修复：v1.3.38 仅改了程序化本地桌台（`TableMesh`），真机游戏实际加载 GLTF 模型桌台，袋口/凸点问题未生效。现 `Assets.paintTable` 同步处理 GLTF 材质：`blackpocket`（6 球洞）取库边色、`Material.001`（袋口包边/金属件）取桌框色、`diamond`（桌边菱形标记小凸点）直接隐藏。
-- 仅改展示层，未改动任何物理逻辑、挥杆动画、碰撞参数；版本同步迭代至 v1.3.39 并重新发布。
-
-**v1.3.38（2026-08-27）**
-- 变更履历去嵌套框：修复 v1.3.37 起变更履历区被 6 层空 `<div class="setting-group">` 嵌套导致多层同心圆角框的问题，重写包裹结构后全列表仅保留单层外框，DOM 标签平衡校验通过（div 开合 139=139）。
-- 桌面 6 个球洞颜色同步当前桌布主题：原球洞材质硬编码蓝紫色，现按当前 `tableSkin` 取库边色给 6 个球洞上色，切桌布即联动；同时去除桌边 12 个 knuckle 小凸点（视觉冗余），仅保留球洞本身。物理/碰撞由 `PocketGeometry` 常量决定，不受影响。
-- 球杆预览窗口加长并横置：小窗由 220×150 改为 340×150；Three.js 中球杆改用 pivot 组放平到水平，旋转动画绕横杆长轴滚动式自转。13 个主题 buildCue + pivot 接线经无头脚本全部验证通过。
-- 仅改菜单预览展示层，未改动任何物理逻辑、挥杆动画、碰撞参数；版本同步迭代至 v1.3.38 并重新发布。
-
-**v1.3.37（2026-08-27）**
-- 修复全主题预览白屏的根因：烬火焚风主题的 `params` 配置误引用函数作用域外的 `cols` 变量，导致整个 `cue-preview-3d.js` 在浏览器解析阶段就 `ReferenceError` 崩溃，所有主题预览全部无法渲染。
-- 将该 `emissive` 改为具体色值 `0xff3a1a`，消除非法引用；并用 jsdom 真实执行每个主题的 `buildCue` 验证，13 个主题（含通用）全部通过。
-- 保留 v1.3.36 的去标题与 `buildCue` 异常降级兜底。
-- 仅改菜单预览展示层，未改动任何物理逻辑、挥杆动画、碰撞参数；版本同步迭代至 v1.3.37 并重新发布。
-
-**v1.3.36（2026-08-27）**
-- 修复部分主题在真机上"无法加载 3D 预览"：给 <code>buildCue</code> 加 try-catch，主题纹理/几何异常时自动降级为通用木纹球杆，避免整窗空白；具体错误打印到控制台便于排查。
-- 去除球杆预览浮层顶部的主题标题，预览窗更简洁。
-- 保留 12 主题定制效果（成功时仍显示专属纹理/造型），仅失败场景兜底。
-- 仅改菜单预览展示层，未改动任何物理逻辑、挥杆动画、碰撞参数；版本同步迭代至 v1.3.36 并重新发布。
-
-**v1.3.35（2026-08-27）**
-- 12 主题球杆预览「真实效果」定制：按主题 ID 独立生成杆身纹理、握把纹理、杆尾几何与材质参数，不再是通用简化模型。
-- 12 个主题专属效果：墨云龙阙（乌墨黑木+暗金龙鳞/云纹+黑檀握把+哑光金属环）、青竹听风（仿竹杆身+竹节银线+竹根握把）、凤羽鎏金（黑檀底+鲍鱼贝羽翼贴片+鎏金线+缠线握把）、千里砚山（青灰石砚+山水浮雕+粗陶握把+方砚台尾）、星核暗芒（深空黑金属+星尘颗粒+青蓝电路纹+点阵橡胶握把）、霓虹溯光（半透深紫玻璃+粉蓝渐变螺旋色带+软胶握把）、虚空裂隙（炭黑金属+裂隙幽紫+皮革压纹握把）、幽刺夜影（炭黑金属+尖刺暗纹+贝母珠光+虎纹真皮握把）、烬火焚风（黑红渐变+熔岩龟裂+粗纹橡胶握把）、云糖幻梦（粉白果冻+云朵暗纹+柔雾硅胶握把）、冰晶雪魄（透白冰晶+冰棱丝纹+磨砂硅胶握把）、万象权杖（黑金金属+欧式几何浮雕+皮线缠绕握把+鎏金饰盘）。
-- 每个主题颜色从卡片 `c1/c2` 自动派生，保证与主题卡片一致。
-- 保留 renderer 只创建一次、松手只停旋转不复创上下文的稳健逻辑；低端 WebView 自动降级 Lambert。
-- 仅改菜单预览展示层，未改动任何物理逻辑、挥杆动画、碰撞参数；版本同步迭代至 v1.3.35 并重新发布。
-
-**v1.3.34（2026-08-27）**
-- 球杆 3D 预览品质升级：球杆整体加粗、缩短，在 220×150 小窗中更饱满；相机拉近并带轻微仰视，更像产品展示。
-- 材质升级：杆身使用程序化木纹纹理，握把使用程序化皮革纹理，金属镶嵌环高光滑亮，先角象牙白，皮头随主题深色；主路径使用 `MeshPhongMaterial`/`MeshStandardMaterial`，低端 WebView 自动降级 `MeshLambertMaterial`。
-- 主题色更协调：金属色和皮头色从主题主色 `c1` / 深色 `c2` 自动派生，避免与粉紫等主题冲突。
-- 灯光与舞台感：多盏方向光棚拍布光，开启 ACESFilmic 色调映射与 SRGB 输出；倒影更明显，地面加暗蓝径向渐变，轨迹环与刻度线更精致。
-- 动画更从容：自转速度略降并加入轻微悬浮摆动；同时保留 v1.3.33 的稳健逻辑——renderer 只创建一次、松手只停旋转、不复创 WebGL 上下文。
-- 仅改菜单预览展示层，未改动任何物理逻辑、挥杆动画、碰撞参数；版本同步迭代至 v1.3.34 并重新发布。
-
-**v1.3.33（2026-08-27）**
-- 修复球杆预览「第二次长按起白屏」：v1.3.32 下第一次长按能看到一部分球杆，之后每次长按都变回纯白空白（与 v1.3.31 同效）。根因是松手时执行 `dispose()` + `forceContextLoss()` 释放 WebGL 上下文，第二次长按再 `new WebGLRenderer` 新建上下文；真机 WebView 在首个 context 被销毁/丢失后再次创建会失败或拿到损坏的 context，导致后续全部白屏。修复：renderer 改为整个页面生命周期**只创建一次、永不销毁**；松手时只停旋转（`stop()`），不再 dispose / 置空 / 释放上下文，第二次及以后预览直接复用同一 renderer 与 scene，仅切换主题并继续自转；`init()` 失败与渲染循环里加空引用防御。
-- 保留小窗 + 松手关闭交互：长按球杆主题卡片（约 380ms）在卡片旁弹出 220×150 小窗、自动旋转，手指 / 鼠标抬起即关闭。
-- 仅改菜单预览展示层，未改动任何物理逻辑、挥杆动画、碰撞参数；版本同步迭代至 v1.3.33 并重新发布。
-
-**v1.3.32（2026-08-27）**
-- 修复真机 three.js 球杆预览白屏：v1.3.31 在真机 WebView 上预览窗显示纯白色空白，WebGL context 已创建但画面未实际渲染。根因是复杂 shader/渲染路径（shadowMap、环境贴图 `scene.environment`、`scene.background` CanvasTexture、ACES 色调映射）在部分移动 GPU / WebView 上容易编译失败或缓冲合成异常。修复：降级为稳健版 three 场景——`alpha:true` + 强制 `renderer.setClearColor(0x0a1020)`，移除 shadowMap / 环境贴图 / 背景纹理，改用纯色 `MeshLambertMaterial` 材质，仅保留基础多光源（Hemisphere + Directional）；同时给预览 canvas 加 CSS 暗蓝兜底背景，防止 WebView 合成出白。
-- 保留小窗 + 松手关闭交互：长按球杆主题卡片（约 380ms）仍在卡片旁弹出 220×150 小窗、自动旋转，手指 / 鼠标抬起即关闭。
-- 仅改菜单预览展示层，未改动任何物理逻辑、挥杆动画、碰撞参数；版本同步迭代至 v1.3.32 并重新发布。
-
-**v1.3.31（2026-08-27）**
-- 球杆主题预览升级为 three.js 电影级写实 3D 渲染：一根台球杆在暗蓝渐变舞台灯光中 360° 缓慢自转（约 10.5s 一圈），正面居中视角，清晰展示杆尾 / 握把 / 杆身 / 先角结构；程序化木纹、金属镶嵌环、皮革握把网格、雕刻纹路、皮头，环境贴图高光反射，底部半透明倒影、旋转轨迹环与角度刻度线、柔和棚拍光与电影感阴影（ACES 色调映射 + 软阴影）。
-- 实现：新增 `three.standalone.js`（three r185，离线自包含，挂 `window.THREE`）与 `cue-preview-3d.js`（`CuePreview3D` 类），长按时按需加载一次；单一 WebGLRenderer，松手即 `dispose()` + `forceContextLoss()` 释放上下文，避免多次预览累积丢上下文。若设备 WebGL 不可用则显示明确提示（纯 3D 路径，不做 2D 降级）。
-- 保留小窗 + 松手关闭交互：长按球杆主题卡片（约 380ms）在卡片旁弹出 220×150 小窗、自动旋转，手指 / 鼠标抬起即由 document 级 pointerup/pointercancel 关闭（浮层 pointer-events:none 不拦截抬手）。
-- 仅改菜单预览展示层，未改动任何物理逻辑、挥杆动画、碰撞参数；APK 因内嵌 three 增大约 2MB；版本同步迭代至 v1.3.31 并重新发布。
-
-**v1.3.30（2026-08-27）**
-- 球杆预览渲染彻底修复：根据真机录屏（预览窗整窗被左右两半色块填满、无 -45° 球杆、渲染完全错乱）定位根因——预览的 WebGL `CueViewer3D` 路径在真机 WebView 下新建第二个 WebGL 上下文会触发「上下文上限 / 上下文丢失」，着色器无法正常出图，canvas 被当作 2D 拉伸铺满整窗。现已彻底删除 `CueViewer3D` / `ensureCueViewer3D` / `webglSupported`，球杆预览 100% 走已真机验证的 2D 整杆渲染（绕长轴自转模拟 3D 转动），所有设备无歧义，不再有任何走 WebGL 的可能。
-- 保留小窗 + 松手关闭交互：长按球杆主题卡片（约 380ms）仍在卡片旁弹出 220×150 小窗、自动旋转，手指 / 鼠标抬起即由 document 级 pointerup/pointercancel 关闭（浮层 pointer-events:none 不拦截抬手）。
-- 仅改菜单展示层，未改动任何物理逻辑、挥杆动画、碰撞参数；APK 版本同步迭代至 v1.3.30 并重新发布。
-
-**v1.3.29（2026-08-26）**
-- 球杆预览改用可靠 2D 渲染，彻底解决部分真机黑屏：经排查，原 3D（WebGL）预览在部分真机仍黑屏——主游戏已在 WebView 内持有 WebGL 上下文，预览再新建第二个 WebGL 上下文易触发「上下文上限 / 上下文丢失」，渲染全黑，且该路径无法在本无头环境实测验证。故统一改用可靠的 2D 整杆渲染（带绕长轴自转，约 2.6s 一圈，清晰呈现 3D 转动感），保证预览一定可见、一定旋转。
-- 保留小窗 + 松手关闭交互：长按球杆主题卡片（约 380ms）仍在卡片旁弹出 220×150 小窗、自动旋转，手指 / 鼠标抬起即由 document 级 pointerup/pointercancel 关闭（浮层 pointer-events:none 不拦截抬手）。
-- 仅改菜单展示层，未改动任何物理逻辑、挥杆动画、碰撞参数；APK 版本同步迭代至 v1.3.29 并重新发布。
-
-**v1.3.28（2026-08-26）**
-- 球杆主题预览改为卡片旁小窗 + 松手关闭：长按球杆主题卡片（约 380ms）弹出的预览从「居中全屏浮层、点击任意处关闭」改为「在卡片对应位置弹出 220×150 小窗（优先放卡片右侧、空间不足放左侧、再不足居中，避免超出视口），自动旋转展示；手指 / 鼠标抬起即由 document 级 pointerup/pointercancel 捕获关闭（浮层 pointer-events:none 不拦截抬手）」。
-- 修复预览黑屏：根因为浮层刚 active 时 canvas 尚未布局（clientWidth=0），`ensureCueViewer3D` 的尺寸检查 `clientWidth < 2` 返回 null 且不再重建，viewer 永不创建、真机（尤其 WebView 同步读 clientWidth=0）全黑无任何物体。修复：用双 `requestAnimationFrame` 确保布局完成、canvas 有真实尺寸后再初始化 viewer 并设置主题 / 自动旋转；WebGL 不可用时降级 2D 整杆预览并做轻微摆动模拟旋转。
-- 仅改菜单展示层，未改动任何物理逻辑、挥杆动画、碰撞参数；APK 版本同步迭代至 v1.3.28 并重新发布。
-
-**v1.3.27（2026-08-26）**
-- 修复手机竖屏无法进入游戏：移除「竖屏手机强制全屏显示『请横屏使用』遮罩」的硬锁定（css/index.css 的 `@media (orientation: portrait)`）。此前该遮罩以 `position:fixed; inset:0; z-index:10000` 全屏盖住并屏蔽游戏交互，导致手机竖屏下点「开始游戏」后落到此死墙、对局起不来，看似「无法跳转 / 无反应」。
-- 现游戏在竖屏下也能正常进入与游玩（游戏本身已适配 orientationchange 重渲染），APK 版本同步迭代至 v1.3.27 并重新发布。
-
-**v1.3.26（2026-08-26）**
-- 球杆主题预览交互重构：移除常驻预览窗口，界面更紧凑，19 张卡片全部可见无需上滑。
-- 长按球杆主题卡片（约 380ms）弹出居中预览浮层，球杆自动 360° 旋转展示（原生 WebGL 圆柱，可手指/鼠标拖动辅助查看；WebGL 不可用自动降级 2D 整杆预览），点击浮层任意处关闭。
-- 短按仍为选中主题，长按不触发选中。仅改菜单展示层，未改动任何物理逻辑、挥杆动画、碰撞参数。
-
-**v1.3.25（2026-08-26）**
-- 球杆主题预览框收窄：高度由 180px 降至约 96px，左右分栏（左侧 2D 缩略、右侧主预览），让 19 张卡片全部进入视口，切换主题后无需上滑。
-- 新增 3D 球杆展示：右侧主预览使用原生 WebGL 渲染带纹理圆柱，支持手指 / 鼠标拖动旋转（水平转 yaw、垂直转 pitch），360° 查看杆身材质与配色；菜单页不加载 three.js，3D 逻辑自包含。
-- WebGL 自动降级：不支持 3D 的设备自动显示 2D 整杆预览并标注"2D 预览"，避免空白。
-- 仅改展示层，未改动任何物理逻辑、挥杆动画、碰撞参数。
-
-**v1.3.24（2026-08-26）**
-- 新增 12 款特色球杆皮肤：墨云龙阙 / 青竹听风 / 凤羽鎏金 / 千里砚山 / 星核暗芒 / 霓虹溯光 / 虚空裂隙 / 幽刺夜影 / 烬火焚风 / 云糖幻梦 / 冰晶雪魄 / 万象权杖（程序化生成杆身材质 / 纹理 / 配色，含击球微光、星芒粒子、火光、金色拖尾等专属特效）。
-- 删除 3 款重复皮肤（墨玉 / 青竹 / 霓虹）；最终球杆主题 = 随台面(auto) + 原 6 款 + 新 12 款 = 共 19 款。
-- 球杆主题界面增加实时渲染预览：切换皮肤时顶部大预览区（增强 2D Canvas，菜单不引 three.js）即时重绘当前球杆外观。
-- 约束：仅改球杆材质 / 纹理 / 颜色，不改动任何物理逻辑 / 挥杆动画 / 碰撞参数。
-
-**v1.0.9（2026-08-04）**
-- 被击球辅助线改为「仅在技术瞄准时显示」：按住拖动 / 力度条 / 键盘瞄准期间持续显示，滚轮微调闪现约 1.2 秒，击球即隐藏，未操作不占屏。
-- 球杆颜色跟随球桌皮肤（5 套皮肤杆身 / 杆尾色与台呢协调），新增 5 款程序化球杆主题：屠龙斩、青龙、小黄人、小猪佩奇、火麒麟。
-- 进袋音效由程序合成改为 Freesound 的 CC0 / CC-BY 真实台球录音（轻 / 中 / 重 + 通用），击球、碰撞、撞库音效同步替换为真实录音并做响度归一化。
-- 环境场景新增沙滩、原始森林、雪山、沙漠、办公室、网吧共 6 套，每套含程序化墙面贴图与专属氛围光，主菜单与对局内均可实时切换。
-
-**v1.0.8（2026-08-04）**
-- 修复皮肤不生效、被击球辅助线不出现、俯视点击无法自动对准三个问题；调试句柄改为 `?debug=1` 才挂载。
-
-**v1.0.7（2026-08-04）**
-- 修复 v1.0.6 主菜单「开始游戏」按钮不可见且无法滚动的阻断性回归。
-
-**v1.0.6（2026-08-03）**
-- 皮肤卡片 + 实时换肤、技术力度回调、辅助线滑动条、音效增强、分步实操引导等多项功能更新。
-
-### v1.3.64 · 2026-09-02
-
-8 个场景选择全部放开（5 张卡此前被 UI 层硬锁「暂不可用」，代码其实早绑好了事件）；足球场 / 篮球场「渲染垃圾」定位到 4 个几何根因并逐个修掉：球场过大、看台过高压住台呢、座椅红蓝双色糊成红带、标线硬编码没跟着缩。
-
-- **场景选择未放开，是纯 UI 层锁死**。`dist/menu.html` 里 room / beach / forest / office / cybercafe 五张卡
-  各自硬编码了 `disabled` 属性加 `<span class="lock-badge">暂不可用</span>` 角标，CSS 的 `.skin-card:disabled`
-  再把它们压成 40% 不透明度并禁止指针事件；而 `menu-cn.js` 的 `initScenes()` 是对 `#sceneCards .skin-card`
-  **全量**绑 click 的 —— 只要摘掉属性，八个场景立刻可切。缩略图由 `drawScenePattern()` 按 `data-scene` 绘制，
-  8 个 kind 在 v1.3.63 已全部实现，无需额外改动。
-
-- **根因 ①：球场尺度远大于球桌，远景里每条标线都不到 1px**。旧值 football 半长 8 / 半宽 5（16×10m）、
-  basketball 半长 6 / 半宽 3.5（12×7m），而球桌只有 2.88×1.44m —— 球场是球桌的 5.6 倍长。
-  改为半长 5 / 半宽 3.2（10×6.4m）与半长 4 / 半宽 2.4（8×4.8m），仍是球桌的 3.5 倍长，
-  够撑出空间感，同时给标线留出肉眼可辨的宽度。
-
-- **根因 ②：看台 3 排太高，顶部直接压在台呢上方**。瞄准相机可见高度上限约 `0.295 + 0.035·d`；
-  看台原 stepZ=0.30 三排、最高处 z≈0.9m，而它离相机约 8m（该距离上限仅 0.575m）——
-  第 3 排整排顶到画面上沿、横在球桌上方。改为 2 排、stepZ 0.30→0.20、stepD 0.95→0.80，最高处降到 0.4m。
-
-- **根因 ③：看台座椅红蓝双色，远景混色成一条脏红带**。`buildStands()` 的 `seatHexes` 原传
-  `[0x2f5d8a, 0x8a3f3a]`（蓝 + 暗红），`seatStripe()` 每 0.55m 交替取色；看台在 20m 外、单座仅 0.55m 宽，
-  两种色带在屏幕上各不足 2px，混色后是一条突兀的暗红横带。改为全蓝单色 `[0x2f5d8a]`。
-
-- **根因 ④：标线全是硬编码尺寸，没跟着球场一起缩，弧线直接飞出场地**。篮球三分弧半径写死 5.6m、
-  直段落点 ±5.3m，而缩后的球场半宽只有 2.4m，整条弧线跑到场地外面，画面上只剩两根穿出边线的白线。
-  全量按比缩放：中圈 1.75→0.9、罚球线 3.6→3.0、罚球弧 1.75→1.2、三分弧 5.6→3.0、直边 2.4→1.6 @ ±5.3→±2.8、
-  罚球线距端线 2.6→2.0；足球中圈 1.75→0.9、开球点 0.09→0.06、大禁区 6.4×2.6→4.0×1.6、
-  小禁区 3.2×1.1→2.0×0.7、罚球点距 1.9→1.2、罚球弧 1.75→1.0、角弧 0.42→0.30。
-
-- **门柱与泛光灯塔同步下调**。门柱 `0.09×0.09×2.44m @ sx*1.83` → `0.08×0.08×1.6m @ sx*1.0`
-  （原门柱间距 3.66m 已超过缩后的小禁区宽度 2.0m，球门比禁区还大）；横梁 `3.9×0.09 @ FIELD_Z+2.44` →
-  `2.0×0.08 @ FIELD_Z+1.6`；灯塔由 `@(sx*15, sy*11)`、塔身 `0.7×0.7×9.0m` 改为 `@(sx*9, sy*6)`、
-  `0.5×0.5×6.0m`（9m 高的灯塔在 15m 外需要近 18° 仰角才进画，而瞄准相机是俯视的，永远看不到）。
-
-- **验证**：webpack 构建 271ms 通过；`tsc --noEmit` 对 `sceneenvironment.ts` 0 报错
-  （`view.ts` 仅剩 5 个与本轮无关的既有 TS6133）；8 场景 × 2 屏 × 2 视角 = 32 项全量回归全绿，
-  零 JS 报错，构建耗时 0~50ms 全部低于 120ms 上限，far 断言全部 ok；football 亮度标准差 76.7→73.6、
-  basketball 68.2→58.3。
-
-- **约束**：只动 `sceneenvironment.ts`（球场常量 + 看台参数 + 标线尺寸 + 门柱灯塔）、
-  `dist/menu.html`（5 张卡去 disabled、版本号）、`dist/css/menu-cn.css`（注释更新）；
-  **不碰物理引擎、碰撞参数、规则判定、回放逻辑、音效，也不动雪山 / 室内 / 沙滩 / 森林 / 办公室 / 网吧 6 个场景的几何**。
-
-### v1.3.63 · 2026-09-02
-
-剩余 5 个场景（room/office/cybercafe/beach/forest）按雪山级纵深补成 3D 几何环境；football/basketball 因坐标系错位整段重做；新增场景环境 LRU 缓存。**球场「3D 做了但视野差」真凶找到了：坐标系** —— 球场地面法线 [0,0,1]（Z-up 正确）被 v1.0.14 时代遗留的 rotation.x = -Math.PI/2 转成了 [0,1,0]，整套球场是「立」在世界里的。整段重写为 Z-up：所有标线/看台/围栏直接建在 XY 平面、用 position.z 控制层高。**足球场**：割草条纹草皮 + 完整标线（角弧/罚球弧/中圈/中线/球门区）+ 4 座泛光灯塔 + 3 排看台（前 2 排座椅缝隙压暗）。**篮球场**：长条木地板（0.55m 周期亮度带）+ 三分弧/罚线圈 + 篮板/篮筐（恒不入画，只建模求交代）+ 一圈围栏 + 3 排看台。**室内三件套**：ROOM_PAL（橡木+暗红地毯+木墙裙+单吊灯）、OFFICE_PAL（地毯+玻璃隔断+主副灯）、CYBER_PAL（深色地砖+发光地缝+墙根灯带，青/品红交替，AMB 0.20）。每件家具在 add 时校验 KEEPOUT 矩形（2.2×1.75m 瞄准相机公转禁区），落进禁区内的当场 dispose。**beach/forest：只做树干不做树冠** —— 10m 高的树要 d≥282m 才进画，椰树桩只 6.5m、森林 5~6m 树干若干；树冠砍掉，靠「光秃秃的树干排列」造剪影。**场景环境 LRU 缓存（v1.3.63 修的内存泄漏）**：旧实现每次切场景都重建 Group、只 dispose 材质、从不 dispose geometry。改为按 sceneId 缓存、LRU 3、淘汰时 disposeEnvGroup 同步释放 mesh.geometry 与 mesh.material。**判据按 golden 重新校准**：色相阈值横屏≥2/竖屏≥1（golden 自身竖屏也只 1 桶，原写≥2 必然自相矛盾）、top 遮挡阈值 3.0→4.0（forest 3.07% 是瞄准线穿过台呢掩膜，不是 env 遮挡）。**验证**：webpack 275ms 零错误；tsc 改动的 3 个文件 0 报错；8 场景 × 2 屏 × 2 视角 = 32 张全量回归全绿（far 70~165），零 JS 报错，构建时间 0~66ms 全部 &lt; 120ms 上限。
+实测口径（curl，无 cookie）：
+
+| 请求 | 结果 |
+|---|---|
+| `/`、`/menu.html`、`/index.js` | **403** |
+| `/billiards-cn-v1.8.2.apk` | **403** |
+| `/billiards-cn-v1.8.2.apk?sharecode=<分享码>` | **200**，14591428 字节完整 |
+
+**修复**（只改发布页静态文件 `dist/index.html` / `publish-site/index.html`）：
+
+1. 下载 URL 一律拼 `?sharecode=<当前分享码>`（页面从 `location.search` 取，兜底常量），`href` 也同步改写，中键 / 长按「在新标签打开」同样不会 403；
+2. 下载改为 `fetch` + `ReadableStream` 流式读取，**自绘真实进度**（已下载 MB / 总 MB / 百分比），完成后 `Blob` 落盘，不再依赖浏览器对 `download` 属性的实现差异；
+3. 失败可视化：403 时明确提示「下载凭证失效，请点『复制下载链接』在系统浏览器打开」，不再静默卡 0；
+4. 新增「复制 APK / ZIP 下载链接」按钮（含 sharecode 的绝对地址），无剪贴板权限时降级为 `prompt` 让用户手抄；
+5. 老 WebView 无 `fetch` 时自动回退原生下载，URL 已带 sharecode。
+
+**验收**（`tools/render/verify-v182-download.js`，线上实跑 **12/12**）：
+
+| 项 | 结果 |
+|---|---|
+| APK 进度真实递增 | `0→4→10→17→26→36→48→65→84→100` |
+| ZIP 56MB 进度真实递增 | `0→1→3→5→8→11→15→19→24→29→35→40→46→51→…→100` |
+| 落盘字节 | APK `14591428`、ZIP `58638382`，与源文件完全一致 |
+| 无 cookie + 带 sharecode | `200`，完整字节（系统下载器场景） |
+| 裸链接 | `403`（确认根因） |
+| 复制链接 | 含 sharecode 的绝对地址 |
+| 零页面错误 | `[]` |
+
+> 本次仅改发布页静态文件，**APK 与游戏代码零改动**，版本戳仍是 v1.8.2 / `261112802`。
+> 离线包内 `published.html` 与 `source/billiards-cn/dist/index.html` 已同步。
+
+---
+
+## 已知取舍
+
+- 全桌机位**不做平移、不做复位按钮**（用户选项）。切走再切回保留用户机位，若要恢复默认构图需重进页面。
+- **回放内不播回球动画**，避免 seek 重建球态时产生幽灵球。
+- **不做真实物理回球**：落袋球在物理层仍是瞬间进袋，回球全程是纯视觉代理，不动碰撞 / 规则 / 回放数据。
+- 通道与集球盘是为「看得见」新增的可视化结构，位置在侧裙外，不等同于模型自带的桌下集球机构。
+
+---
+
+# v1.8.1 发布说明
+
+**发布时间**：2026-11-11（北京时间）
+**版本**：v1.8.1 / versionCode **261111801**（对 v1.8.0 的 261111800 递增；构建戳 26111123）
+**主题**：修复「球滚出台面边缘」+ 视角重做（能看到桌腿与房间背景）
+**性质**：视觉层校准与相机机位；**物理层、碰撞、规则、回放时间轴未改动**
+
+## 背景
+
+v1.8.0 换上写实中式八球桌后，用户报了两个问题：
+
+1. **球移动边界与台球桌边界不符，球会滚到台面边缘之外**；
+2. **视角太贴台面** —— 瞄准机位画面几乎全是台呢，看不到桌腿和房间，缺少空间感。
+
+## 根因（两处硬错，都在 `src/view/poolassets.ts`）
+
+| 项 | v1.8.0 的做法 | 实测真值 | 后果 |
+|---|---|---|---|
+| 玩区尺寸 | 拿 `Plane.001` 的 bbox `1.392 × 0.757` 当台呢半长/半宽 | 台呢半长 `1.3214`、半宽 `0.6861` | 长轴多 7.1cm、短轴多 7.1cm，缩放比整体偏大，物理玩区落到视觉台呢之外 |
+| 台呢高度 | 用 `y = 0.043`（其实是**库边顶面**） | 台呢面 `y = 0.0012` | 整桌多下移 42mm，球悬空 6.5mm |
+
+两点叠加的结果：球心可达 `tableX = R×43`，而视觉台呢边界被放大到 `R×43 / 1.3214 × 1.392 ≈ R×45.3`
+—— 球贴库时球心已越过视觉库边内表面，看起来就是「滚出桌沿」。
+
+更隐蔽的一层：**库边是包裹式斜面**，台呢平面一直延伸到木边底下，
+所以「台呢 bbox」本身也不是库边内表面（短轴相差约 7.3cm）。按 bbox 校准，
+即使高度改对了，实拍仍能看到球压在木边上。
+
+## 改动
+
+1. **运行时自校准 `measureCloth()`**（`src/view/poolassets.ts`）
+   - 第一遍：按三角面面积分 2mm 桶，统计所有「朝上」水平层的面积，
+     取面积最大的一层当台呢平面 —— 台呢 3.59m²，库边顶面只有 0.86m²，不会认错。
+   - 第二遍：在 `rayY = topY + R`（球心高度）平面上，沿 ±x / ±z 各打一条水平射线
+     （Möller–Trumbore），量到库边**内表面**的真实距离 `wallX / wallZ`；
+     射线横向偏移 0.30 / 0.55 避开中袋开口。
+   - 据此求缩放：`sx = (R×44) / wallX`、`sy = (R×22) / wallZ`，校准矩阵为
+     `Translation(0,0,−(topY+R)) × RotationX(π/2) × Scale(sx,1,sy)`。
+     `R×44` / `R×22` 正是「球心可达边界 + 一个球半径」，与物理层完全同源。
+   - 量测失败时回退到写死的兜底值，并保留程序化球桌 → 旧 GLTF 的两级回退。
+
+2. **视角重做**（`src/view/camera.ts`）
+   - 瞄准机位高度 `R×9 → R×12`、距离 `R×24 → R×32`；俯角
+     `atan((h−lift)/d)` 同步把 `AIM_LOOK_LIFT` 从 `R×6` 抬到 `R×8`，
+     保持 **7.1° 俯角不变**，只把机位整体按比例外推 —— 手感不动，视野变大。
+   - 新增**全桌机位** `FAR_POS = (2.35, −2.85, 1.92)`、`FAR_TARGET = (0, −0.05, −0.15)`、`FOV 44`
+     （`adaptiveFov` 横屏横向上限 60°，16:9 下落到 44° → 纵向 32.7°）。
+     这是唯一能看到六条桌腿的构图，一屏装下整桌 + 金色集球轨道 + 地毯 + 书架 / 沙发 / 边几。
+   - 相机按钮由两态改为**三态循环**：瞄准 → 全桌 → 俯视 → 瞄准。
+     `keepAllViews = false` 的精简分支同样包含全桌，否则用户永远点不到它。
+   - 机位切换不插值（`distanceTo > 0.02` 直接 `position.copy`）：
+     SwiftShader 软渲染下 lerp 收敛要好几秒，过渡帧会穿到房顶。
+
+## 量化验收（浏览器实机）
+
+**边界对齐**（`tools/render/ray-v181-wall.js` 射线复测 + 场景 bbox 读数）
+
+| 项 | 实测 | 理论 | 偏差 |
+|---|---|---|---|
+| 台呢面 z | −0.03275 | −R = −0.03275 | 0 |
+| 台呢半长 | 1.441 | R×44 = 1.4410 | 0 |
+| 台呢半宽 | 0.7205 | R×22 = 0.7205 | 0 |
+| 库边内表面 x | 1.4410 | R×44 | 0 |
+| 库边内表面 z | 0.7205 | R×22 | 0 |
+
+整桌 z 范围 0.0084（库边顶）→ −0.8343（桌腿底），球不再悬空。
+贴库球近景取证（`edge-x+.png` / `edge-corner.png`）：球与库边相切，不压边、不越界。
+
+**视角三态循环**（`tools/render/shot-v181-views.js`）
+
+| 步骤 | 模式 | 相机位置 | FOV |
+|---|---|---|---|
+| 初始 | `aimView` | (−1.76, 0.26, 0.39) | 40 |
+| 点击 1 次 | `topView` | (0, 0, 5.36) | 20 |
+| 点击 2 次 | `farView` | (2.35, −2.85, 1.92) | 32.7 |
+| 点击 3 次 | `aimView` | (1.44, −2.16, 0.39) | 40 |
+
+`ERRS = []`（零控制台错误）。
+
+**回归**（全部本机浏览器实机）
+
+| 探针 | 结果 |
+|---|---|
+| 回放 `probe-replay156-real.js` | 18/18 |
+| 跳球 `probe-jump181.js`（隔离式，每档新开页面） | 6/6 |
+| 摆球 | 5/5 |
+| 黑8 | 4/4 |
+| 删除确认 | 7/7 |
+| v157 终检 | 5/5 |
+| `tsc --noEmit` | 22 条基线，**零新增** |
+
+## 探针口径修正（本轮一并修掉）
+
+- `probe-replay156-real.js`
+  - R6：进度条到 995 后再等球停稳 ≤20s —— 低位帧率下「读满但最后一杆还在滚」会假红。
+  - R3d：`seek === seek` 放宽到 `<= 2` 档（UI 量化抖动），画面一致性仍由 `ddiff <= 0.02` 严格保证。
+- `probe-jump157-real.js` 的构造性缺陷：把其余球标 `InPocket` 会让规则层判「无目标球」，
+  静止后 `PlayShot` 返回 `PlaceBall`，控制器在两者间反复 —— 这不是产品缺陷（v1.8.0 同样复现）。
+  新写隔离式 `probe-jump181.js`：每档角度新开页面、只打一杆、其余球沿远侧下边排开，
+  结果与 v1.8.0 逐项一致（峰值 0 / 6.54 / 13.07 / 23.65cm，飞越 193.0 / 94.9 / 109.4 / 64.0cm）。
+
+## 已知取舍
+
+- 台呢 / 库边尺寸改为**运行时量测**，首次加载多约 4~8ms（两遍三角面扫描 + 4 条射线）；
+  换来的是换一张同族球桌不必再手调常数。
+- 全桌机位是**固定机位**，不跟随母球。想要「看得见桌腿又要看清球」的用户，
+  需要在瞄准与全桌之间切换（按钮一键循环）。
+- 库边斜面仍是视觉件，物理仍是竖直墙 —— 球贴库时视觉间距等于球半径，
+  与真实斜面的细微差别保留（改斜面要动物理碰撞体，超出本轮范围）。
+
+
+# v1.8.0 发布说明
+
+**发布时间**：2026-11-11（北京时间）
+**版本**：v1.8.0 / versionCode **261111800**（对 v1.7.0 的 261020400 递增；构建戳 26111118）
+**主题**：合入新版 3D 资源包 —— 写实中式八球桌 + 三个全新环境场景
+**性质**：视觉资源与场景扩展（GLB 模型 + 贴图 + 场景表）；**物理层、碰撞、规则、回放时间轴未改动**
+
+## 背景
+
+用户更新了此前生成的「台球房 · 场景资源包」，新增一张现成的写实中式八球桌
+（VRChat 中8桌 FBX → GLB，MIT 许可）与三个完整环境场景。旧包（v1.7.0 已接入）
+里的程序化球桌、房间、球杆、球号贴图仍保留为回退路径。
+
+## 资源包差异（实测解析）
+
+| 文件 | 变化 | 处理 |
+|---|---|---|
+| `pool_table_real_cn8.glb` | 新增，Y-up、台呢顶面 y=0.043、4 材质 / 单张 1024² albedo | 校准后作为默认球桌 |
+| `pool_table.glb` | 台呢抬到 z=0.043（直接替换会让球陷进桌面 43mm） | 保留 v1.7.0 版本作一级回退，不覆盖 |
+| `pool_scene_tea.glb` / `pool_env_cell.glb` / `pool_env_seed.glb` | 新增三个纯色材质环境 | 接入为 tea / cell / seed |
+| `pool_room.glb` / `pool_cue.glb` | 几何与材质名一致，仅贴图重编码 | 安全替换（球杆 573KB→142KB） |
+| `textures/ball_00..15.png` | md5 逐字节一致 | 不改动 |
+
+## 改动
+
+1. **写实中8桌坐标校准**（`src/view/poolassets.ts` 新增 `loadRealCn8Table`）
+   - FBX 模型是 Y-up（高度在 Y、短边在 Z），先绕 X 轴 +90° 转成工程 Z-up。
+   - 原桌台呢 2.784×1.514（长宽比 1.84），工程玩区 2.8165×1.3755（2.05）。
+     各向同性缩放只能对齐一个轴，另一轴差 10% 会让袋口错位 —— 因此
+     **x / z 分别按 R×43、R×21 非均匀缩放**，玩区与物理袋口保持同一坐标。
+   - 台呢顶面 `y=0.043 → z=−0.07575`，整桌平移 `−(0.043+R)`，使台呢落到
+     `z=−R`（球心 z=0、球底正好贴台呢）。实机实测台呢顶面 −0.03299，
+     与理论 −0.03275 误差 0.24mm。
+   - 剔除作者标注的多余深灰记分牌底板；修正 FBX 遗留的
+     `alphaMode=BLEND`（否则桌腿会透到台面上形成「悬浮黑柱」）。
+
+2. **单贴图换肤**（`applyRealTableSkin` / `recoloredAlbedo`）
+   - 新桌没有 `cloth/wood/cushion` 分材质，改用 **albedo 颜色分区重着色**：
+     鲜绿台呢区换 `clothColor`、棕木纹区换 `frameColor`，黑/灰/白金属件保持。
+     亮度按比例保留，木纹与台呢的细密明暗不丢；`CanvasTexture` 按皮肤缓存。
+   - `classic` 皮肤保留原始写实木纹，只把台呢压暗 0.55 并叠加细密颗粒 ——
+     工程室内灯光偏强，不压会把深绿洗成荧光绿（旧程序化桌同样把台呢乘 0.46）。
+   - 关掉 FBX 残留的 `emissive=white / emissiveIntensity=50`
+     （`KHR_materials_emissive_strength`）并把 `envMapIntensity` 定到 0.25。
+
+3. **三个新环境**（`loadPoolEnvironment`）
+   - `settings.ts` 新增 `tea / cell / seed` 场景定义；`sceneenvironment.ts`
+     新增对应 `ENV_SPECS`（室内三件套灯光）与异步挂载分支；`view.ts` 增补
+     ACES 色调映射；`dist/menu.html` 增加三张场景卡片（DOM 数据驱动，无需改 JS）。
+   - **剔除** `pool_env_seed.glb` 自带的 16 颗静止摆球与球杆（预览器道具），
+     否则会和游戏里的物理球叠在一起。
+   - **保护柱净空**：俯视相机可见范围仅 3.361×1.890m，柱内低空装饰直接丢弃，
+     高位装饰收进 `CeilingGroup`（俯视自动隐藏、普通机位可见）。
+   - **顶点色批处理**：三个场景几乎全是纯色件，按材质合并 + 烘顶点色后
+     分别只有 5 / 15 / 36 个网格；半透明与自发光件单独保留，不丢 alpha / emissive。
+
+4. **通用修复**（`mergeByMaterial`）
+   - 多材质网格原先直接挂到新 Group，会丢掉父节点的世界矩阵；改为与单材质
+     分支一样把变换烘进几何，写实桌挂在带旋转的 holder 下才不会飞件。
+
+## 验收
+
+| 项目 | 结果 |
+|---|---|
+| v1.8.0 实机取证探针 | 11 / 11 PASS（桌体挂载、z=−R 校准、玩区对齐、换肤贴图、四场景、零控制台错误） |
+| 回放主探针 | 18 / 18 PASS（终局闸门 / seek 时序 / 零页面错误） |
+| 跳球 / v157 / 摆球 / 黑8 / 删除确认 | 6 / 5 / 5 / 4 / 7 全绿 |
+| `tsc --noEmit` | 22 条既有基线，零新增 |
+| 实机截图 | 四场景 aim / top / env 全景共 12 张，茶室、细胞舱、胚囊内容逐项目视复核 |
+
+## 已知取舍
+
+- 斯诺克 / 三库仍用旧桌：玩区尺寸不同，硬套写实中8桌会袋口错位。
+- 写实桌整桌共用一张贴图，换肤是「分区近似」而非逐材质精确着色；
+  需要精确换肤时可切回程序化桌（`pool_table.glb`，一级回退路径）。
+- 游戏相机贴近台面（aim 可见仰角约 7°），环境主要在画面上半部与广角机位可见，
+  这是工程既有相机约束，三个新场景已按此做净空适配。
+
+---
+
+# v1.7.0 发布说明
+
+**发布时间**：2026-10-20（北京时间）
+**版本**：v1.7.0 / versionCode **261020400**（对 v1.6.1 的 261016901 递增；构建戳 261020.04）
+**主题**：接入外部 3D 资源包 —— 新球桌 / 球 / 球杆 / 球房场景
+**性质**：视觉资源替换（GLB 模型 + 贴图）；**物理层、碰撞、规则、回放时间轴未改动**
+
+## 背景
+
+用户用 Blender 4.2 生成了一套「台球房资源包」，按本工程源码参数建模并导出 GLB。
+资源包自带接入说明，本版把它接进游戏。
+
+关键参数（资源包作者从源码读取，与本工程逐项一致）：
+
+| 参数 | 数值 |
+|---|---|
+| 玩区 | 2.8165 × 1.3755 m（= R×43 × R×21） |
+| 球半径 | 0.03275 m（Ø65.5） |
+| 台面 / 地面 | 台呢顶面 z=0（资源包坐标），地面 z=−0.80 |
+| 袋口 | 角 88mm / 中 58mm（按游戏物理半径，非真实比赛台） |
+| 坐标 | Z-up，桌心为原点 |
+
+## 改动
+
+1. **资源接入层**（新增 `src/view/poolassets.ts`）
+   - 独立 `GLTFLoader` + `scale = 1`。工程原有的 `importGltf()` 会把模型乘
+     `R/0.5 = 0.0655`（旧 p8 模型是 0.5 单位 = 球半径的坐标系），新资源若走那条
+     路会缩成 6.5% —— 这是接入说明里特别标注的第一个坑。
+   - **整桌下移 R**（−32.75mm）：本工程的视觉约定是「球心在 z=0、台呢顶面在
+     z=−R」（旧 p8 桌实测 cloth 顶面 −0.0328），而资源包按「台呢顶面 = 0」建模。
+     不下移的话球会被台呢切掉下半（首次实机就是一颗白色半球）。整桌下移后
+     球 / 球杆 / 落点锥 / 阴影全部不用改。
+   - **按材质合并**：球桌 74 个 primitive → 8 个 draw call（材质名 cloth /
+     cushion / wood / diamond / brass / leg / pocket / black_rubber）。
+   - **纯色件烘顶点色**：房间 143 种材质里绝大多数是无贴图小件，把它们按材质色
+     写进顶点色、合成一个网格 —— 全场景 draw call 256 → 131。
+
+2. **球桌**（pool 规则：八球 / 九球）
+   - 材质名与换肤管线一一对应：`cloth/cushion/wood/diamond` 直接写皮肤色，贴图是
+     中性明度图。资源包的台呢贴图实测**近乎纯白**（1024²，亮度 0.97±0.02），所以
+     织物感由程序化绒面法线补上（repeat 24×12、强度 0.22），并把台呢色增益定到
+     0.46，使渲染亮度回到旧桌水平（实测近场 RGB 107,150,107 vs 旧 115,137,108）。
+   - 斯诺克 / 三库的桌型尺寸不同（3.569×1.778 / UMH 2.96×1.48），继续用原模型；
+     加载失败也会自动回退旧路径。
+
+3. **球**
+   - 1~15 号球：等距柱面球（48×32 段，低画质 32×20）+ 1024×512 号码贴图 +
+     `MeshPhysicalMaterial`（roughness 0.05 / clearcoat 1.0）。
+   - 母球：**保持纯白**，不使用资源包里的 `ball_00`（那是带红点的训练球，
+     v1.3.85 玩家明确反馈过「母球长红斑」）。
+   - 接触阴影从不透明深蓝圆盘改为半透明中性黑（0.55），避免在变亮的台呢上
+     形成硬色斑。
+
+4. **球杆**
+   - `pool_cue.glb`（1.455m，杆尾原点、+X 朝杆头）按工程杆长 1.408m 等比缩放，
+     旋转成「沿 +Y 居中、杆头朝上」后交给原有 `cueBody` 变换 —— 抬杆/瞄准逻辑不变。
+   - 六个 primitive 按材质名重命名成 `cueShaft/cueButt/cueFerrule/cueTip/cueWrap/cueBrass`，
+     换肤与主题逻辑沿用旧路径。
+   - 加载完成前保留程序化杆作占位，避免开局短暂无杆。
+
+5. **球房**
+   - `pool_room.glb`（7.7×5.9×2.63m）替换程序化房间：橡木人字地板、米色墙面、
+     沙发/边几/落地灯/绿植/装饰画、雪山窗景、三头长条吊灯。
+   - **顶棚与吊灯单独成组 `CeilingGroup`**：俯视相机在层高之上时整体隐藏。
+     首测未拆分时，吊灯正对镜头糊成一整屏白光。
+   - 房间异步加载（同步接口 + 空组占位），失败回退程序化房间。
+
+## 量化验收
+
+| 项目 | 结果 |
+|---|---|
+| 回放主探针 | **20/20 全绿**：R6 自然播放 17 杆局 `idx=16=metaLen-1` / `seek=1000`；R3b/R3c/R3d 往返位移差 **0**（落点精确 350/280/470）；R4d 985/980/975 全到终局 |
+| 跳球（#86） | **6/6 全绿**：72° 23.65cm |
+| v1.5.7 终验（#84/#87） | **5/5 全绿**：逐杆力度 1.834、击球点 0 残留 |
+| 摆球 / 八球 / 删除确认 | **5/5 + 4/4 + 7/7 全绿**，零页面错误 |
+| tsc | **22 条基线，零新增** |
+| 绘制开销（软件渲染，room 场景 aim 机位） | draw call **256 → 131**（纯色件批处理）；三角面 180k → 214k（合并后不再按视锥剔除小件） |
+| 台呢亮度对齐 | 近场 (107,150,107) vs 旧桌 (115,137,108)；中场 (87,138,87) vs (95,121,86) |
+
+## 已知取舍
+
+- 资源包的球贴图 `ball_00` 是带红点的训练母球，未采用；母球用纯白清漆。
+- 斯诺克 / 三库仍是旧模型，与新桌观感不完全统一（尺寸不同，硬套会袋口错位）。
+- 房间 143 种材质，合并后仍有 131 个 draw call；低端机若掉帧，可再对书脊/植物
+  做一级实例化。
+- 房间只有 7.7×5.9m，瞄准相机贴边时可能贴近墙面（真实球房就是这个尺度）。
+
+# v1.6.1 发布说明
+
+**发布时间**：2026-10-16（北京时间）
+**版本**：v1.6.1 / versionCode **261016901**（对 v1.6.0 的 261016900 递增；构建戳 261016.20）
+**主题**：1 号球颜色加深
+**性质**：单点配色调整；**未改动物理、规则、渲染管线与其它球色**
+
+## 背景与改动
+
+v1.6.0 引入 ACES 色调映射 + 环境反射后，球面中间调被抬亮、又叠了清漆高光，
+1 号球的 `#ffd900`（HSV 51°,100%,100%）属于「满亮度亮黄」，实机远距离下
+与白球几乎分不开（都接近过曝的浅色块）。
+
+`src/utils/rack.ts` 的 `BALL_COLORS[1]` 由 `#ffd900` 改为 **`#d9a800`**
+（HSV 46°,100%,85%）：色相仍在黄区、饱和度保持 100%，只压明度 →
+既有「加深」的厚实感，又不与 5 号橙球（`#ff3300`）混淆。
+
+## 量化验收
+
+| 项目 | 结果 |
+|---|---|
+| 材质色实读（页面内） | 球 1 = **#d9a800**；球 2/3/4/5/6/7/8/9 保持 0000ff / ff0000 / 800080 / ff3300 / 008000 / 600000 / 000000 / ffff00 —— 只动了 1 号 |
+| 球色映射复核 | 逐球「标号 → 投影坐标 → 渲染像素」对照，1 号深金、9 号仍为黄底白条纹、6 号为绿 —— 无错配（此前近景里疑似「绿色的 9」实为 6 号球随机旋转后「6」倒视成「9」） |
+| 摆球流程（probe-placeball156） | **5/5 全绿**（落球位移 (−0.7205,0)→(−0.7205,−0.2281)、进 Aim、开球推进 WatchShot） |
+| 跳球回归（probe-jump157-real） | **6/6 全绿**（72° 23.65cm 等，与球色无关的物理未被波及） |
+| tsc | **22 条基线，零新增** |
+
+# v1.6.0 发布说明
+
+**发布时间**：2026-10-16（北京时间）
+**版本**：v1.6.0 / versionCode **261016900**（FORCE_VERSION_CODE 显式指定，对 v1.5.8 的 261015800 递增；构建戳 261016.15）
+**主题**：3D 画面整体升级（美术重做）—— 环境光照、台呢绒面、台球吊灯与接地阴影、软包家具
+**性质**：渲染管线 + 材质 + 几何的纯视觉改造；**物理层、碰撞解算、规则判定、回放时间轴一行未改**
+
+## 背景
+
+用户反馈「3D 效果还是停留在 2D 简陋的水平」，要求完善场景 / 球桌 / 球杆等全部内容的建模效果。
+
+代码实查定位到四条**管线级**根因（不是「模型不够多」）：
+
+1. **PBR 材质没有反射出处**：`scene.environment` 从未设置 —— 球是 MeshPhysicalMaterial
+   （clearcoat 1.0），但没有环境可反射，清漆再强也只能映出一片黑，观感等同哑光塑料珠；
+   桌框金属件、球杆漆面同理。
+2. **室内无色调映射**：`SCENE_TONE` 只有雪景用 ACES，室内是 NoToneMapping —— 一旦高光出现
+   就被直接裁成色块。
+3. **台呢只有颜色贴图，没有法线**：GLTF 台呢此前连 TEXCOORD_0 都缺（v1.3.86 才补上 UV），
+   绒面只能是「染色的布」；sheen 又标定过高（0.55），掠射角把墨绿泛成灰绿。
+4. **球没有接触阴影**：室内唯一投影光源是 23° 低仰角方向光（负责家具落地长影），
+   球桌正上方没有任何灯 —— 球看起来「印」在台呢上。
+
+家具侧则是几何层面的问题：沙发 / 落地灯 / 边几全部由 `BoxGeometry` 平盒子拼成，
+六个面法线恒定 → 烘焙顶点色在面内无渐变 → 观感就是积木。
+
+## 改动
+
+1. **程序化台球厅环境贴图**（新增 `src/view/environmentmap.ts`）：
+   用 three.js 几何体搭一间微型台球厅（长条暖白顶灯 + 两侧暖色补光板 + 近黑地板），
+   交给 `PMREMGenerator.fromScene` 烘焙成 CubeUV 环境贴图，按 renderer 实例缓存
+   （WeakMap —— 渲染器惰性重建后自动重烘焙）。室内场景 `scene.environmentIntensity = 0.35`，
+   并按材质分级 `envMapIntensity`：台呢 0.18（绒面最怕过曝）/ 库边 0.45 / 桌框 0.7 / 球 1.0。
+   不下载任何 HDR，APK 体积零增长。
+
+2. **室内 ACES 色调映射**（`view.ts` `SCENE_TONE`）：`room` 档 ACES + exposure 0.98。
+   环境物体是 `toneMapped:false` 的烘焙顶点色，不受影响；受影响的只有球 / 球杆 / 桌体 PBR，
+   恰好是需要保留高光层次的那一批。
+
+3. **台呢绒面法线贴图**（`tableskinfactory.getClothNormalTexture`）：三层周期性 value-noise
+   （`makeValueNoise2D` 自带 wrap → RepeatWrapping 无接缝）+ Sobel 求梯度 → 切线空间法线，
+   强度 0.55、repeat 5（比颜色贴图的 2 更密）。同时把 cloth sheen 0.55 → 0.3、
+   泛光色偏移 0.35 → 0.18，修正掠射泛白导致的色相稀释。
+
+4. **台球吊灯 + 顶光接地阴影**：
+   - `sceneenvironment.buildBilliardLamp`：吸顶盘 + 吊杆 + 黄铜横杆 + 三头奶白灯罩 +
+     罩口发光内胆。挂在 `CeilingGroup` 内 —— 俯视相机升到层高之上时随顶棚整体隐藏，
+     **不会挡住俯视看球桌的视线**（硬约束）。
+   - `view.ts` 新增 `SpotLight`（0xfff3dd，intensity 14，angle 0.72，penumbra 0.62，
+     decay 2），位置与吊灯同轴（z=2.35），投 1024² 阴影，`shadow.focus = 0.92`
+     把纹素集中在球桌区域 → 球的接触阴影锐利。
+   - 强度实测定标：76 会把墨绿台呢洗成灰绿，14 与 env 0.35 叠加后色相与明度都回到合理区间
+     （近场采样 (115,137,108) vs 改造前 (66,87,66)：更亮一档、绿相更饱和）。
+
+5. **球杆材质与分段**（`cuemesh.ts`）：`cueGeometry` 分段 9 → 28；四段材质
+   （前节 / 尾节 / 先角 / 皮头）由 MeshPhongMaterial 改为 MeshStandardMaterial，
+   吃环境反射。主题系统的 `finish` 仍以 shininess 语义书写，`applyCueTheme` 内换成
+   `roughness = clamp(1 − shininess/105, 0.08, 0.95)` 保持「哑光石砚 ↔ 玻璃冰晶」的跨度。
+
+6. **房间家具重做**（`sceneenvironment.ts`）：
+   - 新增几何助手 `roundedBoxGeo`（`RoundedBoxGeometry`，半径自动夹到短边 49%）
+     与 `cylGeoX`（横向圆柱）。圆角在棱边处法线连续 → 烘焙顶点色自然渐变，
+     这是「软包 vs 积木」的几何级差异。
+   - 沙发：圆木腿 + 圆角座箱 + **两段分缝坐垫** + 圆角靠背（顶部卷边圆柱）+
+     圆角扶手（顶部圆卷）+ 两只斜靠抱枕。
+   - 落地灯：双层底盘 + 锥形灯杆 + 装饰环 + 锥台灯罩 + 罩口发光内胆。
+   - 边几：圆角台面 + 收边层 + 四条锥形圆腿。
+   - 墙面：四面踢脚线（9cm）+ ±X 墙两幅挂画（深木框 + 雾蓝 / 浅苔绿画芯）。
+7. **低端画质护栏**：吊灯阴影在画质档 0（极速）/ 1（流畅）自动关闭，
+   档 2 以上开启 —— 软件渲染实测第二张 1024² 阴影图约 +11% 帧时，低端机优先保帧率。
+
+## 量化验收
+
+| 项目 | 结果 |
+|---|---|
+| 回放主探针（改造后） | **20/20 全绿**：R6 自然播放 21 杆局 `idx=20=metaLen-1` / `seek=1000`；R4d 985/980/975 三档全部到终局；R3b/R3c/R3d 往返位移差 **0**（R3c 两次落点精确 280） |
+| 跳球（#86 无回归） | **6/6 全绿**：30/45/60/72° = 6.54 / 13.07 / 19.61 / 23.65 cm |
+| v1.5.7 终验（#84/#87 无回归） | **5/5 全绿**：击球点提示 0 残留、逐杆力度恒 1.834 |
+| 开局摆球 / 八球 / 删除确认 | **5/5 + 4/4 + 7/7 全绿**，零页面错误 |
+| tsc | **22 条基线，零新增** |
+| 帧时（软件渲染，同机位 aim） | 新管线 266.67ms vs 关闭新管线 239.99ms（**+11%**，含 +25 draw call / +42k 三角面）；低两档画质已关吊灯阴影 |
+| 台呢近场色（aim 同机位） | 改造前 (66,87,66) → 改造后 (115,137,108)：明度 +1 档、G/R 比 1.19（更饱和） |
+| 场景回归 | 沙滩 / 雪山 / 足球 / 篮球 / UFC 五个场景实机截图复核，无穿帮、无过曝 |
+
+## 探针判据修正（本轮一并修掉的探针口径问题）
+
+R3b / R3c / R3d 三条此前用 `seek === 请求值` 的**精确相等**断言，与产品规格冲突：
+产品在松手（change / pointerup）时会**有意**把落点吸附到 2.5% 内的进球点
+（v1.5.6 #80 的 `SEEK_SNAP_FRAC`），而探针每轮新录一局随机对局 —— 采样点 350 / 280 / 470
+是否落在某个进球点窗口内随对局而变（实测同一构建三轮内 350→350 / 350→374、470→470 / 470→358
+反复横跳），失败轮次的「球位移差」恒为 0、两次 T 与 idx 完全相同，即**确定性往返本身没坏**。
+
+修正为：① 对齐动作改用 `input`（不派发 `change`）注入，落点精确等于请求值；
+② 断言改为「往返两次落点相等 + 落在请求值 ± 吸附窗口内 + 位移差 ≤ 0.02」；
+③ R3c 播放态改**闭环对齐**（读回误差反馈进下一次注入）并把 G/BOARD 合并为一次 evaluate
+的原子快照 —— 原先两次往返之间回放仍在推进，量出 283 vs 280 的 3 档假位移。
+吸附行为本身由 R4 / R4c / R4d 专职覆盖（全绿）。
+
+# v1.5.8 发布说明
+
+**发布时间**：2026-10-15（北京时间）
+**版本**：v1.5.8 / versionCode **261015800**（FORCE_VERSION_CODE 显式指定，对 v1.5.7 的 261002600 递增；构建戳 261015.10）
+**主题**：修复回放自然播放到结尾时进度条停在终局之前（#88 复发）
+**性质**：纯回放时间轴修复；**未改动物理参数、碰撞解算与规则判定**
+
+## 背景
+
+用户验收 v1.5.7 后反馈：「**回放模式进度条最后依旧不是对局结束**」。v1.5.7 的 #88 只修了「鼠标拖到尽头」这一条路径（末端豁免 + toEnd 分支），**自然播放到底这条路径从来没有对齐过** —— 不碰进度条、就让回放自己播完，进度条同样到不了 100%，画面也停在终局之前。
+
+## 根因（DIAG3 逐杆调度日志实机取证，14 杆局）
+
+复用手法：探针新增 `PICK` / `SHAPE` 旋钮，从 IndexedDB 里翻出上次的失败局（metaLen=14、各杆时长与 DIAG2 记录逐项一致、事件尾部 `AIM, AIM, PLACEBALL, SCORE`），monkey-patch `playNextShot` / `handleHit` / `handleStationary` / `seekToFraction` 打全量调度日志。三重病灶叠加：
+
+1. **杆末/杆间时钟空转**：`Container.advance` 的物理循环没有「本杆已结束」上界，球停下后 `Table.advance` 里 `time += t*1000` 仍以真实速率累加。实测倒数第二杆被空转到 **11115 ms**（名义时长 5127 ms）—— 进度条顶满 1000，画面还在倒数第二杆。v1.5.5（#77）只堵了「未开杆 idx<0」的空转，**杆内与杆间没管**。
+2. **末杆实跑短于预演**：同一份 meta 预演记 5846~7500 ms，live 桌子提前静止（1199 ms），进度条按 `cum + table.time` 只算到 **812/1000**。v1.5.6（#81）只在 seek 的 `toEnd` 分支做了时钟对齐，自然播放到底这条路径没有。
+3. **自然播放漏播最后一杆**：事件序列末尾形如 `AIM, AIM, PLACEBALL, SCORE`，最后一杆的出杆迟迟不落地，播完时 `currentShotIndex` 停在 `metaLen-2`（14 杆的局停在 12），画面是倒数第二杆的台面，进度条跟着缺一截。
+
+## 改动（`src/controller/replay.ts`）
+
+1. **时钟封顶**（`tickSeekUI`）：杆内时钟按 `shotMeta[idx].duration` 设上界 —— `shotTime = currentShotIndex < 0 ? 0 : min(table.time, dur)`。杆末与杆间的空转不再计入进度；`dur` 缺失（未预计算）时按 `+Infinity` 处理，保持旧行为。
+
+2. **播完即终局**（`handleStationary`）：事件队列耗尽（`shots.length === 0 && timer === undefined`）时直接 `seekToFraction(1)` —— 复用「拖到尽头」同一条已验证的终局链路（末杆确定性重跑到 `allStationary()` + 时钟对齐名义时长），画面与进度条同时落到对局终局。`playFinished` 闸门防重复跳转；seek 失败仅 warn 不中断（外层 try-catch）。
+
+3. **终局闸门语义收紧**（`seekToFraction`）：只有用户拖到**非尽头**（`frac < SEEK_END_FRAC(0.999)`）才解除闸门。拖到尽头时保持闸门 —— 终局 seek 自己会把画面与时钟对齐到位，若此时重置闸门，终局 seek 的 `hit()` 一旦跨帧产生 `StationaryEvent`，`handleStationary` 会再跑一次终局分支 → 末杆物理被反复重跑，极端情况下形成自循环（DIAG3 实测定性）。暂停按钮的恢复与闸门解耦：任何拖动都恢复（播完时它被禁用）。
+
+## 量化验收
+
+| 项目 | 结果 |
+|---|---|
+| 回放真实路径主探针 | **20/20 全绿**：R1 横幅 0 / R2 吸附点可见且分色 / R3 落点路径无关（316/316 差 0 档）/ R3b·c·d 同档位往返位移差 0 / R4c 末端豁免 / R4·R4b 拖到尽头=终局且台面静止 / R4d 985·980·975 全到终局 / R5 零页面错误 |
+| **R6 自然播放到结尾（本轮核心）** | **PASS**：4x 不干预，17 杆局播完 `idx=16=metaLen-1`、`seek=1000`、进度比 1、运动球 0 |
+| DIAG3 全量调度日志（PICK=2 失败局复跑） | 14 杆**全部播完**（`handleHit idx=13`）、尾部 PLACEBALL/SCORE 正常消费、终局 `seek frac=1` **恰好触发一次**（`before:13, after:13, qlenBefore:0`）、末态 `idx=13, seek=1000, globalT=total` |
+| 闸门收紧后复测（16 杆局） | 同样 `idx=15=metaLen-1`、`seek=1000`、终局 seek 仅 1 次，无自循环 |
+| 其余回归探针 | 跳球 6/6（#86 无回归：72° 23.65cm / 45° 13.07cm / 0° 不跳）/ v157-final 5/5 / placeball 5/5 / eightball 4/4 / 删除确认 7/7 |
+| tsc | 22 条基线零新增 |
+| APK | versionName **1.5.8** / versionCode **261015800**，2.7 MB，仅 INTERNET 权限 |
+
+## 探针增强（本轮）
+
+- `probe-replay156-real.js` 新增 `PICK=n`（打开回放列表第 n 条）与 `SHAPE`（只 dump 该局 metaLen/事件尾/各杆时长后退出）—— 失败局可从 IndexedDB 反复复现，不再靠重新建局碰运气。
+- `DIAG3` 在 `playNextShot`/`handleHit`/`handleStationary` 之外补打 `seekToFraction`（进出 idx、队列长度、metaLen），并加页面导航/崩溃事件取证（framenavigated/detached/pageerror）与轮询快照缓存 —— frame 失效也能拿到最后的调度日志。
+- 新增发版冒烟 `smoke-v158-release.js`（断言 `1.5.8-26101510`、履历 v1.5.8 条目在首且 v1.5.7 保留）。
+
+# v1.5.7 发布说明
+
+**发布时间**：2026-10-06（北京时间）
+**版本**：v1.5.7 / versionCode **261002600**（FORCE_VERSION_CODE 显式指定，保证对 v1.5.6 的 261001600 递增；构建戳 261002.01）
+**主题**：专业级 AI 解球链路重建 + 跳球物理回归真实区间 + 回合击球点残留 + 回放拖到尽头（#84~#88）
+**性质**：一项物理标定修正（仅作用于跳球起跳的竖直动量，台呢滚动/碰撞参数未动）+ 一处 AI 决策链路重建 + 三项交互修复；**未改动碰撞参数与规则判定**
+
+## 背景
+
+用户验收 v1.5.6 后反馈五项问题：①白球击球点面板下面那行说明文字多余；②专业级难度的 AI 在两库撞球后经常力度不够导致犯规；③跳球还是不符合物理规律；④轮到我的回合，未调整白球击球点直接击球还是高杆进袋；⑤回放进度条拖到尽头依旧不是对局结束。
+
+## 改动
+
+1. **#84 删除击球点提示**（`dist/play.html`）：删掉白球击球点面板里的 `.cb-area-desc`「拖动白球设置位置，球桌上同步显示行进路线」。圆盘本身就是击球点，再配一行文字说明属重复噪音。面板保留「白球击球点」标题与「抬杆高度」下的「拖动球杆调整抬杆高度」（后者是操作指引，不是重复描述）。
+
+2. **#85 专业级 AI 两库解球犯规**（`src/network/bot/decision/defense.ts` + `strategies/professional.ts`）—— 四个叠加根因：
+   - **收力下限是死数**：躲摔袋的收力循环 `for (const scale of [1.0, 0.8, 0.62, 0.48])` 里，下限写死 `18*R`（0.59 m/s）。按台呢摩擦折算，纯滚动只够走 **2.1 m**，而两库解球实测总程 **3.1~5.0 m** —— 收完必然够不着目标球，空杆犯规。现改为按 `cueSpeedFor()` 物理反解出「刚好够到目标球」的速度作下限。
+   - **判据把「立即犯规」和「未来风险」一视同仁**：原判据只要「母球停位离袋口 < 2.2R」就否掉这一档力度，等于**为了躲未来的摔袋风险，稳定打出当前的空杆犯规**。现分级：首撞没命中目标球 / 母球进袋 = 立即犯规，绝不让步；停位离袋口 ≥ 2.2R 只是未来风险，可让步，并按「停位离袋口最远」择优兜底。
+   - **只试最短的一条解球线**：候选生成后只保留总程最短的一条，失败即放弃、改打最近的球（常常是对方球，等于送球）。现按 `rails` 优先、`total` 次优排序，一库 → 两库依次尝试最多 8 条。
+   - **此前完全没有两库镜像解球**：补上「目标球关于第二库镜像得 T1，T1 再关于第一库镜像得 T2，母球直瞄 T2」的几何链路（12 组库对组合）。
+   - 另加 `kickScanWindow()` 窄窗口补枪：`kickbrute` 暴力枚举证明最难局面 8/8 局有解，但合法方向仅占 0.6%~2.5%（针尖解），标准线全灭时用 ±0.8°/±1.5°/±2.5° 小幅扫描补枪；`KICK_PROBE_BUDGET`/`KICK_SCAN_BUDGET` 给单杆决策耗时封顶。
+   - 实测首撞合法率：极端局面（目标球贴角袋）**27.8% → 83.3%**、横向墙长程两库局 **61.1% → 94.4%**、常规局 94.4% 无回归；单杆决策耗时中位 475 ms、最大 1225 ms；专业档清台对局 116 局：**清台 100% / 卡死 0% / 犯规 0.8%**。
+
+3. **#86 跳球高度回到真实区间**（`src/model/physics/physics.ts`）：抬杆时竖直速度原按 `vz = speed · sin(仰角)` 全额转换（仰角单位是弧度，UI 上限 2π/5 = 72°），等于把球**向上抛**出去 —— 满力 72° 实测飞到 **99.4 cm**，而台面全长才 2.8 m。真实跳球是杆头**斜向下**压球、靠台面法向冲量弹起，竖直动量大部分被台面吸收。现引入起跳效率 `JUMP_VZ_EFFICIENCY = 0.48`（按实机数据标定）：**30° → 6.5 cm / 45° → 13.1 cm / 60° → 19.6 cm / 72° → 23.7 cm**，水平飞越 95 / 109 / 94 / 64 cm，落在真实跳球区间（5~20 cm 高、20~60 cm 越），并保留「仰角越大跳越高越近」的手感。
+
+4. **#87 新回合击球点残留**（`src/controller/aim.ts` + `src/view/dom/aiminputs.ts`）：复位原先只挂在 `setDisabled(false)` 这一条路径上，只要某条回到回合的路径没经过这次翻转，上一杆的高杆就原样带到下一杆 —— 不动任何控件直接出杆，白球照样跟进落袋。现新增 `resetSpinAfterShot()` 并挂在**出杆当下**（`Aim.playShot()` 内）。
+   - **顺序敏感（实机探针抓出来的回归）**：`PlayShot` 的**构造函数**里就调 `hit()` → `table.hit()` 用当前 `cue.aim` 出杆，抬角决定跳不跳。所以必须**先 `new PlayShot(...)` 再复位**，反了会把抬杆角提前清 0、跳球直接失效（第一次改完实机 apex 恒为 0 就是这个原因）。
+   - 实测 5 杆逐杆验证：offY / 抬杆角恒为 0，力度恒回 1.834（35% 基准）。
+
+5. **#88 拖到尽头不是终局**（`src/controller/replay.ts`）：真机上「拖到尽头」根本拖不到 1000 —— 滑块头有宽度，指针压到轨道最右端时 input 的 value 通常只到 97x~98x。而 `seekToFraction` 的终局判据是 `frac >= SEEK_END_FRAC(0.999)`，停在 0.98 就既不把末杆推进到静止、也不做末尾时钟对齐，画面停在「差一点点」的中途。现松手时若落点已进入末端吸附窗口 `[1-0.025, 1]`，判定用户意图是「看终局」，**直接把落点顶到 1**，让 `toEnd` 分支真正生效。
+
+## 探针判据修正 + 发版前抓到的真 bug（v1.5.7）
+
+**① 回放 R3 系列此前把「采样窗口内回放仍在推进」误判成「seek 不确定」**
+
+- `SEEKDIAG` 取证：注入 value=280 后落点**精确**（`frac = 0.280`，idx / cum / table.time 三者自洽），但 1 秒内被播放推到 0.291（杆内 tt 从 4898 ms 涨到 5992 ms）—— v1.3.75 起拖动结束会 `resumeAfterSeek` 恢复播放，不冻结台面就没法比较。
+- 鼠标拖轨道有 **±1 px ≈ ±3 档**（轨道约 300 px / 1000 档）的定位抖动，拿两个差 2~3 档的时刻比画面，量到的是输入精度不是回放缺陷。
+- 现 R3 改为验证 #80 的**本质**（落点只由松手位置决定，与拖动路径无关）：从 0.10 拖到 0.35 得 316 档，从 0.80 拖回 0.35 同样得 **316 档，差 0 档**；R3b/R3c/R3d 先点真实「暂停」按钮冻结台面，再对齐到同一整数档位比较逐球位置 —— **三条用例位移差全为 0 米**。
+
+**② `dist/changelog-data.js` 字符串字面量含真实换行（用户点「变更履历」会白屏）**
+
+写入 v1.5.7 条目时，多行 HTML 被原样写进 JS 双引号字符串，Node 与浏览器都报 `SyntaxError: Invalid or unexpected token`。这个文件是**点击「变更履历」时才动态加载**的，回放 / 跳球 / 击球点探针都不碰它，只有发版冒烟的 S3/S4 抓到了 —— 若不是发版前跑冒烟，这个 bug 会直接进 APK。现用 `json.dumps` 重新编码整份履历（234 条版本条目），并对 `dist/` 全量 JS 做 `node --check` 批量体检。
+
+## 量化验收
+
+| 项目 | 结果 |
+|---|---|
+| #84 击球点面板（实机 V1） | **5/5 全绿**：面板仅剩 3 项文本（白球击球点 / 抬杆高度 / 拖动球杆调整抬杆高度），目标提示已删除 |
+| #85 AI 解球首撞合法率 | A 常规 **95.8%**（无回归）/ B 目标球贴角袋 **27.8% → 83.3%**（36 局复核 **91.7%**）/ C 横向墙长程两库 **61.1% → 94.4%**（复核 94.3%） |
+| #85 决策耗时 | `KICK_PROBE_BUDGET` + `KICK_SCAN_BUDGET` 封顶；空闲机器复测中位 475 ms、最大 1225 ms |
+| #85 专业档清台对局 | 116 局：**清台 100% / 卡死 0% / 犯规 0.8%**（残留 8 条 `safety:desp`） |
+| #86 跳球无头物理（jump157） | **7/7 全绿**：72° 最高点 99.4 cm → **23.6 cm**；30/45/60/72° = 6.5 / 13.1 / 19.6 / 23.6 cm，飞越 94.9 / 109.4 / 94.4 / 64.0 cm |
+| #86 跳球浏览器实机（probe-jump157-real） | **6/6 全绿**：30/45/60/72° 峰值 **6.54 / 13.07 / 19.61 / 23.65 cm**，飞越 94.9 / 109.4 / 94.4 / 64.0 cm |
+| #87 回合击球点复位（实机 V2） | **5/5 全绿**：逐杆打点 / 抬杆角恒 0、力度恒回 1.834（35% 基准） |
+| #88 拖到尽头（真机拇指落点） | R4 seek=1000 / R4b 静止 0 球在动 / R4c 末端豁免（注入 0.99 进球点仍 seek=1000）/ R4d **985 / 980 / 975 三档全部 seek=1000 且到终局** |
+| 回放 R1–R5 + R3b/c/d | **13/13 全绿**：横幅 0 条、吸附点可见且分色正确、落点与路径无关（差 0 档）、同档位往返位移差 0 米、零 pageerror |
+| #83 开局摆球（probe-placeball156） | **5/5 全绿**：序列 `["PlaceBall"]`、点击位移 (−0.7205,0)→(−0.7205,−0.2281)、确认进 Aim、开球推进 WatchShot |
+| #73 八球开球进黑 8（probe-eightball155） | **4/4 全绿**：黑 8 已 respot（−0.057, 0.6877）、未判负、3s 后流程健康 |
+| #75 删除二次确认（probe-delconfirm155） | **7/7 全绿**：确认框、取消保留、确认后列表刷新、零误删、零 pageerror |
+| 履历文件体检 | `node --check` 全量 JS 通过；履历 234 条版本条目、v1.5.7 首条、#84~#88 齐全 |
+| tsc | **22 条基线错误零新增** |
+| APK | `billiards-cn-v1.5.7.apk` 2.7 MB，`aapt2 dump badging` → `versionCode='261002600' versionName='1.5.7'`，仅 INTERNET 权限 |
+
+---
+
+# v1.5.6 发布说明
+
+**发布时间**：2026-10-01（北京时间）
+**版本**：v1.5.6 / versionCode **261001600**
+**主题**：跳球落地衰减 + 回放四项 + 开局摆球（#78~#83）
+
+（详见上一版发布包内归档）

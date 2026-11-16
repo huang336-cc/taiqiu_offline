@@ -20,6 +20,12 @@ import { TableGeometry } from "./tablegeometry"
 import { Settings, getSkin, getTableSkin } from "../utils/settings"
 import { buildSceneEnvironment, GROUND_Z } from "./sceneenvironment"
 import {
+  loadPoolTable,
+  applyPoolTableSkin,
+  loadRealCn8Table,
+  applyRealTableSkin,
+} from "./poolassets"
+import {
   getClothTexture,
   getClothNormalTexture,
   getFrameTexture,
@@ -81,6 +87,18 @@ export class Assets {
   rules: Rules
   background: Mesh
   table: Mesh
+  /**
+   * v1.7.0：当前桌是否来自外部资源包（pool_table.glb）。
+   * 换肤走 applyPoolTableSkin，而不是旧模型的 paintTable（后者依赖旧 GLTF
+   * 的材质名与缺 UV 修正逻辑，对新模型是错的）。
+   */
+  poolTable = false
+  /**
+   * v1.8.0：当前桌是写实中式八球桌（pool_table_real_cn8.glb）。
+   * 它只有一张 albedo 贴图，换肤走 applyRealTableSkin 的分区重着色，
+   * 与 pool_table.glb 的「按材质名写颜色」是两套完全不同的路径。
+   */
+  realTable = false
 
   /**
    * 当前 3D 场景环境（Request D-v3）：足球场/篮球场/雪山场景的真实几何环境。
@@ -133,6 +151,58 @@ export class Assets {
     room.position.set(0, 0, GROUND_Z + 15)
     this.background = room
     this.done()
+
+    /**
+     * v1.7.0：中式八球 / 九球（p8 桌型）改用外部资源包的米制新桌。
+     *
+     * 为什么只换 p8：新模型玩区 2.8165×1.3755 与 `TableGeometry` 的
+     * R×43 × R×21 **逐毫米一致**；斯诺克（3.569×1.778）与三库（UMB 2.96×1.48）
+     * 尺寸不同，硬套会袋口错位，仍用原 GLTF。加载失败（离线缺文件）则回落
+     * 到旧的 importGltf 路径，不阻断进游戏。
+     */
+    if (this.rules.asset.includes("p8.min")) {
+      /**
+       * v1.8.0 三级回退：写实中8桌 → 资源包程序化桌（可精确换肤）→ 旧 GLTF。
+       * 任一级加载失败都只降级、绝不阻断进游戏；离线缺文件时最后一级永远可用。
+       */
+      const mount = (g: Group, real: boolean) => {
+        g.traverse((child: any) => {
+          if (!child.isMesh) return
+          child.receiveShadow = true
+          child.castShadow = true
+        })
+        this.realTable = real
+        this.poolTable = !real
+        this.table = g as unknown as Mesh
+        TableMesh.mesh = g
+        this.done()
+      }
+      loadRealCn8Table()
+        .then((g) => mount(g, true))
+        .catch((e) => {
+          console.warn(
+            "[assets] 写实中8桌加载失败，回退资源包程序化桌:",
+            (e as Error)?.message
+          )
+          loadPoolTable()
+            .then((g) => mount(g, false))
+            .catch((e2) => {
+              console.warn(
+                "[assets] 新桌加载失败，回退旧 GLTF:",
+                (e2 as Error)?.message
+              )
+              this.realTable = false
+              this.poolTable = false
+              this.loadLegacyTable()
+            })
+        })
+      return
+    }
+    this.loadLegacyTable()
+  }
+
+  /** 旧 GLTF 桌（p8 / snooker / threecushion）加载路径，原样保留作回退 */
+  private loadLegacyTable() {
     importGltf(this.rules.asset, (m) => {
       this.rules.scaleTableModel?.(m.scene)
       // 皮肤着色必须对所有台尺寸生效。
@@ -245,6 +315,16 @@ export class Assets {
    * tableSkinId 同理传入（item 5 台球桌皮肤实时切换）。
    */
   recolorTable(scene, skinId?: string, tableSkinId?: string): void {
+    if (this.realTable) {
+      // v1.8.0 写实中8桌：整桌共用一张 albedo，按颜色分区换肤
+      applyRealTableSkin(scene, tableSkinId ?? Settings.get().tableSkin)
+      return
+    }
+    if (this.poolTable) {
+      // 新桌：只按材质名写四个参数化颜色（贴图是中性明度图）
+      applyPoolTableSkin(scene, tableSkinId ?? Settings.get().tableSkin)
+      return
+    }
     const cfg = Assets.tableCustomizationFor(skinId, tableSkinId)
     this.paintTable(scene, cfg, false)
   }

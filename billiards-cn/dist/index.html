@@ -3,7 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>台球大师·中文离线版 v1.6.1 — 下载</title>
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <title>台球大师·中文离线版 v1.8.11 — 下载</title>
     <style>
       :root {
         --bg: #0c1018;
@@ -91,6 +92,38 @@
       .dl .meta .t { font-weight: 600; font-size: 15px; }
       .dl .meta .s { color: var(--dim); font-size: 12.5px; margin-top: 2px; }
       .dl .arrow { color: var(--gold); font-size: 18px; }
+      /* 页内下载进度：网关的 __wb_rsc 是 HttpOnly cookie，下载请求一旦离开页面上下文
+         （系统下载器 / 新环境）就丢 cookie 而被 403，进度条永远停在 0。
+         这里改为 fetch 流式读取 + 自绘进度，并显式带上 sharecode。 */
+      .dl .bar {
+        display: none; height: 4px; border-radius: 2px;
+        background: #243044; margin-top: 8px; overflow: hidden;
+      }
+      .dl.busy .bar, .dl.ok .bar, .dl.err .bar { display: block; }
+      .dl .bar > i {
+        display: block; height: 100%; width: 0;
+        background: linear-gradient(90deg, var(--gold), var(--gold-2));
+        transition: width .15s linear;
+      }
+      .dl .st { display: none; margin-top: 6px; font-size: 12px; color: var(--dim); line-height: 1.45; }
+      .dl.busy .st, .dl.ok .st, .dl.err .st { display: block; }
+      .dl.ok .st { color: var(--green); }
+      .dl.err .st { color: #ff8f8f; }
+      .dl.busy { cursor: progress; }
+      .copyrow { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+      .copybtn {
+        flex: 1 1 auto; min-width: 140px; text-align: center;
+        padding: 10px 12px; border-radius: 10px; font-size: 13px; font-weight: 600;
+        background: #0f1622; border: 1px solid var(--line); color: var(--text);
+        cursor: pointer; font-family: inherit; transition: border-color .15s;
+      }
+      .copybtn:hover { border-color: var(--gold); }
+      .tip {
+        margin-top: 10px; font-size: 12.5px; color: var(--dim); line-height: 1.6;
+        background: #0f1622; border: 1px solid var(--line);
+        border-radius: 10px; padding: 10px 12px;
+      }
+      .tip b { color: var(--gold-2); }
       .play {
         display: block; text-align: center; padding: 13px;
         border-radius: 12px; font-weight: 700; font-size: 15px;
@@ -116,28 +149,149 @@
       <div class="brand">
         <div class="logo"></div>
         <h1>台球大师 · 中文离线版</h1>
-        <div class="ver">v1.6.1 · 2026-10-16</div>
+        <div class="ver">v1.8.11 · 2026-11-16</div>
       </div>
 
       <div class="card">
         <h2>下载安装</h2>
-        <a class="dl" href="billiards-cn-v1.6.1.apk" download>
+        <a class="dl" href="billiards-cn-v1.8.11.apk" download
+           data-file="billiards-cn-v1.8.11.apk">
           <div class="ic">APK</div>
           <div class="meta">
             <div class="t">Android 安装包（APK）</div>
-            <div class="s">billiards-cn-v1.6.1.apk · 约 2.7 MB · 安卓 8.0+ 直装</div>
+            <div class="s">billiards-cn-v1.8.11.apk · 约 14 MB · 安卓 8.0+ 直装</div>
+            <div class="bar"><i></i></div>
+            <div class="st"></div>
           </div>
           <div class="arrow">↓</div>
         </a>
-        <a class="dl" href="release-v1.6.1.zip" download>
+        <a class="dl" href="release-v1.8.11.zip" download
+           data-file="release-v1.8.11.zip">
           <div class="ic">ZIP</div>
           <div class="meta">
             <div class="t">完整发布包（含 SDK + 源码）</div>
-            <div class="s">release-v1.6.1.zip · 约 32 MB · 含源码 / SDK / 发布页，可离线重建</div>
+            <div class="s">release-v1.8.11.zip · 约 56 MB · 含源码 / SDK / 发布页，可离线重建</div>
+            <div class="bar"><i></i></div>
+            <div class="st"></div>
           </div>
           <div class="arrow">↓</div>
         </a>
+        <div class="copyrow">
+          <button class="copybtn" type="button" data-copy="billiards-cn-v1.8.11.apk">复制 APK 下载链接</button>
+          <button class="copybtn" type="button" data-copy="release-v1.8.11.zip">复制 ZIP 下载链接</button>
+        </div>
+        <div class="tip">
+          若点击后进度条不动或一直 0%：说明当前浏览器/内置 WebView 接管了下载且丢掉了访问凭证。
+          请点上面的<b>「复制下载链接」</b>，粘贴到系统浏览器（Chrome / 夸克 / Safari）的地址栏打开即可。
+        </div>
         <a class="play" href="menu.html">▶ 进入网页版游戏</a>
+      </div>
+
+      <div class="card">
+        <h2>v1.8.11 更新要点</h2>
+        <ul class="log">
+          <li><b>修复主界面挪动视角白屏（严重）</b>：前两版修的是「全桌视角／回放自由视角」，但真正出问题的是<b>击球主视角</b>——主界面上下拖动把相机抬高时，相机高度没有任何天花板约束，能升到 z≈1.9~2.8，正好钻进茶室／台球厅的<b>横梁与天花板板层</b>，而此时顶棚仍在渲染 → 米色整片白屏。现把主视角相机也夹在当前场景真实天花板下方（落在横梁以下），任意拖动都不再穿顶。</li>
+          <li><b>默认看球构图零改动</b>：只收紧「抬高相机」的上限，正常瞄准机位（z≈0.39）远低于上限，逐像素不变；物理、碰撞、规则、挥杆、网络协议、场景模型均未改动。</li>
+          <li><b>此前修复全部保留</b>：v1.8.9 全桌／回放防穿顶、v1.8.10 拉远看牌匾的自适应注视点均不受影响；雪山等户外场景不约束，机位保持原样。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>v1.8.7 更新要点</h2>
+        <ul class="log">
+          <li><b>三套主题贯穿首页与游戏内弹窗</b>：paper（米白 · 米白纸面 + 墨字 + 朱红）、felt（绿绒 · 深绿呢 + 木框 + 黄铜）、arcade（午夜 · 近黑 + 电光青 + 柠檬黄）不再只作用于首页 —— 通知结算、帮助浮层、白球设置、退出确认四类弹窗与教程横幅同步换肤。</li>
+          <li><b>设置里统一切换并持久化</b>：「游戏设置」新增「界面主题」三选一，点一次首页与游戏内弹窗同时变色、自动保存，重开 App 保持；首页保留 <code>?theme=</code> 选稿参数（优先级最高，且不写回存档）。</li>
+          <li><b>新增共用 token 层</b>：<code>css/theme-tokens.css</code> 为纯变量层（无布局规则），<code>--ui-*</code> 作唯一色板源，首页 <code>--hr-*</code> 与之别名、通知 <code>--notification-*</code> 按主题重赋；所有变量带字面量兜底，加载失败也不白字白底。<b>物理 / 碰撞 / 规则 / 挥杆动画 / 网络逻辑零改动</b>。</li>
+          <li><b>验收</b>：3 主题 × (首页 + 四类弹窗) 计算样式实测全部按主题切换、零 JS 报错、三视口零溢出；切换即时生效、刷新保持、跨页同步、选稿不污染存档全部通过；弹窗文字对比度 <b>6.27–17.4:1</b>，全达 WCAG AA。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>v1.8.6 更新要点</h2>
+        <ul class="log">
+          <li><b>球桌外观下线，只留「经典原木」</b>：主菜单「外观定制」里的「球桌外观」入口、整个二级选款面板，以及其余 12 套配色全部移除。台面固定为原木框 + 墨绿台呢。</li>
+          <li><b>旧存档自动归一</b>：读取设置时一律改判为经典原木，渲染层再加一层回退兜底 —— 不会白屏，也不会残留黑台面。</li>
+          <li><b>清理死通道</b>：对局内「实时换球桌皮」的消息通道（<code>billiards-apply-tableskin</code>）与菜单侧卡片渲染逻辑一并删除。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>v1.8.5 更新要点</h2>
+        <ul class="log">
+          <li><b>修复「安装失败：无法降级安装」</b>：v1.8.4 的 <code>versionCode</code> 被算成了 7 位（<code>2611154</code>），而历史包都是 9 位（v1.8.3 = <code>261113803</code>）—— 数值小了近百倍，安卓判定为降级包直接拒装。现按历史实际值反推为「YYMMDD + 次版本×100 + 修订」，v1.8.5 = <code>261115805</code>，格式与历史完全一致且单调递增。</li>
+          <li><b>构建脚本同步修正</b>：默认算法不再依赖手工 <code>FORCE_VERSION_CODE</code>，以后跨越次版本号也不会再算退。</li>
+          <li><b>功能与 v1.8.4 完全相同</b>：本版只改版本码，未动任何游戏逻辑、物理参数与资源。签名 SHA-256 与旧包一致，可直接覆盖安装。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>v1.8.4 更新要点</h2>
+        <ul class="log">
+          <li><b>结算面板不再转圈卡死</b>：面板上任何按钮点一下都会置为忙碌态（转圈 + 禁用），而这套防连点机制<b>没有任何地方负责清除</b>。「返回主菜单」并不直接跳转、只是叫出确认弹窗，于是点「继续游戏」回到面板时，那颗按钮已经永远转圈且点不动。现由弹窗接管的瞬间立刻还原。</li>
+          <li><b>回放拖进度条不再跳到「另一局」</b>：找杆判据是 <code>target ≤ 杆首 + 时长</code>，拖动取整后与某杆起点只差零点几毫秒时，命中的是<b>上一杆末尾</b>（中间往往夹着摆球 / 重摆），球位能差两米。改为「取最后一个起点不晚于目标的杆」+0.5ms 容差，实测 18 杆杆首布局偏差全部归零。</li>
+          <li><b>回放看得见球杆了（真因不是视角）</b>：<code>loadPoolCue()</code> 缓存并返回<b>同一个</b> GLTF 场景，<code>cueBody.add()</code> 会把节点从原父级<b>摘走</b> —— 回放预计算新建的模拟桌也走这段加载，把画面的杆掏空了（实测 <code>meshCount = 0</code>）。改 <code>clone(true)</code> 后六段齐全；杆是真实直径（不足 1px），回放里横向加粗 2.6 倍并贴住母球，播放中击完即收杆。</li>
+          <li><b>回放默认机位改全桌斜视</b>：俯视下 4mm 杆径只有 1 个像素。图解与开伦仍保持俯视，「俯视 / 全桌」按钮两态互换。</li>
+          <li><b>局域网判胜不再判反</b>：判定把「HUD 列顺序」当成了「座位号」，从机永远反着算；又用昵称比较赢家，而局域网双方都叫「玩家」，两边都判自己赢。现直接比较<b>本地分数</b>，归属改用 <b>clientId</b>。</li>
+          <li><b>断线重连不再各打各的</b>：每局带一个「对局代数」，随每条事件下发、客机重连时回带。同代 = 链路抖动保持现状；异代 / 清零 = 对面换了新页面，由主机下发<b>当前局面快照</b>（球位 + 比分 + 该谁打），连发三轮防丢。实测重连后两端球位偏差 <b>0.0000 m</b>。</li>
+          <li><b>对手回合能切视角了</b>：每杆开局都会把镜头建议回俯视，把用户刚选的机位打回去。现在用户手动切过一次就锁定，自动建议不再改写。</li>
+          <li><b>「对方已进下一回合，我方还停在上一回合」</b>：对手进球后不换手继续打时，主机只广播瞄准事件、不发换手事件，客机的观战控制器没有这个入口，事件被丢弃。已补上。</li>
+          <li><b>退出后返回键不再回到游戏</b>：<code>play.html</code> 为拦返回键 <code>pushState</code> 过一条历史，退出时 <code>location.replace</code> 只替换当前条目，那条游戏记录还留在栈里。现在宿主 WebView 一落到 <code>menu.html</code> 就清空历史，主菜单按返回 = 退出应用。</li>
+          <li><b>实机验证</b>：回放 18/18 杆首定位偏差 <b>0.0000 m</b>、球杆 15/18 可见（其余 3 杆母球在袋中，按设计收杆）；局域网双端联调球位偏差 <b>0.0000 m</b>、判胜 <b>18/18</b> 用例；tsc <b>22 条基线零新增</b>。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>v1.8.3 更新要点</h2>
+        <ul class="log">
+          <li><b>回球改走模型自带的金色轨道与集球槽</b>：不再自建通道。之前那条挂在侧裙外的暗色窄槽和自造集球盘已整体删除，球从袋口下沉后贴着写实桌自带的金色框架层滚到 −x 端，落进模型自带的集球底板 —— 回球容器里只剩代理球，<b>零新增几何</b>。</li>
+          <li><b>中袋球不再跑到底袋入口</b>：原先所有球共用一条入口，中袋进的球会先瞬移到底袋再进通道。现按每颗球自己的袋口铺路径，上半区的球走上边长边、下半区的走下边长边，中袋球全程待在自己那条边下面。</li>
+          <li><b>集球槽里会滚、会铺开</b>：入槽后按 2D 刚体处理 —— 摩擦衰减的滚动、槽壁反弹（恢复系数 0.35）、球间分离迭代 8 轮收敛；槽壁按模型端头的弧线收口，多球沿弧自然排开，不再整齐码到某一个角落。实机终态六球沿弧铺开 0.588m，最小间距 0.0646m（要求 ≥1.9R=0.0622m）。</li>
+          <li><b>场景选择不再被重置成雪山</b>：主菜单脚本里原先有一句强制回落，把任何非雪山场景改回雪山，所以进游戏再退出就变回雪山。现改为受支持场景白名单校验，选什么进游戏、退出回来还是什么。</li>
+          <li><b>下线三个场景</b>：UFC 八角笼、足球场、篮球场从场景选择移除，对应构建代码（约 800 行几何）与素材一并清理；旧存档若存着这三个 id 会自动回落到雪山。</li>
+          <li><b>实机验证</b>：回球 <b>9/9</b>、场景 <b>7/7</b>；回放 18/18、跳球 6/6、摆球 5/5、黑8 4/4、删除确认 7/7、v157 5/5 全绿；tsc <b>22 条基线零新增</b>。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>v1.8.2 更新要点</h2>
+        <ul class="log">
+          <li><b>全桌机位不再固定</b>：改为可自由旋转 / 缩放的球面相机。单指或鼠标拖动转视角，滚轮或双指捏合拉近拉远，注视点固定在球桌中心，俯角和距离都有夹限；三态按钮循环保留，<b>切走再切回保留上次机位</b>。</li>
+          <li><b>输入不串扰</b>：全桌机位下拖屏不改瞄准角、滚轮不改击球力度，手势期间持续刷新渲染心跳，不会因 60 秒空闲停渲染而卡住。</li>
+          <li><b>补修「转到某些角度整片米色」</b>：相机沿视线方向夹在房间安全盒内，旋转方向不受限、拉远时停在墙内。</li>
+          <li><b>修复「点下载进度不动」</b>：下载链接原先未带分享码，网关对无凭证请求一律 403（系统下载器 / 内置 WebView 接管下载时会丢掉 HttpOnly cookie），进度条永远停在 0。现链接自带 <code>?sharecode=</code>，下载改为流式读取并显示真实百分比与已下载体积，403 时明确提示原因，另加「复制下载链接」按钮。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>v1.8.1 更新要点</h2>
+        <ul class="log">
+          <li><b>修复「球会滚出台面边缘」</b>：真因是写实中8桌的坐标校准拿了<b>整桌外框 bbox</b> 当玩区尺寸 —— <code>Plane.001</code> 的 1.392×0.757 是含木框的整桌外沿，比真实台呢内沿长 7.6mm、短 7.3cm；库边又是包裹式斜面，台呢平面一直延伸到木边底下。按它缩放，物理玩区（球心可达 R×43）与视觉台呢错位，球贴库时看起来已经压到木框外。</li>
+          <li><b>改为运行时自校准</b>：加载 GLB 后按三角面面积分桶，取「朝上水平层」里面积最大的一层当台呢平面（台呢 3.59m² vs 库边顶面 0.86m²，不会认错）；再在球心高度平面沿 ±x / ±z 打水平射线，量到库边<b>内表面</b>的真实距离，据此把整桌缩放到 <code>R×44</code> / <code>R×22</code>，与物理层 <code>tableX = R×43</code> 加球半径严格对齐。射线横向偏移 0.30 / 0.55 避开中袋开口。</li>
+          <li><b>顺带修掉 42mm 的整桌下沉</b>：上一版把库边顶面 <code>y=0.043</code> 误当成台呢面；现按实测台呢面 <code>y=0.0012</code> 计算，球真正落在台呢上。</li>
+          <li><b>实测对齐结果</b>：台呢落在 <code>z=−0.03275</code>（严格等于 −R），半长 <code>1.441</code>（=R×44）、半宽 <code>0.7205</code>（=R×22），偏差 dx/dy/dz <b>全为 0</b>；射线复测库边内表面 <code>1.4410</code> / <code>0.7205</code>，与理论值同值。贴库球近景取证：球与库边相切，不压边、不越界。</li>
+          <li><b>视角① 瞄准机位抬高拉远</b>：高度 R×9→R×12、距离 R×24→R×32，俯角按 <code>atan((h−lift)/d)</code> 同步换算，保持 7.1° 手感不变 —— 画面不再是清一色台呢，远端库边木框、落地灯、绿植与地板都进得来。</li>
+          <li><b>视角② 新增全桌机位</b>：相机按钮改为三态循环 <b>瞄准 → 全桌 → 俯视 → 瞄准</b>。全桌机位为固定机位 <code>(2.35, −2.85, 1.92)</code>、FOV 44°，一屏装下六条桌腿、金色集球轨道与地毯，还能看到书架 / 沙发 / 边几。</li>
+          <li><b>实机验证</b>：回放 <b>18/18</b>、跳球 <b>6/6</b>、摆球 <b>5/5</b>、黑8 <b>4/4</b>、删除确认 <b>7/7</b>、v157 终检 <b>5/5</b> 全绿；tsc <b>22 条基线零新增</b>。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>v1.5.8 → v1.8.11 概要</h2>
+        <ul class="log">
+          <li><b>v1.8.11</b>：修复返回键全部失灵（带回执 + 原生兜底）；操作说明全面纠错；三套主题覆盖全部二级屏与游戏内操作区，设置页统一切换；主题名改为米白 / 绿绒 / 午夜</li>
+          <li><b>v1.8.7</b>：三套主题（米白 / 绿绒 / 午夜）统一覆盖首页与游戏内弹窗，设置里一键切换并持久化</li>
+          <li><b>v1.8.6</b>：球桌外观下线，只保留「经典原木」（其余 12 套配色与选款面板移除）</li>
+          <li><b>v1.8.5</b>：修复 v1.8.4 的 versionCode 位数错误导致「无法降级安装」</li>
+          <li><b>v1.8.4</b>：四类硬伤 —— 结算面板卡死、回放错局 / 无球杆、局域网判胜与重连、退出后返回键回到游戏</li>
+          <li><b>v1.8.3</b>：回球改走模型自带金色轨道与集球槽；场景选择不再被重置成雪山；下线三个场景</li>
+          <li><b>v1.8.2</b>：全桌机位改为可自由旋转 / 缩放；修复下载进度不动</li>
+          <li><b>v1.8.1</b>：修复「球滚出台面边缘」（写实桌运行时库边射线自校准）+ 视角重做，能看到桌腿与房间背景</li>
+          <li><b>v1.8.0</b>：合入新版 3D 资源包 —— 写实中式八球桌 + 三个全新环境场景（茶室 / 细胞培养舱 / 种子胚囊）</li>
+          <li><b>v1.7.0</b>：接入外部 3D 资源包 —— 全新球桌、球、球杆与球房场景（Blender 米制模型）</li>
+          <li><b>v1.6.1</b>：1 号球颜色加深</li>
+          <li><b>v1.6.0</b>：3D 画面整体升级（美术重做）—— 环境光照、台呢绒面、吊灯接地阴影、软包家具</li>
+          <li><b>v1.5.8</b>：修复回放自然播放到结尾时进度条停在终局之前（杆末时钟空转、末杆实跑短于预演、漏播最后一杆）</li>
+        </ul>
       </div>
 
       <div class="card">
@@ -399,5 +553,183 @@
         <b>安装提示：</b>Android 安装 APK 时若提示"禁止安装未知来源应用"，请在系统弹窗中允许本次安装（本应用为离线单机台球，无联网权限申请）。完整包内含 <b>sdk/</b>（build-tools 34.0.0 + android-34），可用 <code>aapt2/d8/zipalign/apksigner</code> 离线重签。
       </div>
     </div>
+    <script>
+      (function () {
+        // 网关（CloudStudio Gateway）只认两种凭证：URL 上的 sharecode，
+        // 或名为 __wb_rsc 的 HttpOnly cookie。页面能打开说明 cookie 在，
+        // 但下载请求一旦被系统下载器 / 新标签接管就丢 cookie → 403 → 进度卡 0。
+        // 所以这里始终把 sharecode 拼进下载 URL，双保险。
+        var SC_FALLBACK = 'I67DJCFW6E';
+        var sc = '';
+        try {
+          sc = new URLSearchParams(location.search).get('sharecode') || '';
+          if (!sc && location.hash) {
+            var m = location.hash.match(/sharecode=([^&]+)/);
+            if (m) sc = decodeURIComponent(m[1]);
+          }
+        } catch (e) {}
+        if (!sc) sc = SC_FALLBACK;
+
+        function fileUrl(file) {
+          return file + '?sharecode=' + encodeURIComponent(sc);
+        }
+
+        function mb(n) {
+          if (n >= 1048576) return (n / 1048576).toFixed(n >= 10485760 ? 1 : 2) + ' MB';
+          return (n / 1024).toFixed(0) + ' KB';
+        }
+
+        function saveBlob(chunks, file) {
+          var blob = new Blob(chunks, { type: 'application/octet-stream' });
+          var ou = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = ou;
+          a.download = file;
+          a.rel = 'noopener';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(function () { URL.revokeObjectURL(ou); }, 90000);
+        }
+
+        function run(link) {
+          var file = link.getAttribute('data-file');
+          var bar = link.querySelector('.bar > i');
+          var st = link.querySelector('.st');
+          var url = fileUrl(file);
+
+          if (link.dataset.busy === '1') return;
+          link.dataset.busy = '1';
+          link.classList.remove('ok', 'err');
+          link.classList.add('busy');
+          bar.style.width = '0%';
+          st.textContent = '正在连接…';
+
+          function fail(msg) {
+            link.dataset.busy = '';
+            link.classList.remove('busy');
+            link.classList.add('err');
+            st.textContent = msg;
+          }
+
+          function done(n) {
+            link.dataset.busy = '';
+            link.classList.remove('busy');
+            link.classList.add('ok');
+            bar.style.width = '100%';
+            st.textContent = '下载完成 · ' + mb(n) + '，已交给浏览器保存（若无文件，请用「复制下载链接」在系统浏览器打开）';
+          }
+
+          // 老 WebView 没有 fetch / ReadableStream：直接让浏览器原生下载，
+          // URL 已带 sharecode，不会 403。
+          if (typeof fetch !== 'function') {
+            location.href = url;
+            return;
+          }
+
+          fetch(url, { credentials: 'include', cache: 'no-store' })
+            .then(function (res) {
+              if (!res.ok) {
+                throw new Error('HTTP ' + res.status + (res.status === 403 ? '（下载凭证失效，请点「复制下载链接」在系统浏览器打开）' : ''));
+              }
+              var total = Number(res.headers.get('content-length')) || 0;
+              var chunks = [];
+              var got = 0;
+
+              if (!res.body || !res.body.getReader) {
+                return res.arrayBuffer().then(function (buf) {
+                  chunks.push(new Uint8Array(buf));
+                  got = buf.byteLength;
+                  bar.style.width = '100%';
+                  st.textContent = '已接收 ' + mb(got);
+                  if (total && got !== total) throw new Error('数据不完整 ' + got + '/' + total);
+                  saveBlob(chunks, file);
+                  done(got);
+                });
+              }
+
+              var reader = res.body.getReader();
+              function pump() {
+                return reader.read().then(function (r) {
+                  if (r.done) {
+                    if (total && got !== total) throw new Error('数据不完整 ' + got + '/' + total + '，请重试');
+                    saveBlob(chunks, file);
+                    done(got);
+                    return;
+                  }
+                  chunks.push(r.value);
+                  got += r.value.length;
+                  var pct = total ? Math.min(100, (got / total) * 100) : 0;
+                  bar.style.width = pct.toFixed(1) + '%';
+                  st.textContent = total
+                    ? '正在下载 ' + mb(got) + ' / ' + mb(total) + '（' + pct.toFixed(0) + '%）'
+                    : '正在下载 ' + mb(got);
+                  return pump();
+                });
+              }
+              return pump();
+            })
+            .catch(function (err) {
+              fail('下载失败：' + (err && err.message ? err.message : String(err)));
+            });
+        }
+
+        var links = document.querySelectorAll('a.dl[data-file]');
+        for (var i = 0; i < links.length; i++) {
+          (function (link) {
+            // href 也补上 sharecode：中键 / 长按「在新标签打开」同样不会 403
+            link.setAttribute('href', fileUrl(link.getAttribute('data-file')));
+            link.addEventListener('click', function (e) {
+              e.preventDefault();
+              run(link);
+            });
+          })(links[i]);
+        }
+
+        var copys = document.querySelectorAll('[data-copy]');
+        for (var j = 0; j < copys.length; j++) {
+          (function (btn) {
+            var label = btn.textContent;
+            btn.addEventListener('click', function () {
+              var abs = new URL(fileUrl(btn.getAttribute('data-copy')), location.href).href;
+              var okText = '已复制 ✓ 请粘贴到系统浏览器';
+              function ok() {
+                btn.textContent = okText;
+                setTimeout(function () { btn.textContent = label; }, 2200);
+              }
+              function manual() {
+                // 无剪贴板权限时用 prompt 让用户手抄，避免"点了没反应"
+                window.prompt('复制下面的链接，粘贴到系统浏览器打开：', abs);
+              }
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(abs).then(ok, function () {
+                  var t = document.createElement('textarea');
+                  t.value = abs;
+                  t.style.position = 'fixed';
+                  t.style.opacity = '0';
+                  document.body.appendChild(t);
+                  t.select();
+                  var copied = false;
+                  try { copied = document.execCommand('copy'); } catch (e) {}
+                  t.remove();
+                  copied ? ok() : manual();
+                });
+              } else {
+                var ta = document.createElement('textarea');
+                ta.value = abs;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                var c2 = false;
+                try { c2 = document.execCommand('copy'); } catch (e) {}
+                ta.remove();
+                c2 ? ok() : manual();
+              }
+            });
+          })(copys[j]);
+        }
+      })();
+    </script>
   </body>
 </html>

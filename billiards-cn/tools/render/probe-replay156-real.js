@@ -676,7 +676,16 @@ async function main() {
   const d2 = await tmo(page.evaluate(G), 8000, "d2")
   const db2 = await tmo(page.evaluate(BOARD), 8000, "db2")
   const ddiff = boardDiff(db1, db2)
-  ok("R3d_跨杆往返画面一致", ddiff <= 0.02 && d1.seek === d2.seek && Math.abs(d1.seek - SEEK_B) <= 26, {
+  /**
+   * v1.8.1：`d1.seek === d2.seek` 放宽到 ≤2 档。
+   *
+   * 这条验的是「往返同一档位后画面一致」，而画面一致性由 `ddiff`
+   * （球位移最大差，阈值 0.02m）严格保证 —— 实测 ddiff 恒为 0。
+   * seek 是**进度条 UI 的量化读数**（0~1000 档），两次 setSeek 之间
+   * 只要有一帧播放推进或 1px 落点差异就会差 1~2 档（=0.1~0.2%），
+   * 与画面无关。原判据把 UI 抖动当成画面不一致，属于口径过严。
+   */
+  ok("R3d_跨杆往返画面一致", ddiff <= 0.02 && Math.abs(d1.seek - d2.seek) <= 2 && Math.abs(d1.seek - SEEK_B) <= 26, {
     最大球位移差: ddiff, 对齐档位: SEEK_B, d1T: d1.globalT, d2T: d2.globalT, d1idx: d1.idx, d2idx: d2.idx,
     // v1.6.0：补打实际 seek —— 原判据只写 `d1.seek === SEEK_B` 却不打印实际值，
      // 失败时无法判断是「差几档（实跑短于预演的固有夹取）」还是「真跑偏」。
@@ -819,6 +828,18 @@ async function main() {
     nat = await tmo(page.evaluate(G), 8000, "nat")
     if (nat.seek >= 995) break
     await sleep(500)
+  }
+  /**
+   * v1.8.1：进度条到 995 之后**再等球停稳**（最多 20s）。
+   * 软件渲染帧率低时，进度条已经读满、最后一杆的球还在滚，直接查
+   * inMotion() 会读到 1 —— 这是采样时机问题，不是终局没到。
+   * 判定标准不变：20s 后仍在动就算失败。
+   */
+  const settleT0 = Date.now()
+  while (Date.now() - settleT0 < 20000) {
+    const mv = await tmo(page.evaluate(() => window.container.table.balls.filter((b) => b.inMotion()).length), 8000, "natSettle")
+    if (mv === 0) break
+    await sleep(400)
   }
   const natMv = await tmo(page.evaluate(() => window.container.table.balls.filter((b) => b.inMotion()).length), 8000, "natMv")
   const natBoard = await tmo(page.evaluate(BOARD), 8000, "natBoard")

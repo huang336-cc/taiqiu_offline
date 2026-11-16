@@ -1,6 +1,10 @@
 import { MessageRelay } from "./messagerelay"
 import { BeginEvent } from "../../events/beginevent"
+import { WatchEvent } from "../../events/watchevent"
+import { ScoreEvent } from "../../events/scoreevent"
+import { StartAimEvent } from "../../events/startaimevent"
 import { EventUtil } from "../../events/eventutil"
+import { Session } from "./session"
 import { Container } from "../../container/container"
 import { ruleName } from "../../utils/i18n"
 
@@ -70,6 +74,19 @@ interface Envelope {
   d?: string
   ruletype?: string
   name?: string
+  /**
+   * v1.8.4：对局代数（epoch）。
+   *
+   * 病根（「重新开局后断线重连，从机直接重新开局，主机还在旧球局」）：
+   * 两端只靠 hello 是否收到来判断开局，完全没有「这还是不是同一局」的概念。
+   * 客机页面重载后本地对局状态清零，主机却还握着上一局，于是各打各的。
+   *
+   * 现在主机在开局时生成 epoch 并随每条 ev 下发；客机 hello 时回带自己
+   * 已知的 epoch（新页面为 0）。主机据此判断：
+   *   · 同一个 epoch  → 只是链路抖动，沿用当前对局，不重开；
+   *   · epoch 不同/0  → 对面是新页面，**双方一起重开**，保证状态一致。
+   */
+  epoch?: number
 }
 
 /**
@@ -108,6 +125,14 @@ export class LanRelay implements MessageRelay {
   private callback: ((message: string) => void) | null = null
   private gotHello = false
   private closed = false
+
+  /**
+   * v1.8.4：当前对局代数。主机在建链时生成，客机从 ev 信封学习。
+   * 0 = 「我这边还没有任何对局状态」（新页面 / 刚重载）。
+   */
+  private epoch = 0
+  /** 主机侧：是否已经开过一局（决定 hello 是「首次开局」还是「重连」） */
+  private begun = false
 
   // ---- v1.3.73：客机端连接状态机 ----
   private joinState:
@@ -262,6 +287,11 @@ export class LanRelay implements MessageRelay {
   }
 
   private send(env: Envelope): void {
+    // v1.8.4：主机下发的每条对局事件都挂上当前 epoch，客机据此判断
+    // 「我收到的还是不是同一局」。
+    if (this.role === "host" && env.k === "ev" && env.epoch === undefined) {
+      env.epoch = this.epoch
+    }
     const json = JSON.stringify(env)
     // v1.3.81：优先走原生通道
     const nb = this.nativeBridge()
@@ -327,10 +357,22 @@ export class LanRelay implements MessageRelay {
       } else if (env.k === "ev" && env.d) {
         // v1.3.82：收到真实对局事件 → 说明主机已经在广播，hello 使命完成
         this.stopHelloResend()
+        // v1.8.4：记下主机当前的对局代数，下次 hello（重连）时回带。
+        if (env.epoch !== undefined) {
+          this.epoch = env.epoch
+        }
         this.callback?.(env.d)
       }
-    } catch {
-      // 忽略非法消息
+    } catch (e) {
+      /**
+       * v1.8.4：这里以前是空 catch。
+       *
+       * 代价是致命的：onHello 里「推 BeginEvent 开局」就在这个 try 内，
+       * 一旦开局路径上任何一行抛异常（实测就是开局从未发生、两端都停在
+       * Init，且控制台干干净净），从日志上完全看不出原因 —— 只能靠猜。
+       * 现在至少留一条 warn，带信封内容。
+       */
+      console.warn("[lan] 信封处理失败:", (e as Error)?.message, raw.slice(0, 120))
     }
   }
 
@@ -339,7 +381,14 @@ export class LanRelay implements MessageRelay {
   /** 客机端发一条 hello（幂等，主机侧有 gotHello 去重） */
   private sendHello(): void {
     this.helloSent += 1
-    this.send({ k: "hello", ruletype: this.ruletype, name: "玩家" })
+    // v1.8.4：带上本端已知的对局代数（新页面为 0）。主机据此判断
+    // 「对面只是链路重连」还是「对面已经重载成新页面，需要双方重开」。
+    this.send({
+      k: "hello",
+      ruletype: this.ruletype,
+      name: "玩家",
+      epoch: this.epoch,
+    })
   }
 
   /**
@@ -379,6 +428,10 @@ export class LanRelay implements MessageRelay {
       this.graceTimer = null
       if (this.closed || this.gotHello) return
       this.pushSelfDiag("宽限期到，主机主动开局（未收到 hello）")
+      // v1.8.4：宽限开局同样要建立会话代数，否则后续 hello 会被误判成
+      // 「对手换了新页面」而重复下发快照。
+      this.epoch = this.makeEpoch()
+      this.begun = true
       this.dismissRoom()
       this.notify("局域网对战", "对手已就绪，你先开球")
       this.callback?.(EventUtil.serialise(new BeginEvent()))
@@ -948,7 +1001,7 @@ export class LanRelay implements MessageRelay {
     }
   }
 
-  /** 主机收到 hello：校验规则一致后开局（主机先开球） */
+  /** 主机收到 hello：首次开局；重连则同步当前局面（绝不各开各的新局） */
   private onHello(env: Envelope): void {
     // v1.3.82：去掉 `if (this.gotHello) return` 的一次性拦截。
     //
@@ -956,9 +1009,6 @@ export class LanRelay implements MessageRelay {
     // gotHello 本来就是 false，理论上不受影响；但客机现在会**重发** hello
     // （见 scheduleHelloResend），若这里仍按「只认第一条」拦截，第二条
     // hello 会被丢掉 —— 而第一条可能恰好落在主机还没接管的空窗里。
-    // onHello 本身是幂等的（开局 + 通知），重复执行只是多推一次 BeginEvent，
-    // 由 Container 侧的去重负责；比「永远不开局」安全得多。
-    this.gotHello = true
     this.clearGraceTimer()
     if (env.ruletype && env.ruletype !== this.ruletype) {
       this.dismissRoom()
@@ -970,9 +1020,106 @@ export class LanRelay implements MessageRelay {
       )
       return
     }
+
+    // v1.8.4：区分「链路重连」与「对面换了新页面」。
+    //
+    // 用户的病灶：重新开局后断线重连，从机页面重载、本地状态清零，主机却
+    // 还握着上一局的球桌 —— 旧代码收到 hello 就往本地注入 BeginEvent，
+    // 而对局中的控制器没有 handleBegin，这条事件被忽略 → 主机继续旧局，
+    // 客机从 Init 重新开局，两边彻底不同步；再重连一次又偶然对上。
+    //
+    // 现在以 epoch 判定：同代 = 只是链路抖动，保持现状；异代/0 = 对面是新
+    // 页面，直接下发当前局面快照（球位 + 比分 + 该谁打），让客机原地跟上。
+    const peerEpoch = env.epoch ?? 0
+    const sameSession = this.begun && peerEpoch !== 0 && peerEpoch === this.epoch
+
+    this.gotHello = true
     this.dismissRoom()
-    this.notify("局域网对战", "对手已就绪，你先开球")
-    this.callback?.(EventUtil.serialise(new BeginEvent()))
+
+    if (sameSession) {
+      this.pushSelfDiag(`对手链路重连（epoch=${peerEpoch}），沿用当前对局`)
+      return
+    }
+
+    const firstEver = !this.begun
+    this.epoch = this.makeEpoch()
+    this.begun = true
+
+    if (firstEver) {
+      this.notify("局域网对战", "对手已就绪，你先开球")
+      this.callback?.(EventUtil.serialise(new BeginEvent()))
+      return
+    }
+
+    this.pushSelfDiag(
+      `对手换了新页面（epoch=${peerEpoch}），下发当前局面快照 epoch=${this.epoch}`
+    )
+    this.notify("局域网对战", "对手已重新连接，正在同步当前局面")
+    this.sendSnapshot()
+  }
+
+  /** v1.8.4：生成对局代数（不依赖随机源，取时间戳即可） */
+  private makeEpoch(): number {
+    return (Date.now() & 0x7fffffff) || 1
+  }
+
+  /**
+   * v1.8.4：把主机当前局面发给刚重连的客机。
+   *
+   * 只发「状态」不发「重开」：客机页面虽然重载了，但它能拿到完整球位、
+   * 当前比分，以及该不该它打 —— 于是能原地接上，不用把主机这一局也毁掉。
+   *
+   * 顺序很重要：先 WatchEvent（客机 Init.handleWatch → WatchAim，同时把
+   * playerIndex 置 1），再 ScoreEvent（比分按座位号下发），最后如果是客机
+   * 的回合，补一个 StartAimEvent 让 WatchAim 切到 Aim。
+   */
+  private sendSnapshot(): void {
+    /**
+     * v1.8.4：连发三轮。
+     *
+     * 客机刚重载时，页面可能还没把 relay 的订阅回调接上（容器 init 与
+     * WS 建链是两条并行的异步链），这一瞬投过去的事件会被丢；真机实测
+     * 「重连后客机停在 Init、球位还是开局那一套」就是偶发丢一次造成的。
+     * 快照是幂等的（SetBall 式覆盖 + 比分覆盖），多发两轮没有副作用，
+     * 却把「偶发同步成功」变成「稳定同步」。
+     */
+    this.sendSnapshotOnce()
+    if (this.closed) return
+    globalThis.setTimeout(() => {
+      if (!this.closed) this.sendSnapshotOnce()
+    }, 900) as unknown as number
+    globalThis.setTimeout(() => {
+      if (!this.closed) this.sendSnapshotOnce()
+    }, 2000) as unknown as number
+  }
+
+  private sendSnapshotOnce(): void {
+    const c = this.container
+    if (!c) return
+    try {
+      this.send({
+        k: "ev",
+        d: EventUtil.serialise(new WatchEvent(c.table.serialise())),
+      })
+      const s = Session.getInstance()
+      this.send({
+        k: "ev",
+        d: EventUtil.serialise(
+          new ScoreEvent(s.myScore(), s.opponentScore(), 0, 0)
+        ),
+      })
+      const name = c.controller?.name
+      const hostIsPlaying =
+        name === "Aim" || name === "PlaceBall" || name === "PlayShot"
+      if (!hostIsPlaying) {
+        this.send({
+          k: "ev",
+          d: EventUtil.serialise(new StartAimEvent()),
+        })
+      }
+    } catch (e) {
+      this.pushSelfDiag("下发局面快照失败：" + String(e))
+    }
   }
 
   // ---------------- v1.3.73：客机端连接状态机 ----------------

@@ -2,6 +2,7 @@ import { R } from "../model/physics/constants"
 import { up } from "../utils/three-utils"
 import { Settings, getCueTheme, getSkin, getTableSkin } from "../utils/settings"
 import { getCueTexture, getCueButtTexture } from "./cuetexturefactory"
+import { loadPoolCue } from "./poolassets"
 
 /**
  * 按权重把 `a` 往 `b` 混合，返回 0xRRGGBB。
@@ -169,6 +170,16 @@ export class CueMesh {
   }
 
   static createCue(tip, but, length): CueMeshes {
+    /**
+     * v1.7.0：接入外部资源包的球杆模型（pool_cue.glb）。
+     *
+     * 结构沿用旧约定：cueBody 是一个「沿 +Y 居中、杆头在 +Y」的组，
+     * 外面再整体绕 Z 转 −90° 让杆身沿 +X、杆头指向白球；位置与抬杆
+     * 逻辑一行都不用改。
+     *
+     * 异步替换：GLB 到达前先挂程序化杆（占位），到达后整组换掉 ——
+     * 否则开局头两百毫秒会「没有球杆」。
+     */
     const cueBody = this.cueGeometry(tip, but, length)
     const tiltGroup = new Group()
     const mesh = new Group()
@@ -177,11 +188,82 @@ export class CueMesh {
       new Matrix4().identity().makeRotationAxis(up, -Math.PI / 2)
     )
     cueBody.position.set(-length / 2 - R, 0, R * 0.12)
-    tiltGroup.rotation.y = this.baseTilt
     tiltGroup.add(cueBody)
     mesh.add(tiltGroup)
     // 初始套用球杆主题（item 2）：auto 用皮肤色，具体主题套程序化贴图
     this.applyCueTheme(cueBody, Settings.get().cueTheme, Settings.get().skin)
+
+    loadPoolCue()
+      .then((source) => {
+        if (!cueBody.parent) return // 已被销毁
+        /**
+         * v1.8.4：**必须 clone**。
+         *
+         * loadPoolCue() 缓存并返回同一个 gltf.scene。旧代码直接
+         * `cueBody.add(glb)` —— three 的 add 会把节点从原父级摘走，于是
+         * **第二根球杆创建时，第一根的杆身被整个掏空**（cueBody.children=0，
+         * 屏幕上再也看不到球杆）。
+         *
+         * 触发点很隐蔽：回放的 precomputeAllShots() 会用 rules.table() 新建
+         * 一张模拟桌，那张桌也带 Cue，也走这段加载 —— 结果真实画面的杆被
+         * 模拟桌的杆抢走。用户看到的「回放模式不显示球杆」就是这么来的，
+         * 而且它跟视角、加塞、击球动画都无关。
+         *
+         * clone(true) 深拷贝节点树（材质共享，不额外占显存）。
+         */
+        const glb = source.clone(true) as Group
+        // clone 会继承「上一根杆」被改过的变换，先复位再按本杆长度归一化。
+        glb.position.set(0, 0, 0)
+        glb.rotation.set(0, 0, 0)
+        glb.scale.setScalar(1)
+        // 资源包：杆尾 x=0 → 杆头 x=1.455（米制）。归一化到本工程长度，
+        // 平移使杆身沿 X 居中，再绕 Z 转 +90° 变成「沿 +Y、杆头朝上」。
+        const SRC_LEN = 1.455
+        const k = length / SRC_LEN
+        glb.scale.setScalar(k)
+        /**
+         * ⚠️ 平移轴是 **Y** 不是 X。
+         *
+         * 子节点的局部矩阵是 T·R·S —— 先旋转再平移，且平移量写在**父级**
+         * 坐标系里。杆身绕 Z 转 +90° 后，几何的 +X 已经变成 +Y；此时若按
+         * X 平移 −L/2，杆会被整体推到侧面（实机表现：瞄准视角里球杆消失）。
+         * 正确做法是按旋转后的轴（Y）把杆身居中。
+         */
+        glb.rotation.z = Math.PI / 2
+        glb.position.y = -length / 2
+        /**
+         * 按材质名把六段映射回旧名字 —— 工程里的换肤（applySkin）、
+         * 主题（applyCueTheme）以及探针都靠这些名字定位。
+         * GLTF 每个 primitive 是一个独立 Mesh，正好一段一个。
+         */
+        const NAME_MAP: Record<string, string> = {
+          cue_shaft: "cueShaft",
+          cue_butt: "cueButt",
+          cue_ferrule: "cueFerrule",
+          cue_tip: "cueTip",
+          cue_wrap: "cueWrap",
+          brass: "cueBrass",
+        }
+        glb.traverse((o: any) => {
+          if (!o.isMesh) return
+          const mn = o.material && o.material.name
+          if (mn && NAME_MAP[mn]) o.name = NAME_MAP[mn]
+          o.castShadow = true
+          o.receiveShadow = true
+        })
+        // 先清掉占位几何，再挂新杆
+        cueBody.clear()
+        cueBody.add(glb)
+        CueMesh.applyCueTheme(
+          cueBody,
+          Settings.get().cueTheme,
+          Settings.get().skin
+        )
+      })
+      .catch((e) => {
+        console.warn("[cue] 新球杆加载失败，保留程序化杆:", (e as Error)?.message)
+      })
+
     return { mesh, tiltMesh: tiltGroup, cueBody }
   }
 

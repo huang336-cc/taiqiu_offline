@@ -4,6 +4,7 @@ import { PlaceBall } from "./placeball"
 import { ControllerBase } from "./controllerbase"
 import { PlaceBallEvent } from "../events/placeballevent"
 import { RerackEvent } from "../events/rerackevent"
+import { AimEvent } from "../events/aimevent"
 import { Session } from "../network/client/session"
 import { BeginEvent } from "../events/beginevent"
 import { HitEvent } from "../events/hitevent"
@@ -38,6 +39,20 @@ export class WatchShot extends ControllerBase {
   override handleStartAim(_) {
     this.container.rules.startTurn()
     return new Aim(this.container)
+  }
+
+  /**
+   * v1.8.4：对手进球后**不换手**（同一回合继续打）时，主机不会发
+   * StartAimEvent —— 它只是继续瞄准并广播 AimEvent。而客机在对手击球静止后
+   * 停在 WatchShot，旧代码里 WatchShot 没有 handleAim，这条 AimEvent 被
+   * 直接丢弃，于是客机永久停在上一杆的观战画面，比分/球位都落后一回合
+   * （用户报的「对方已击球进下一回合，我方还停在上一个回合」）。
+   *
+   * 现在收到对手的瞄准事件即转入观战瞄准，跟随对手的球位与角度。
+   */
+  override handleAim(event: AimEvent) {
+    const watching = new WatchAim(this.container)
+    return watching.handleAim(event)
   }
 
   /**

@@ -34,7 +34,12 @@ import { getBilliardHallEnvironment, getOutdoorSkyEnvironment } from "./environm
 import { Assets } from "./assets"
 import { Snooker } from "../controller/rules/snooker"
 import { Settings, getEnvScene } from "../utils/settings"
-import { getEnvSpec, INDOOR_CEIL_Z, setEnvFogEnabled } from "./sceneenvironment"
+import {
+  getEnvSpec,
+  INDOOR_CEIL_Z,
+  CAMERA_CEILING_Z,
+  setEnvFogEnabled,
+} from "./sceneenvironment"
 
 /* ══════════════════════════════════════════════════════════════════════
  * v1.3.85 室内三件套光照常量
@@ -266,6 +271,11 @@ export class View {
     // 对中间调的压暗（室内照明仍由 indoor 三件套主导，体感亮度持平）。
     // 环境物体是 toneMapped:false 的烘焙顶点色，不受此影响。
     room: { mapping: ACESFilmicToneMapping, exposure: 0.98 },
+    // v1.8.0：三个资源包 v2 环境同为室内布景，沿用 ACES 保留高光层次。
+    // 茶室是深木色调，曝光略抬；细胞舱 / 胚囊本身偏亮，保持 1.0。
+    tea: { mapping: ACESFilmicToneMapping, exposure: 1.04 },
+    cell: { mapping: ACESFilmicToneMapping, exposure: 1.0 },
+    seed: { mapping: ACESFilmicToneMapping, exposure: 1.0 },
   }
   /** 当前 3D 场景环境（足球场/篮球场/雪山）；null 表示用立方体房间 */
   sceneEnv: Group | null = null
@@ -386,6 +396,11 @@ export class View {
     this.camera.update(elapsed, aim)
     // 相机升到层高之上（俯视档）就藏起顶棚，否则顶棚会挡在相机与球桌之间。
     // 相机在层高之下时顶棚在头顶，本来也不入画，所以这个开关没有任何副作用。
+    // v1.7.0：新房间是异步加载的，applyScene 执行时 CeilingGroup 还不存在
+    // （this.ceiling 为 null）→ 每帧兜底重找一次，找到后即为常引用。
+    if (!this.ceiling && this.sceneEnv) {
+      this.ceiling = this.sceneEnv.getObjectByName("CeilingGroup") ?? null
+    }
     const cg = this.ceiling
     if (cg) cg.visible = this.camera.camera.position.z < INDOOR_CEIL_Z - 0.05
   }
@@ -846,6 +861,11 @@ export class View {
      * 数值与 v1.3.62 完全一致（雪山 golden 验证通过）。
      */
     const spec = getEnvSpec(sceneId)
+
+    // v1.8.9：把当前场景的天花板净空注入相机，约束全桌/回放自由机位的 z 上界，
+    // 防止拖动视角抬高机位时穿进天花板白屏。室内新场景 room/tea 有明确高度，
+    // 其余场景（户外 / 高顶棚）为 null → 相机保持原有行为。
+    this.camera.setCeilingZ(CAMERA_CEILING_Z[sceneId] ?? null)
 
     if (this.sun) this.sun.visible = spec.outdoor
     if (this.hemi) this.hemi.visible = spec.outdoor

@@ -55,25 +55,29 @@
     "设置": "Settings",
     "触屏操作": "Touch controls",
     "左右拖动：旋转瞄准方向": "Drag left/right: rotate aim direction",
-    "上下拖动：调整视角俯仰": "Drag up/down: adjust view pitch",
-    "双指捏合：缩放画面": "Pinch: zoom",
-    "击球按钮：右下角圆形按钮，点击出杆":
-      "Shoot button: round button at bottom-right; tap to strike",
+    "上下拖动：抬高 / 降低镜头": "Drag up/down: raise / lower the camera",
+    "双指捏合：仅在「远台」视角下缩放画面":
+      "Pinch: zoom (Far view only)",
+    "击球按钮：底部操作栏最左侧的「击球」按钮，点击出杆（轮到你摆球时同一按钮显示为「摆球」）":
+      "Shoot button: the leftmost “Shoot” button on the bottom bar; tap to strike (it reads “Place ball” when you are placing the cue ball)",
     "力度与杆法": "Power & Stroke",
     "力度条：拖动调整，百分比实时显示":
       "Power bar: drag to adjust; percentage shows live",
-    "母球图示：点选击球点，上=高杆，下=低杆，左右=加塞":
-      "Cue ball diagram: tap contact point — top=follow, bottom=draw, left/right=side spin",
-    "「+」按钮：调整球杆抬起角度": "+ button: raise cue angle",
-    "复位按钮（圆盘左上角 ⟲）：一键把击球点恢复到正中心；双击母球图示也可复位":
-      "Reset button (top-left of disc ⟲): recentre contact point; double-tap the cue diagram also resets",
+    "母球图示：先点底部「击球点」按钮展开面板，再在白球上点选或拖出落点——上=高杆，下=低杆，左右=加塞":
+      "Cue-ball diagram: tap the “Contact point” button on the bottom bar to open the panel, then tap or drag on the cue ball — top = follow, bottom = draw, left/right = side spin",
+    "抬杆高度：在「击球点」面板右侧拖动球杆，调整抬杆角度（用于跳球与弧线）":
+      "Cue elevation: drag the cue on the right side of the panel to raise the butt angle (for jump and curve shots)",
+    "复位按钮（击球点外框左上角 ⟲）：一键把击球点恢复到正中心":
+      "Reset button (top-left of the contact-point frame ⟲): recentre the contact point in one tap",
     "细微瞄准条：底部悬浮滑动条，左右拖动极精细修正瞄准角；滑块居中=本杆初始方向，松手自动归中，可一直拖动持续微调瞄准":
       "Fine aim bar: floating slider at bottom; drag left/right for precise aim adjustment; centred = shot initial direction, auto-recentres on release",
     "视角": "Camera",
-    "点击 循环切换：跟随 → 俯视 → 母球视角":
-      "Tap to cycle: Follow → Top-down → Cue-ball view",
+    "点击 循环切换：瞄准 → 俯视 → 远台":
+      "Tap to cycle: Aim → Top-down → Far",
     "俯视视角适合观察全局与规划走位":
       "Top-down helps read the whole table and plan position",
+    "远台视角可单指旋转、双指捏合缩放，看清整张球台与房间":
+      "In Far view, drag to orbit and pinch to zoom — see the whole table and room",
     "画面": "Graphics",
     "画质档位": "Quality",
     "画质调整后，返回主菜单重新开局即可完全生效。":
@@ -91,13 +95,13 @@
       "How far the line extends when no pocket is directly aimed at. Drag fully left to also turn it off.",
     "保留三个视角": "Keep three views",
     "关闭后，": "When off, ",
-    "仅在「跟随 / 俯视」两视角间切换，不再拉远到母球视角。":
-      "only the Follow / Top-down views are kept; it no longer zooms out to the cue-ball view.",
+    "只在「瞄准 / 俯视 / 远台」三档之间直接切换，不再自动拉远查看全台。":
+      "the camera button cycles directly between Aim / Top-down / Far without auto zooming out to show the whole table.",
     "语言": "Language",
     "界面语言": "Interface language",
     "中文": "Chinese",
       "游戏菜单": "Game Menu",
-      "（圆盘左上角 ⟲）：一键把击球点恢复到正中心；双击母球图示也可复位": "(Top-left of the disc ⟲): one tap resets the cue contact point to center; double-tap the cue-ball icon also resets it.",
+      "（击球点外框左上角 ⟲）：一键把击球点恢复到正中心": "(Top-left of the contact-point frame ⟲): one tap recentres the contact point.",
       "瞄准时在台面上画两段线：实线 = 母球球心 →\n          目标球碰撞接触点，虚线 = 碰撞点 →\n          球袋中心。遇到其它球或台边自动截断，出杆瞬间立刻隐藏。": "When aiming, two lines are drawn on the table: the solid line = cue-ball center → object-ball contact point, the dashed line = contact point → pocket center. They are auto-clipped at other balls or rails and hidden the instant you shoot.",
       "最长": "Longest",
       "左右拖动": "Drag left/right",
@@ -105,20 +109,20 @@
       "上下拖动": "Drag up/down",
       "：调整视角俯仰": ": tilt the view pitch",
       "双指捏合": "Pinch",
-      "：缩放画面": ": zoom in/out",
+      "：缩放画面": ": zoom (Far view only)",
       "击球按钮": "Shoot button",
-      "：右下角圆形按钮，点击出杆": ": the round button at bottom-right; tap to shoot",
+      "：底部操作栏最左侧的「击球」按钮，点击出杆（轮到你摆球时同一按钮显示为「摆球」）": ": the leftmost “Shoot” button on the bottom bar; tap to strike (it reads “Place ball” when placing)",
       "力度条": "Power bar",
       "：拖动调整，百分比实时显示": ": drag to adjust; the percentage shows in real time",
-      "母球图示": "Cue-ball icon",
-      "：点选击球点，上=高杆，下=低杆，左右=加塞": ": tap to set the contact point — top = follow, bottom = draw, left/right = side spin",
-      "「+」按钮": "“+” button",
-      "：调整球杆抬起角度": ": raise the cue angle",
+      "母球图示": "Cue-ball diagram",
+      "：点选击球点，上=高杆，下=低杆，左右=加塞": ": tap the “Contact point” button first, then tap or drag on the cue ball — top = follow, bottom = draw, left/right = side spin",
+      "抬杆高度": "Cue elevation",
+      "：在「击球点」面板右侧拖动球杆，调整抬杆角度（用于跳球与弧线）": ": drag the cue on the right side of the panel to raise the butt angle (jump and curve shots)",
       "复位按钮": "Reset button",
       "细微瞄准条": "Fine aim bar",
       "：底部悬浮滑动条，左右拖动极精细修正瞄准角；滑块居中=本杆初始方向，松手自动归中，可一直拖动持续微调瞄准": ": a floating bar at the bottom; drag left/right for very fine aim correction. The slider centers on the current shot’s initial direction, auto-recenters on release, and you can keep dragging to fine-tune continuously.",
       "点击": "Tap",
-      "循环切换：跟随 → 俯视 → 母球视角": "to cycle: Follow → Top-down → Cue-ball view",
+      "循环切换：瞄准 → 俯视 → 远台": "to cycle: Aim → Top-down → Far",
   }
 
   function curLang() {

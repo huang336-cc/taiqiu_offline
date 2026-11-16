@@ -78,21 +78,25 @@ const SCENE = process.env.SCENE || ""
     const r = el.getBoundingClientRect()
     return { x: r.x, y: r.y, w: r.width, h: r.height }
   })
-  await page.mouse.click(box.x + box.w * 0.5, box.y + box.h * 0.52)
+  // 落球点用 0.62/0.42：0.5/0.52 实测落在无效区（点完仍在 PlaceBall），
+  // 这个坐标来自 probe-placeball156 的已验证路径。
+  await page.mouse.click(box.x + box.w * 0.62, box.y + box.h * 0.42)
   await new Promise((r) => setTimeout(r, 500))
   await page.evaluate(() => document.getElementById("cueHit")?.click())
   await new Promise((r) => setTimeout(r, 2500))
-  // 关掉教程横幅：它正好压在球堆上方，挡住核对球色的视线
-  await page.evaluate(() => {
-    const btns = Array.from(document.querySelectorAll("button, .hud-button, div"))
-    const b = btns.find((el) => /知道了/.test(el.textContent || ""))
-    if (b) b.click()
+  // 断言真的进了 Aim —— 否则后面拍到的是摆球俯视/隐藏球杆，截图会被误读
+  const ctrlName = await page.evaluate(() => {
+    const c = globalThis.__bc.container.controller
+    return c && (c.constructor?.name || c.name || String(c))
   })
-  await new Promise((r) => setTimeout(r, 600))
+  console.log("controller =", ctrlName)
+  if (ctrlName !== "Aim") console.warn("⚠️ 未进入 Aim，球杆会被隐藏")
 
   const shot = async (name, fn) => {
     await page.evaluate(fn)
-    await new Promise((r) => setTimeout(r, 700))
+    // v1.7.0：重场景（房间 144 网格）在软件渲染下每帧可达 300~400ms，
+    // 相机切换是每帧 lerp 0.9，700ms 只走 2 帧（还差 19%）→ 会拍到中途构图。
+    await new Promise((r) => setTimeout(r, 2200))
     await page.screenshot({ path: `${OUT}/${prefix}-${name}.png` })
     console.log(`saved ${prefix}-${name}.png`)
   }

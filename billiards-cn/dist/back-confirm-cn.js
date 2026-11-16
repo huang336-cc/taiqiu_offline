@@ -80,7 +80,7 @@
       "#" + BACKDROP_ID + "{",
       "  position:fixed;top:0;right:0;bottom:0;left:0;",
       "  width:100%;height:100%;",
-      "  background:rgba(0,0,0,0.6);",
+      "  background:var(--ui-overlay,rgba(0,0,0,0.6));",
       "  z-index:99999;",
       "  -webkit-tap-highlight-color:transparent;",
       "  padding:16px;box-sizing:border-box;",
@@ -97,12 +97,13 @@
       "  height:auto;min-height:0;max-height:none;",
       "  margin:0 auto;", /* 块级 + 定宽 + auto 边距 = 水平居中（无 flex 依赖） */
       "  top:0;right:0;bottom:0;left:0;",
-      "  background:#5a3c1b;",
-      "  background:-webkit-linear-gradient(top,#6b4a22 0%,#4a3014 100%);",
-      "  background:linear-gradient(180deg,#6b4a22 0%,#4a3014 100%);",
-      "  border:1.5px solid #c89534;border-radius:14px;",
+      /* v1.8.7：面板配色主题化（变量从 <html> 继承，切换无需重注入；兜底保留原木金棕） */
+      "  background:var(--ui-panel-top,#5a3c1b);",
+      "  background:-webkit-linear-gradient(top,var(--ui-panel-top,#6b4a22) 0%,var(--ui-panel-bottom,#4a3014) 100%);",
+      "  background:linear-gradient(180deg,var(--ui-panel-top,#6b4a22) 0%,var(--ui-panel-bottom,#4a3014) 100%);",
+      "  border:1.5px solid var(--ui-panel-border,#c89534);border-radius:14px;",
       "  box-shadow:0 12px 32px rgba(0,0,0,0.55),inset 0 1px 0 rgba(255,225,160,0.18);",
-      "  color:#f3d79a;padding:18px 20px 16px;text-align:center;",
+      "  color:var(--ui-panel-text,#f3d79a);padding:18px 20px 16px;text-align:center;",
       "  font-family:system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;",
       "  -webkit-text-size-adjust:100%;text-size-adjust:100%;",
       "}",
@@ -111,22 +112,22 @@
       "#" + BACKDROP_ID + " .bctitle{",
       "  display:block;margin:0 0 10px;padding:0;",
       "  font-size:18px;line-height:1.35;font-weight:700;",
-      "  color:#e7b14b;letter-spacing:0.5px;",
+      "  color:var(--ui-title,#e7b14b);letter-spacing:0.5px;",
       "  text-shadow:0 1px 2px rgba(0,0,0,0.6);",
       "  white-space:normal;word-break:break-word;",
       "}",
       "#" + BACKDROP_ID + " .bctext{",
       "  display:block;margin:0 0 6px;padding:0;",
-      "  font-size:14px;line-height:1.6;color:#f3d79a;",
+      "  font-size:14px;line-height:1.6;color:var(--ui-panel-text,#f3d79a);",
       "  white-space:normal;word-break:break-word;",
       "}",
       "#" + BACKDROP_ID + " .bcseries{",
       "  display:block;margin:0 0 16px;padding:0;",
       "  font-size:13px;line-height:1.5;",
-      "  color:rgba(243,215,154,0.78);",
+      "  color:var(--ui-panel-sub,rgba(243,215,154,0.78));",
       "  white-space:normal;word-break:break-word;",
       "}",
-      "#" + BACKDROP_ID + " .bcseries b{color:#e7b14b;font-weight:700;}",
+      "#" + BACKDROP_ID + " .bcseries b{color:var(--ui-title,#e7b14b);font-weight:700;}",
       /* 按钮行：text-align 居中 + inline-block 按钮（CSS2.1，全内核兼容）。
          font-size:0 消除 inline-block 之间的空隙，按钮内再单独设字号 */
       "#" + BACKDROP_ID + " .bcactions{",
@@ -146,20 +147,20 @@
       "  letter-spacing:normal;text-indent:0;",
       "  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;",
       "  cursor:pointer;text-align:center;text-decoration:none;",
-      "  border:1px solid #c89534;border-radius:10px;",
+      "  border:1px solid var(--ui-panel-border,#c89534);border-radius:10px;",
       "  -webkit-text-size-adjust:100%;text-size-adjust:100%;",
       "}",
       "#" + BACKDROP_ID + " .bcbtn.secondary{",
-      "  background:#7a5730;",
-      "  background:-webkit-linear-gradient(top,#7a5730 0%,#54371a 100%);",
-      "  background:linear-gradient(180deg,#7a5730 0%,#54371a 100%);",
-      "  color:#f7e6bb;",
+      "  background:var(--ui-panel-top,#7a5730);",
+      "  background:-webkit-linear-gradient(top,var(--ui-panel-top,#7a5730) 0%,var(--ui-panel-bottom,#54371a) 100%);",
+      "  background:linear-gradient(180deg,var(--ui-panel-top,#7a5730) 0%,var(--ui-panel-bottom,#54371a) 100%);",
+      "  color:var(--ui-panel-text,#f7e6bb);",
       "}",
       "#" + BACKDROP_ID + " .bcbtn.danger{",
-      "  background:#8e2f22;",
-      "  background:-webkit-linear-gradient(top,#8e2f22 0%,#5f1d14 100%);",
-      "  background:linear-gradient(180deg,#8e2f22 0%,#5f1d14 100%);",
-      "  color:#ffd9c2;border-color:#e0a06a;",
+      "  background:var(--ui-danger-top,#8e2f22);",
+      "  background:-webkit-linear-gradient(top,var(--ui-danger-top,#8e2f22) 0%,var(--ui-danger-bottom,#5f1d14) 100%);",
+      "  background:linear-gradient(180deg,var(--ui-danger-top,#8e2f22) 0%,var(--ui-danger-bottom,#5f1d14) 100%);",
+      "  color:var(--ui-danger-ink,#ffd9c2);border-color:var(--ui-danger-border,#e0a06a);",
       "}",
       "#" + BACKDROP_ID + " button.bcbtn:active{opacity:0.82;}",
       /* v1.4.6：点空白（误触）时面板抖动提示 —— 明确反馈「点到了但没点中按钮」，
@@ -292,13 +293,15 @@
       // —— 真机实测（录屏逐帧 + CPU 6x 降速）这段长达 3.5 秒且画面完全静止，
       // 玩家感知为「点了没反应、卡死几秒」。这里立即铺一层全屏「加载中…」遮罩，
       // 把无反馈的静默期变成明确的加载状态（与进入游戏时的加载页同款观感）。
+      var ld = null
       try {
-        var ld = document.createElement("div")
+        ld = document.createElement("div")
         ld.setAttribute("id", "bc-exit-loading")
         ld.style.cssText = "position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#0a2a3d;"
         var sp = document.createElement("div")
         sp.style.cssText = "width:42px;height:42px;border:4px solid rgba(255,255,255,0.18);border-top-color:#e8c37a;border-radius:50%;animation:bcExitSpin 0.8s linear infinite;"
         var tx = document.createElement("div")
+        tx.setAttribute("id", "bc-exit-loading-text")
         tx.style.cssText = "font-size:14px;color:rgba(255,255,255,0.75);letter-spacing:1px;"
         tx.textContent = "加载中…"
         var st = document.createElement("style")
@@ -308,24 +311,59 @@
         document.body.appendChild(st)
         document.body.appendChild(ld)
       } catch (e) {}
+
       // 返回主菜单即结束本轮系列赛：清掉「你 X : Y 电脑」的累计，
       // 不清的话下次进同一玩法会接着上次的比分算，语义不对。
       try {
         window.localStorage && window.localStorage.removeItem(SERIES_KEY)
       } catch (e) {}
-      // v1.4.6：跳转前主动释放游戏内的 WebGL / Audio 资源（见 index.ts 暴露的
-      // window.__onExitToMenu）。部分 WebView 不触发 pagehide/beforeunload，仅靠
-      // 浏览器回收会因 bfcache 保留旧页面 context 而累积到上限，反复「开始游戏 →
-      // 退出主菜单」几次后新 context 创建失败、游戏卡在 Loading（用户反馈的卡死）。
-      // 这里在整页导航之前显式释放，与 browsercontainer 的 shutdown 形成双保险。
+
+      // v1.8.4：资源释放从「跳转前」改到「页面真的卸载时」。
+      //
+      // 旧顺序是 __onExitToMenu() 先拆 WebGL / Audio，再 location.replace。
+      // 一旦 replace 没有生效（WebView 拦截、同文档替换、被系统杀掉导航），
+      // 页面还停在 play.html，但游戏已经被拆掉 —— 画面冻结、点任何东西都
+      // 没反应、遮罩永远转圈，就是用户报的「返回主菜单后点继续游戏转圈卡死」。
+      // 现在改为：跳转成功 → pagehide 时释放；4 秒后仍未离开 → 才兜底释放，
+      // 并把遮罩变成「点此重试」，保证任何情况下都有出路。
+      var released = false
+      function releaseGame() {
+        if (released) return
+        released = true
+        try { clearTimeout(giveUpTimer) } catch (e) {}
+        try {
+          if (typeof window.__onExitToMenu === "function") window.__onExitToMenu()
+        } catch (e) {}
+      }
       try {
-        if (typeof window.__onExitToMenu === "function") window.__onExitToMenu()
+        window.addEventListener("pagehide", releaseGame, { once: true })
+        window.addEventListener("beforeunload", releaseGame, { once: true })
       } catch (e) {}
+
+      // 兜底：4 秒还没走，说明导航失败 —— 给用户一个可点的重试入口。
+      var giveUpTimer = setTimeout(function () {
+        releaseGame()
+        var box = document.getElementById("bc-exit-loading")
+        var label = document.getElementById("bc-exit-loading-text")
+        if (!box) return
+        if (label) label.textContent = "返回失败，点此重试"
+        box.style.cursor = "pointer"
+        box.addEventListener("click", function () {
+          try {
+            window.location.href = "menu.html"
+          } catch (e) {}
+        })
+      }, 4000)
+
       // 直接跳回主菜单；不依赖 history 栈（避免某些 WebView 不一致）
       try {
         window.location.replace("menu.html")
       } catch (e) {
-        window.history.go(-(window.history.length))
+        try {
+          window.location.href = "menu.html"
+        } catch (e2) {
+          window.history.go(-(window.history.length))
+        }
       }
     })
     actions.appendChild(btnStay)

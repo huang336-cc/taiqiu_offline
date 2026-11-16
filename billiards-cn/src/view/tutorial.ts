@@ -6,7 +6,7 @@ import { Settings } from "../utils/settings"
  *          —— 期间禁用击球/瞄准控件，游戏不会「自动开始」，避免点击「重新打开新手引导」
  *             后立即进入可玩状态。用户读完按「知道了」→ 解锁控件 + 进入步骤 2。
  *   步骤 2：在球桌上左右拖动 / 拉横向瞄准条 → 调整瞄准方向（绿线指向被击球）
- *   步骤 3：点击右下角「击球」按钮 → 出杆
+ *   步骤 3：点击底部操作栏最左侧「击球」按钮 → 出杆
  * 用户完成击球后引导自动消失，并写入 seenGuide，之后不再自动弹出。
  *
  * 引导浮层本身 pointer-events:none，让出触摸；按钮（.tut-actions）单独 pointer-events:auto。
@@ -92,7 +92,7 @@ export class Tutorial {
       Tutorial.lockControls(false)
     } else if (Tutorial.step === 3) {
       textEl.innerHTML =
-        "👉 <b>第 3 步</b>：点击右下角的 <b>「击球」</b> 按钮，把球打出去！"
+        "👉 <b>第 3 步</b>：点击底部操作栏最左侧的 <b>「击球」</b> 按钮，把球打出去！"
       if (actionsEl) actionsEl.innerHTML = ""
       Tutorial.lockControls(false)
     }

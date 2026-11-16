@@ -276,8 +276,9 @@ body.replay-mode #menu {
   max-height: calc(100dvh - 84px);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  background: linear-gradient(180deg, #3a2818 0%, #241608 100%);
-  border: 2px solid #c89534;
+  /* v1.8.7：白球设置弹窗主题化（兜底保留原木棕） */
+  background: linear-gradient(180deg, var(--ui-panel-top, #3a2818) 0%, var(--ui-panel-bottom, #241608) 100%);
+  border: 2px solid var(--ui-panel-border, #c89534);
   border-radius: 14px;
   padding: 12px;
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.62);
@@ -303,7 +304,7 @@ body.replay-mode #menu {
   height: 0;
   border-left: 10px solid transparent;
   border-right: 10px solid transparent;
-  border-top: 10px solid #c89534;
+  border-top: 10px solid var(--ui-panel-border, #c89534);
 }
 
 /* v1.1.32：上下两块等宽区域，各自上方印操作指引 */
@@ -315,9 +316,9 @@ body.replay-mode #menu {
   align-items: center;
   gap: 6px;
   padding: 8px 6px;
-  border: 1px solid rgba(200, 149, 52, 0.45);
+  border: 1px solid var(--ui-field-border, rgba(200, 149, 52, 0.45));
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.18);
+  background: var(--ui-field-bg, rgba(0, 0, 0, 0.18));
   box-sizing: border-box;
 }
 /* 区域上方标题 + 简洁操作指引 */
@@ -331,13 +332,13 @@ body.replay-mode #menu {
 .cueball-popup .cb-area-title {
   font-size: 12px;
   font-weight: 700;
-  color: #f3d79a;
+  color: var(--ui-panel-text, #f3d79a);
   font-family: var(--font-family-primary, sans-serif);
   letter-spacing: 0.04em;
 }
 .cueball-popup .cb-area-desc {
   font-size: 10px;
-  color: rgba(243, 215, 154, 0.6);
+  color: var(--ui-panel-sub, rgba(243, 215, 154, 0.6));
   font-family: var(--font-family-primary, sans-serif);
   text-align: center;
 }
@@ -359,7 +360,7 @@ body.replay-mode #menu {
   width: 112px;
   height: 112px;
   border-radius: 12px;
-  border: 2px solid #c89534;
+  border: 2px solid var(--ui-panel-border, #c89534);
 }
 
 /* v1.1.18：图形化抬杆（拖动球杆调角度）；标题已上移到区域头，无需绝对定位 */
@@ -370,11 +371,12 @@ body.replay-mode #menu {
   display: block;
   width: 100%;
   aspect-ratio: 3 / 1;           /* v1.1.34：进一步压低「抬杆高度」区块高度，避免其底部被弹窗裁切 */
-  border: 1.5px solid #8a6428;
+  border: 1.5px solid var(--ui-field-border, #8a6428);
   border-radius: 10px;
+  /* v1.8.7：抬杆区底主题化；径向高光保留（随强调色微调） */
   background:
-    radial-gradient(ellipse at 50% 80%, rgba(232,195,122,0.10), transparent 70%),
-    linear-gradient(180deg, #5a3d1c 0%, #3a2814 100%);
+    radial-gradient(ellipse at 50% 80%, var(--ui-accent-soft, rgba(232, 195, 122, 0.10)), transparent 70%),
+    linear-gradient(180deg, var(--ui-panel-top, #5a3d1c) 0%, var(--ui-panel-bottom, #3a2814) 100%);
   touch-action: none;
   cursor: grab;
 }

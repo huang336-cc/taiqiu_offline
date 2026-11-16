@@ -75,6 +75,10 @@ async function main() {
   await page.setViewport({ width: 393, height: 851, deviceScaleFactor: 1 })
   const errs = []
   page.on("pageerror", (e) => errs.push(String(e).slice(0, 300)))
+  page.on("console", (m) => {
+    const t = m.text()
+    if (t.includes("[PlayShot]") || t.includes("[container]")) console.log("    LOG", t)
+  })
 
   console.log("[1] 进自由练习…")
   await page.goto(`${BASE}/play.html?practice=true&ruletype=eightball`, {
@@ -88,9 +92,22 @@ async function main() {
   const rows = []
   for (const deg of [0, 30, 45, 60, 72]) {
     // 等回到可出杆状态（上一杆出杆后控制器会走 PlayShot → 静止 → Aim）
-    const back = await waitFor(page, READY, 120000)
+    const back = await waitFor(page, READY, 180000)
     if (back < 0) {
-      console.log(`  ${deg}°: 等不到可出杆状态，跳过`)
+      const dbg = await page.evaluate(() => {
+        const c = window.container
+        const btn = document.getElementById('cueHit')
+        return {
+          ctrl: String(c.controller?.name),
+          dis: btn?.disabled,
+          label: btn?.querySelector('.seg-label')?.textContent,
+          cue: [Number(c.table.cueball.pos.x.toFixed(2)), Number(c.table.cueball.pos.y.toFixed(2))],
+          onTable: c.table.cueball.onTable(),
+          nOnTable: c.table.balls.filter((b) => b.onTable()).length,
+          pending: !!c.table.cueball.offTable,
+        }
+      })
+      console.log(`  ${deg}°: 等不到可出杆状态，跳过`, JSON.stringify(dbg))
       continue
     }
     // 每杆前把台面恢复：其余球挪到边角，白球摆到台面左侧空地
@@ -102,9 +119,18 @@ async function main() {
       const Y = 0.704
       balls.forEach((b, i) => {
         if (i === 0) return
-        // 清场：其余球全部标记「已落袋」，白球独跑 —— 否则跳起来会撞到别的
-        // 球、落点被反弹搅乱（实测 45° 落点 -28cm 就是撞球弹回造成的假象）。
-        b.state = "InPocket"
+        /**
+         * v1.8.1 探针修正：原先用 `state = "InPocket"` 清场，会让规则层
+         * 判定「台面无目标球」→ 每次静止都返回 PlaceBall，控制器在
+         * PlayShot ↔ PlaceBall 之间来回，探针永远等不到 Aim。
+         * 改为把其余球**排到远侧下边**（仍 onTable，只是远离白球的 +x 路线），
+         * 既不会有碰撞干扰，也不触发摆球流程。
+         */
+        b.state = "Stationary"
+        b.vel.set(0, 0, 0)
+        b.pos.set(-1.34 + (i % 8) * 0.045, -0.60 - Math.floor(i / 8) * 0.06, 0)
+        b.offTable = false
+        b.updateMesh?.(0)
       })
       const cue = balls[0]
       cue.pos.set(-0.9, 0, 0)
@@ -169,7 +195,19 @@ async function main() {
     // 固定采样 3 秒：球起跳→落地→滚停全程都在 rAF 采样窗口内。
     // （不能靠 allStationary 判结束 —— 出杆生效前它就已经是 true，
     //   会立刻取消采样器，采到的峰值恒为 0。）
-    await sleep(3000)
+    // v1.8.1 探针修正：软件渲染帧率低时 3s 真实时间不足以让球停稳，
+    // 固定 sleep 会读到半路状态（实测位移 38~193cm 乱跳）。
+    // 改为「最多 20s，等物理静止」—— 与产品行为无关，只为拿到稳定采样。
+    const tStop = Date.now()
+    while (Date.now() - tStop < 20000) {
+      const done = await page.evaluate(() => {
+        const c = window.container
+        return c?.table?.allStationary() && c.controller?.name !== "PlayShot"
+      }).catch(() => false)
+      if (done) break
+      await sleep(300)
+    }
+    await sleep(300)
     const res = await page.evaluate(() => {
       const c2 = window.container
       const c = window.container

@@ -139,19 +139,21 @@ canvas {
 #helpOverlay {
   width: min(94%, 420px);
   height: min(88%, 680px);
-  background: #0b1418;
-  border: 1px solid rgb(232 195 122 / 30%);
+  /* v1.8.7：帮助浮层主题化（兜底保留原深蓝绿） */
+  background: var(--ui-panel-bottom, #0b1418);
+  border: 1px solid var(--ui-panel-border, rgb(232 195 122 / 30%));
 }
 
 .help-footer {
   font-family: var(--font-family-primary);
   gap: 8px;
+  border-color: var(--ui-line-soft, rgb(255 255 255 / 10%));
 }
 
 .help-text {
   flex: 1;
   text-align: center;
-  color: #8fa3a8;
+  color: var(--ui-ink-2, #8fa3a8);
 }
 
 .lobby-btn,
@@ -239,9 +241,10 @@ body.lod-low .hitButton {
   max-width: min(420px, calc(100% - 40px));
   padding: 8px 14px;
   border-radius: 10px;
-  background: rgba(15, 28, 24, 0.92);
-  border: 1px solid var(--cn-gold, #e8c87a);
-  color: #f2f3ef;
+  /* v1.8.7：新手引导横幅主题化（兜底保留原深绿） */
+  background: var(--ui-panel-bottom, rgba(15, 28, 24, 0.92));
+  border: 1px solid var(--ui-panel-border, var(--cn-gold, #e8c87a));
+  color: var(--ui-panel-text, #f2f3ef);
   font-size: 12.5px;
   line-height: 1.45;
   text-align: center;
@@ -250,7 +253,7 @@ body.lod-low .hitButton {
   animation: tut-pop 0.25s ease-out both;
 }
 .tutorial-banner .tut-text b {
-  color: var(--cn-gold, #e8c87a);
+  color: var(--ui-title, var(--cn-gold, #e8c87a));
 }
 /* v1.2.6：「知道了」按钮——引导可交互推进（点完才让游戏控件解锁）。
    横幅默认 pointer-events:none 让出触摸，按钮需重新开启 pointer-events。 */
@@ -267,9 +270,10 @@ body.lod-low .hitButton {
   font-weight: 700;
   padding: 5px 14px;
   border-radius: 8px;
-  border: 1.5px solid var(--cn-gold, #e8c87a);
-  background: linear-gradient(180deg, #6b4a22 0%, #4a3014 100%);
-  color: #fff5d8;
+  /* v1.8.7：引导按钮主题化（兜底保留原木金棕） */
+  border: 1.5px solid var(--ui-panel-border, var(--cn-gold, #e8c87a));
+  background: var(--notification-bg-gradient, linear-gradient(180deg, #6b4a22 0%, #4a3014 100%));
+  color: var(--ui-btn-ink, #fff5d8);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }

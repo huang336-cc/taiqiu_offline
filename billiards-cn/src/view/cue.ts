@@ -343,7 +343,11 @@ export class Cue {
   }
 
   private updateCuePosition(pos: Vector3, strokeX: number) {
-    if (this.mesh) this.mesh.position.copy(pos)
+    if (this.mesh) {
+      this.mesh.position.copy(pos)
+      // v1.8.4：回放的观赏补偿 —— 把整根杆抬高一点，避免杆身与桌布共面被遮挡。
+      if (this.visualLift) this.mesh.position.z += this.visualLift
+    }
 
     // Project local strokeX through tilt onto the horizontal plane for shadow
     const unitToBall = unitAtAngle(this.aim.angle, this.tempVec)
@@ -490,11 +494,69 @@ export class Cue {
     this.strokeRetracted = false
   }
 
+  /**
+   * v1.8.4：给球杆做「远景观赏」的视觉补偿。
+   *
+   * 球杆是真实比例的（直径约 4mm、贴着桌面 3mm）。回放默认的全桌斜视下：
+   *   · 4mm 直径在 393px 宽的竖屏上只有 0.6px —— 细到看不见；
+   *   · 杆身与桌布几乎共面，低角度下会被台面遮住。
+   * 两条叠起来就是用户报的「回放没有球杆」。
+   *
+   * lift：整体抬高（米，沿世界 z）。thick：杆身横向放大倍数。
+   * 只作用于渲染，不影响任何物理与瞄准计算。
+   */
+  private visualLift = 0
+
+  setVisualBoost(lift: number, thick: number) {
+    this.visualLift = Math.max(0, lift)
+    if (!this.cueBody) return
+    /**
+     * ⚠️ 缩放必须打在 **cueBody 这一层**，不能逐个 mesh 缩放。
+     *
+     * cueBody 的约定是「杆身沿局部 +Y、居中、杆头在 +Y」（createCue 里已经
+     * 把程序化杆和 GLB 都摆成这个样子，外层再整体绕 Z 转 −90° 让杆身朝 +X）。
+     * 所以 cueBody 局部坐标系里：Y = 杆长方向，X/Z = 横截面。
+     *
+     * 之前遍历每个 mesh 设 `scale.x/z`，对 GLB 是错的 —— 资源包里每个分段
+     * 的几何沿**自己的 +X** 展开（靠父节点转 90° 才变成 +Y），横向放大等于
+     * 沿杆长拉伸，实测把杆头推到离白球 0.7 米开外。改成缩放 cueBody：
+     * 只影响横截面，杆头位置分毫不动（探针实测距白球 0.075m 不变）。
+     */
+    const t = Math.max(1, Math.min(6, thick))
+    this.cueBody.scale.set(t, 1, t)
+  }
+
+  /**
+   * v1.8.4：兼容旧调用点 —— 只调粗细、不改高度。
+   */
+  setVisualThickness(k: number) {
+    this.setVisualBoost(this.visualLift, k)
+  }
+
+  /**
+   * v1.8.4：只收起杆身与投影，不改瞄准状态。
+   *
+   * 回放播放中（球还在跑）需要把杆藏起来 —— 真实对局击完就收杆，
+   * 一根杵在击球点不动的杆会挡住球路。与 aimMode() 成对使用。
+   */
+  hideCue() {
+    if (this.mesh) this.mesh.visible = false
+    if (this.shadowMesh) this.shadowMesh.visible = false
+  }
+
   aimMode() {
     if (this.mesh) this.mesh.visible = true
     if (this.shadowMesh) this.shadowMesh.visible = true
     if (this.placerMesh) this.placerMesh.visible = false
     this.strokeRetracted = false
+    // v1.8.4：进入瞄准即终止上一杆的送杆动画。
+    //
+    // 回放里 seek 会调 table.hit() 重跑本杆，hit() 会置 hittingAnimation=true，
+    // 此后每帧 update 累积 t，t≥STROKE_END_T 就自动收杆 —— 用户拖完进度条
+    // 停在那里看局面时，球杆会在 1.5 秒后凭空消失。瞄准态本就不该带着
+    // 送杆动画，这里一并复位。
+    this.hittingAnimation = false
+    this.hitAnimationWeight = 0
   }
 
   spinOffset(aim: AimEvent = this.aim) {
